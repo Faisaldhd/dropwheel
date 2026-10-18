@@ -42,16 +42,31 @@ public class IntegrationTests : IClassFixture<IntegrationTests.Samples>
             var pdf = Path.Combine(Dir, "dokument.pdf");
             File.WriteAllText(Path.Combine(Dir, "zdroj.md"), "# Nadpis\n\nPříliš žluťoučký kůň úpěl ďábelské ódy.\n\n- jedna\n- dvě\n", new UTF8Encoding(false));
             Files["md"] = Path.Combine(Dir, "zdroj.md");
+            var pdfHasText = false;
             if (Tools.Has(ExternalTool.LibreOffice))
             {
                 var produced = OfficeBackend.ConvertToTempAsync(Context(), Files["md"], "pdf").GetAwaiter().GetResult();
-                File.Move(produced, pdf);
-                PdfHasText = true;
+                File.Move(produced, pdf, overwrite: true);
+                // LibreOffice can exit successfully yet write a PDF with no extractable text layer (missing font,
+                // first-run profile). Probe it instead of trusting the exit code, otherwise the text operations
+                // are expected to succeed on a PDF that has nothing to extract.
+                try
+                {
+                    PdfBackend.ExtractText(pdf, markdown: false);
+                    pdfHasText = true;
+                }
+                catch (ConversionException)
+                {
+                    pdfHasText = false;
+                }
             }
-            else
+            if (!pdfHasText)
             {
+                if (File.Exists(pdf))
+                    File.Delete(pdf);
                 ImageBackend.ImagesToPdfAsync([png, Files["jpg"]], pdf, 90, default).GetAwaiter().GetResult();
             }
+            PdfHasText = pdfHasText;
             Files["pdf"] = pdf;
             File.Copy(pdf, Path.Combine(Dir, "druhý.pdf"));
             Files["pdf2"] = Path.Combine(Dir, "druhý.pdf");
@@ -145,8 +160,14 @@ public class IntegrationTests : IClassFixture<IntegrationTests.Samples>
         _s = samples;
     }
 
-    public static TheoryData<string> SampleKeys() => new(
-        "png", "jpg", "svg", "pdf", "md", "html", "txt", "xlsx", "csv", "srt", "folder", "zip", "tgz", "mp4", "avi", "wav", "mp3", "gif", "docx", "pptx");
+    /// <summary>
+    /// Matches an expected "nothing to extract" failure in any of the languages Core can be running in, so the
+    /// test does not depend on the current UI language (it used to match the Czech text only).
+    /// </summary>
+    private static bool IsAbout(ConversionException ex, params string[] needles) =>
+        needles.Any(n => ex.Message.Contains(n, StringComparison.OrdinalIgnoreCase));
+
+    public static TheoryData<string> SampleKeys() => new(        "png", "jpg", "svg", "pdf", "md", "html", "txt", "xlsx", "csv", "srt", "folder", "zip", "tgz", "mp4", "avi", "wav", "mp3", "gif", "docx", "pptx");
 
     [Theory]
     [MemberData(nameof(SampleKeys))]
@@ -180,11 +201,11 @@ public class IntegrationTests : IClassFixture<IntegrationTests.Samples>
                     Assert.Empty(Directory.GetFiles(outDir, "*.part.*"));
                     output.WriteLine($"ok   {op.Id} → {string.Join(", ", result.Outputs.Select(Path.GetFileName))}");
                 }
-                catch (ConversionException ex) when (key is "pdf" && !_s.PdfHasText && ex.Message.Contains("neobsahuje žádný text"))
+                catch (ConversionException ex) when (key is "pdf" && !_s.PdfHasText && IsAbout(ex, "neobsahuje žádný text", "no text", "لا يحتوي"))
                 {
                     output.WriteLine($"ok   {op.Id} (expected: image-only PDF has no text)");
                 }
-                catch (ConversionException ex) when (op.Id == "pdf.to.xlsx" && (ex.Message.Contains("tables") || ex.Message.Contains("tabulky")))
+                catch (ConversionException ex) when (op.Id == "pdf.to.xlsx" && IsAbout(ex, "tables", "tabulky", "جداول"))
                 {
                     output.WriteLine("ok   " + op.Id + " (expected: this PDF has no tables)");
                 }
