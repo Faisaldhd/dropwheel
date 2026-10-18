@@ -72,10 +72,11 @@ internal sealed class WheelEditorWindow : Window
     /// <summary>Applies a live language switch without reopening the editor.</summary>
     public static void RelocalizeIfOpen()
     {
-        if (_open is null)
+        var open = _open;
+        if (open is null)
             return;
-        LanguageManager.Apply(_open);
-        _open.Build();
+        LanguageManager.Apply(open);
+        open.Build();
     }
 
     private void Save()

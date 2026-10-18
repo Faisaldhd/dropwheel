@@ -70,10 +70,11 @@ internal sealed class SettingsWindow : Window
     /// <summary>Applies a live language switch: new reading direction, new strings, same window.</summary>
     public static void RelocalizeIfOpen()
     {
-        if (_open is null)
+        var open = _open;
+        if (open is null)
             return;
-        LanguageManager.Apply(_open);
-        _open.Rebuild();
+        LanguageManager.Apply(open);
+        open.Rebuild();
     }
 
     private void Save()

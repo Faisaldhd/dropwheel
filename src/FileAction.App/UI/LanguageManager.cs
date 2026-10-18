@@ -74,9 +74,10 @@ internal static class LanguageManager
     /// <summary>Updates every window that is currently open, without reopening any of them.</summary>
     public static void ApplyToOpenWindows()
     {
-        if (Application.Current is null)
+        var app = Application.Current;
+        if (app is null)
             return;
-        foreach (Window window in Application.Current.Windows)
+        foreach (Window window in app.Windows)
             Apply(window);
     }
 
