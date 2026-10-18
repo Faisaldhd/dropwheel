@@ -64,7 +64,7 @@ internal sealed class App : Application
         base.OnStartup(e);
 
         _settings = AppSettings.Load();
-        Loc.Current = _settings.Language ?? Loc.Detect();
+        LanguageManager.Apply(_settings.Language);
         Theme.Refresh();
         _tools = new ToolLocator();
         var jobs = new JobRunner(_settings, _tools);
@@ -77,7 +77,7 @@ internal sealed class App : Application
         }
         catch (InvalidOperationException ex)
         {
-            MessageBox.Show(ex.Message, "DropWheel", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Dialogs.Show(ex.Message, "DropWheel", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
         _controller = new WheelController(_settings, _tools, jobs, _input);
@@ -143,13 +143,17 @@ internal sealed class App : Application
 
     private void OnSettingsChanged()
     {
-        var language = _settings.Language ?? Loc.Detect();
-        if (language != Loc.Current)
+        if (LanguageManager.Preference != _settings.Language)
         {
-            Loc.Current = language;
+            // Live language switch: no restart, no window is closed just because the language changed.
+            LanguageManager.Apply(_settings.Language);
+            LanguageManager.ApplyToOpenWindows();
             _controller.Relocalize();
-            _tray?.Dispose();
-            _tray = CreateTray();
+            _tray?.Refresh();
+            SettingsWindow.RelocalizeIfOpen();
+            WheelEditorWindow.RelocalizeIfOpen();
+            ShelfWindow.RelocalizeAll();
+            JobsWindow.RelocalizeAll();
         }
         ApplyHotkey();
         if (_tray is not null)
@@ -171,7 +175,7 @@ internal sealed class App : Application
             return;
         }
 
-        var taken = AppSettings.HotkeyName(wanted);
+        var taken = Bidi.Value(AppSettings.HotkeyName(wanted));
         foreach (var preset in Enum.GetValues<HotkeyPreset>().Where(p => p != HotkeyPreset.None && p != wanted))
         {
             if (!_hotkey.Register(preset))
@@ -180,7 +184,7 @@ internal sealed class App : Application
             _settings.Hotkey = preset;
             _settings.Save();
             SettingsWindow.RefreshIfOpen();
-            var now = AppSettings.HotkeyName(preset);
+            var now = Bidi.Value(AppSettings.HotkeyName(preset));
             Notifications.Show(T("Zkratka změněna", "Shortcut changed"),
                 T($"{taken} už používá jiná aplikace, DropWheel teď používá {now}. Změnit ji můžete v nastavení.",
                   $"{taken} is used by another app, so DropWheel now uses {now}. You can change it in Settings."));
@@ -201,10 +205,10 @@ internal sealed class App : Application
 
     private void ShowHelp()
     {
-        var convert = AppSettings.KeyName(_settings.ConvertKey);
-        var tools = AppSettings.KeyName(_settings.ToolsKey);
-        var actions = AppSettings.KeyName(_settings.ActionsKey);
-        var hotkey = AppSettings.HotkeyName(_settings.Hotkey);
+        var convert = Bidi.Value(AppSettings.KeyName(_settings.ConvertKey));
+        var tools = Bidi.Value(AppSettings.KeyName(_settings.ToolsKey));
+        var actions = Bidi.Value(AppSettings.KeyName(_settings.ActionsKey));
+        var hotkey = Bidi.Value(AppSettings.HotkeyName(_settings.Hotkey));
         var text = T(
             $"""
             1. Chyťte soubor myší (v Průzkumníku, na ploše, obrázek v prohlížeči, přílohu v Outlooku…).
@@ -240,14 +244,14 @@ internal sealed class App : Application
 
             The result is saved next to the original file; the original stays untouched.
             """);
-        MessageBox.Show(text + "\n\nDropWheel is based on FileAction by Metamorfolog (MIT).", T("Jak DropWheel funguje", "How DropWheel works"), MessageBoxButton.OK, MessageBoxImage.Information);
+        Dialogs.Show(text + "\n\nDropWheel is based on FileAction by Metamorfolog (MIT).", T("Jak DropWheel funguje", "How DropWheel works"), MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         Log(e.Exception);
         e.Handled = true;
-        Notifications.Show(T("DropWheel – chyba", "DropWheel – error"), e.Exception.Message, error: true);
+        Notifications.Show(T("DropWheel – chyba", "DropWheel – error"), Bidi.Value(e.Exception.Message), error: true);
     }
 
     public static void Log(Exception ex)

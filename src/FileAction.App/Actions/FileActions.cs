@@ -118,7 +118,7 @@ internal static class FileActions
                 Thread.Sleep(50);
             }
         }
-        Notifications.Show(T("Cesta zkopírována", "Path copied"), items.Count == 1 ? items[0].Path : Items(items.Count));
+        Notifications.Show(T("Cesta zkopírována", "Path copied"), items.Count == 1 ? Bidi.Value(items[0].Path) : Items(items.Count));
         return Task.CompletedTask;
     }
 

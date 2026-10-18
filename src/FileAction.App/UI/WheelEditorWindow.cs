@@ -46,6 +46,8 @@ internal sealed class WheelEditorWindow : Window
         Width = 640;
         Height = 820;
         MinWidth = 480;
+        UiSetup.Configure(this);
+        UiSetup.FitToWorkArea(this, 640, 820, 480, 360);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/DropWheel.ico"));
         Background = Theme.Page;
@@ -67,6 +69,15 @@ internal sealed class WheelEditorWindow : Window
         _open.Activate();
     }
 
+    /// <summary>Applies a live language switch without reopening the editor.</summary>
+    public static void RelocalizeIfOpen()
+    {
+        if (_open is null)
+            return;
+        LanguageManager.Apply(_open);
+        _open.Build();
+    }
+
     private void Save()
     {
         _settings.Save();
@@ -75,6 +86,8 @@ internal sealed class WheelEditorWindow : Window
 
     private void Build()
     {
+        Title = T("DropWheel – úprava kola", "DropWheel – customize wheels");
+        FlowDirection = LanguageManager.FlowDirection;
         var offset = _scroll.VerticalOffset;
         var root = new StackPanel { Margin = new Thickness(32, 28, 32, 32) };
         var title = Text(T("Úprava kola", "Customize wheels"), 26, FontWeights.SemiBold);
@@ -155,7 +168,7 @@ internal sealed class WheelEditorWindow : Window
             Padding = new Thickness(8),
             Cursor = Cursors.Hand,
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = T("Oblíbená – vždy první", "Favourite – always first"),
+            ToolTip = UiSetup.Tip(T("Oblíbená – vždy první", "Favourite – always first")),
         };
         star.MouseLeftButtonUp += (_, _) =>
         {

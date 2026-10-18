@@ -18,10 +18,12 @@ namespace FileAction.App.Jobs;
 /// <summary>Progress cards in the bottom-right corner. Never steals focus.</summary>
 internal sealed class JobsWindow : Window
 {
+    private static readonly List<JobsWindow> OpenWindows = [];
     private readonly StackPanel _cards = new();
 
     public JobsWindow()
     {
+        UiSetup.Configure(this);
         Title = T("DropWheel – průběh", "DropWheel – progress");
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
@@ -33,7 +35,16 @@ internal sealed class JobsWindow : Window
         Width = 380;
         SizeToContent = SizeToContent.Height;
         FontFamily = Theme.UiFont;
-        Content = _cards;
+        // Many jobs would otherwise grow past the bottom of a high-DPI screen.
+        Content = new ScrollViewer
+        {
+            Content = _cards,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            MaxHeight = Math.Max(240, SystemParameters.WorkArea.Height - 16),
+        };
+        OpenWindows.Add(this);
+        Closed += (_, _) => OpenWindows.Remove(this);
         SourceInitialized += (_, _) =>
             Win32.AddExStyle(new WindowInteropHelper(this).Handle, Win32.WS_EX_NOACTIVATE | Win32.WS_EX_TOOLWINDOW);
         SizeChanged += (_, _) => PlaceInCorner();
@@ -57,10 +68,27 @@ internal sealed class JobsWindow : Window
             Hide();
     }
 
+    /// <summary>Re-renders open progress cards in place after a live language switch.</summary>
+    private void ApplyLanguage()
+    {
+        FlowDirection = LanguageManager.FlowDirection;
+        Title = T("DropWheel – průběh", "DropWheel – progress");
+        foreach (var card in _cards.Children.OfType<JobCard>().ToList())
+            card.ApplyLanguage();
+        PlaceInCorner();
+    }
+
+    public static void RelocalizeAll()
+    {
+        foreach (var window in OpenWindows.ToArray())
+            window.ApplyLanguage();
+    }
+
     private void PlaceInCorner()
     {
         var work = SystemParameters.WorkArea;
-        Left = work.Right - ActualWidth - 8;
+        // Notifications sit on the bottom-right in LTR and bottom-left in Arabic, like Windows.
+        Left = LanguageManager.IsRtl ? work.Left + 8 : work.Right - ActualWidth - 8;
         Top = work.Bottom - ActualHeight - 8;
     }
 }
@@ -119,7 +147,8 @@ internal sealed class JobCard : Border
         StartPulse();
         _status = new TextBlock { Foreground = Theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
         _buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
-        _buttons.Children.Add(UI.Controls.Button(T("Zrušit", "Cancel"), () => _cancel()));
+        _cancelButton = UI.Controls.Button(T("Zrušit", "Cancel"), () => _cancel());
+        _buttons.Children.Add(_cancelButton);
 
         var close = new TextBlock
         {
@@ -130,7 +159,7 @@ internal sealed class JobCard : Border
             Padding = new Thickness(6),
             Cursor = Cursors.Hand,
             VerticalAlignment = VerticalAlignment.Top,
-            ToolTip = T("Zavřít", "Close"),
+            ToolTip = UiSetup.Tip(T("Zavřít", "Close")),
         };
         close.MouseLeftButtonUp += (_, _) =>
         {
@@ -170,6 +199,14 @@ internal sealed class JobCard : Border
     }
 
     private readonly Grid _badgeHost;
+    private readonly Border _cancelButton;
+
+    /// <summary>Updates the card after a live language switch; running jobs keep the title they started with.</summary>
+    public void ApplyLanguage()
+    {
+        FlowDirection = LanguageManager.FlowDirection;
+        UI.Controls.SetText(_cancelButton, T("Zrušit", "Cancel"));
+    }
 
     private void StartPulse()
     {
@@ -206,8 +243,8 @@ internal sealed class JobCard : Border
         _status.Text = warning ?? outputs.Count switch
         {
             0 => note ?? T("Hotovo", "Done"),
-            1 => T("Hotovo: ", "Done: ") + System.IO.Path.GetFileName(outputs[0]),
-            _ => T($"Hotovo: {outputs.Count} výstupů", $"Done: {outputs.Count} outputs"),
+            1 => T("Hotovo: ", "Done: ") + Bidi.Value(System.IO.Path.GetFileName(outputs[0])),
+            _ => T($"Hotovo: {Bidi.Number(outputs.Count)} výstupů", $"Done: {Bidi.Number(outputs.Count)} outputs"),
         };
         if (warning is null && note is not null && outputs.Count > 0)
             _status.Text += Environment.NewLine + note;

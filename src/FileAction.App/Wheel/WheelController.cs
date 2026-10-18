@@ -57,12 +57,15 @@ internal sealed class WheelController
         };
     }
 
-    /// <summary>Rebuilds the wheels after the UI language changed (labels are fixed when an operation is created).</summary>
+    /// <summary>
+    /// Rebuilds the operations after the UI language changed (labels are fixed when an operation is
+    /// created) and refreshes an open wheel in place; nothing has to close or reopen.
+    /// </summary>
     public void Relocalize()
     {
-        _wheel?.Finish();
         _coreOperations = BuildOperations();
         _actions = FileActions.Build(_settings, _settings.Save);
+        _wheel?.Relocalize();
     }
 
     /// <summary>The cross-platform catalog plus tools that need Windows itself (OCR).</summary>

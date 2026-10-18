@@ -36,6 +36,9 @@ internal sealed class SettingsWindow : Window
         Width = 680;
         Height = 820;
         MinWidth = 520;
+        UiSetup.Configure(this);
+        // At 200 % display scaling an 820-DIP window is taller than a 1080p work area.
+        UiSetup.FitToWorkArea(this, 680, 820, 520, 360);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/DropWheel.ico"));
         Background = Theme.Page;
@@ -64,6 +67,15 @@ internal sealed class SettingsWindow : Window
     /// <summary>Redraws the open settings window after the app changed a setting itself.</summary>
     public static void RefreshIfOpen() => _open?.Rebuild();
 
+    /// <summary>Applies a live language switch: new reading direction, new strings, same window.</summary>
+    public static void RelocalizeIfOpen()
+    {
+        if (_open is null)
+            return;
+        LanguageManager.Apply(_open);
+        _open.Rebuild();
+    }
+
     private void Save()
     {
         _settings.Save();
@@ -81,21 +93,23 @@ internal sealed class SettingsWindow : Window
 
     private void Build()
     {
+        Title = T("DropWheel – nastavení", "DropWheel – settings");
+        FlowDirection = LanguageManager.FlowDirection;
         var root = new StackPanel { Margin = new Thickness(32, 28, 32, 32), MaxWidth = 720 };
         root.Children.Add(Header());
 
         root.Children.Add(SectionHeader(T("Jazyk", "Language")));
-        root.Children.Add(Card(T("Jazyk aplikace", "App language"), null,
-            Segmented<Core.Language?>(
-                [(T("Podle Windows", "Windows"), null), ("Čeština", Core.Language.Czech), ("English", Core.Language.English)],
+        root.Children.Add(Card(T("Jazyk aplikace", "App language"),
+            T("Změní se hned, bez restartu.", "Applies immediately, no restart."),
+            Segmented<UiLanguage>(
+                [(T("Systém", "System"), UiLanguage.System), ("العربية", UiLanguage.Arabic), ("English", UiLanguage.English)],
                 _settings.Language,
                 value =>
                 {
                     _settings.Language = value;
+                    // Save calls the app, which applies the direction to every open window and
+                    // rebuilds this one through RelocalizeIfOpen.
                     Save();
-                    // Rebuild the window in the new language.
-                    Title = T("DropWheel – nastavení", "DropWheel – settings");
-                    Rebuild();
                 }),
             glyph: "\uE774"));
 
@@ -145,7 +159,7 @@ internal sealed class SettingsWindow : Window
             glyph: "\uE765"));
 
         root.Children.Add(SectionHeader(T("Výsledky", "Results")));
-        var folderLine = Text(_settings.OutputDirectory ?? "", 12, brush: Theme.Muted, wrap: false);
+        var folderLine = Text(Bidi.Value(_settings.OutputDirectory ?? ""), 12, brush: Theme.Muted, wrap: false);
         var folderRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
         folderRow.Children.Add(Button(T("Vybrat složku…", "Choose folder…"), PickFolder, glyph: Glyphs.Folder));
         folderLine.Margin = new Thickness(12, 0, 0, 0);
@@ -207,7 +221,7 @@ internal sealed class SettingsWindow : Window
             root.Children.Add(ToolCard(tool));
 
         var version = typeof(SettingsWindow).Assembly.GetName().Version;
-        var footer = Text($"DropWheel {version?.ToString(3)} · " + T("vše běží lokálně, soubory se nikam neodesílají.", "everything runs locally, files never leave your PC."), 12, brush: Theme.Muted);
+        var footer = Text($"DropWheel {Bidi.Value(version?.ToString(3))} · " + T("vše běží lokálně, soubory se nikam neodesílají.", "everything runs locally, files never leave your PC."), 12, brush: Theme.Muted);
         footer.Margin = new Thickness(2, 24, 0, 0);
         root.Children.Add(footer);
 
@@ -294,19 +308,21 @@ internal sealed class SettingsWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "DropWheel", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Dialogs.Show(this, ex.Message, "DropWheel", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
     private Border ToolCard(ExternalTool tool)
     {
         var path = _tools.Find(tool);
-        var description = path ?? tool switch
-        {
-            ExternalTool.Ffmpeg => T("Audio a video", "Audio and video"),
-            ExternalTool.Pandoc => T("Dokumenty (DOCX, Markdown, EPUB…)", "Documents (DOCX, Markdown, EPUB…)"),
-            _ => T("DOC, PPTX, ODS a převod do PDF", "DOC, PPTX, ODS and conversion to PDF"),
-        };
+        var description = path is not null
+            ? Bidi.Value(path)
+            : (tool switch
+            {
+                ExternalTool.Ffmpeg => T("Audio a video", "Audio and video"),
+                ExternalTool.Pandoc => T("Dokumenty (DOCX, Markdown, EPUB…)", "Documents (DOCX, Markdown, EPUB…)"),
+                _ => T("DOC, PPTX, ODS a převod do PDF", "DOC, PPTX, ODS and conversion to PDF"),
+            });
         var right = new StackPanel { Orientation = Orientation.Horizontal };
         right.Children.Add(Badge(path is null ? T("chybí", "missing") : T("nalezeno", "found"), path is not null));
         if (path is null)
@@ -317,8 +333,9 @@ internal sealed class SettingsWindow : Window
                 ExternalTool.Pandoc => "JohnMacFarlane.Pandoc",
                 _ => "TheDocumentFoundation.LibreOffice",
             };
+            var downloadSize = Bidi.Value(Shell.ToolInstaller.DownloadSize(tool));
             var install = Shell.ToolInstaller.CanInstall(tool) && DownloadTool is not null
-                ? Button(T($"Stáhnout ({Shell.ToolInstaller.DownloadSize(tool)})", $"Download ({Shell.ToolInstaller.DownloadSize(tool)})"), async () =>
+                ? Button(T($"Stáhnout ({downloadSize})", $"Download ({downloadSize})"), async () =>
                 {
                     if (await DownloadTool(tool))
                         Rebuild();
@@ -333,7 +350,7 @@ internal sealed class SettingsWindow : Window
                 }
                 catch (System.ComponentModel.Win32Exception ex)
                 {
-                    MessageBox.Show(this, ex.Message, "DropWheel", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Dialogs.Show(this, ex.Message, "DropWheel", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }, primary: true, glyph: "\uE896");
             install.Margin = new Thickness(10, 0, 0, 0);

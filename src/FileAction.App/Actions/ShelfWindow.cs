@@ -18,14 +18,18 @@ namespace FileAction.App.Actions;
 /// </summary>
 internal sealed class ShelfWindow : Window
 {
+    private static readonly List<ShelfWindow> OpenWindows = [];
     private readonly ObservableCollection<string> _paths = [];
     private readonly ListBox _list;
     private readonly TextBlock _header;
+    private readonly TextBlock _hint;
+    private readonly Button _close;
     private Point? _dragStart;
 
     private ShelfWindow()
     {
         Theme.Refresh();
+        UiSetup.Configure(this);
         Title = T("Plovoucí panel", "Floating shelf");
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
@@ -40,11 +44,11 @@ internal sealed class ShelfWindow : Window
         FontFamily = Theme.UiFont;
 
         _header = new TextBlock { Foreground = Theme.Text, FontFamily = Theme.DisplayFont, FontWeight = FontWeights.SemiBold, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
-        var close = IconButton("\uE711", T("Zavřít", "Close"));
-        close.Click += (_, _) => Close();
+        _close = IconButton("\uE711", T("Zavřít", "Close"));
+        _close.Click += (_, _) => Close();
         var header = new DockPanel { Margin = new Thickness(14, 10, 8, 8), Background = Brushes.Transparent, Cursor = Cursors.SizeAll };
-        DockPanel.SetDock(close, Dock.Right);
-        header.Children.Add(close);
+        DockPanel.SetDock(_close, Dock.Right);
+        header.Children.Add(_close);
         header.Children.Add(new TextBlock { Text = Glyphs.Pin, FontFamily = Theme.Icons, Foreground = Theme.Accent, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
         header.Children.Add(_header);
         header.MouseLeftButtonDown += (_, e) =>
@@ -59,7 +63,8 @@ internal sealed class ShelfWindow : Window
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Foreground = Theme.Text,
-            MaxHeight = 360,
+            // On a 200 % laptop screen the shelf has to stay shorter than the work area.
+            MaxHeight = Math.Min(360, Math.Max(120, SystemParameters.WorkArea.Height - 140)),
             SelectionMode = SelectionMode.Extended,
             ItemTemplate = BuildTemplate(),
             ItemContainerStyle = ItemStyle(),
@@ -83,7 +88,7 @@ internal sealed class ShelfWindow : Window
             }
         };
 
-        var hint = new TextBlock
+        _hint = new TextBlock
         {
             Text = T("Táhněte položky ven, nebo sem přidejte další.", "Drag items out, or drop more here."),
             Foreground = Theme.Muted,
@@ -95,7 +100,7 @@ internal sealed class ShelfWindow : Window
         var stack = new StackPanel();
         stack.Children.Add(header);
         stack.Children.Add(_list);
-        stack.Children.Add(hint);
+        stack.Children.Add(_hint);
         Content = new Border
         {
             Background = Theme.Panel,
@@ -107,6 +112,8 @@ internal sealed class ShelfWindow : Window
             Effect = Theme.Shadow(24),
         };
 
+        OpenWindows.Add(this);
+        Closed += (_, _) => OpenWindows.Remove(this);
         DragOver += (_, e) =>
         {
             e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
@@ -128,7 +135,37 @@ internal sealed class ShelfWindow : Window
         Win32.GetCursorPos(out var cursor);
         shelf.Show();
         var hwnd = new System.Windows.Interop.WindowInteropHelper(shelf).Handle;
-        Win32.SetWindowPos(hwnd, new IntPtr(-1), cursor.X + 24, cursor.Y - 40, 0, 0, Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+        // Opens on the side the reading direction suggests: right of the cursor in English, left in Arabic.
+        var x = LanguageManager.IsRtl ? cursor.X - (int)shelf.Width - 24 : cursor.X + 24;
+        Win32.SetWindowPos(hwnd, new IntPtr(-1), x, cursor.Y - 40, 0, 0, Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+    }
+
+    /// <summary>Builds a shelf without showing it, for the headless layout previews.</summary>
+    internal static ShelfWindow CreateForPreview(IEnumerable<string> paths)
+    {
+        var shelf = new ShelfWindow();
+        shelf.Add(paths);
+        return shelf;
+    }
+
+    /// <summary>Re-renders an open shelf after a live language switch: direction, strings, item rows.</summary>
+    private void Relocalize()
+    {
+        FlowDirection = LanguageManager.FlowDirection;
+        Title = T("Plovoucí panel", "Floating shelf");
+        UpdateHeader();
+        _hint.Text = T("Táhněte položky ven, nebo sem přidejte další.", "Drag items out, or drop more here.");
+        _close.ToolTip = UiSetup.Tip(T("Zavřít", "Close"));
+        // Rebuild the rows so the file-name converter runs again with the new isolate setting.
+        _list.ItemTemplate = BuildTemplate();
+        _list.ItemsSource = Array.Empty<string>();
+        _list.ItemsSource = _paths;
+    }
+
+    public static void RelocalizeAll()
+    {
+        foreach (var shelf in OpenWindows.ToArray())
+            shelf.Relocalize();
     }
 
     private void Add(IEnumerable<string> paths)
@@ -229,7 +266,7 @@ internal sealed class ShelfWindow : Window
     private static Button IconButton(string glyph, string tip) => new()
     {
         Content = new TextBlock { Text = glyph, FontFamily = Theme.Icons, FontSize = 11, Foreground = Theme.Muted },
-        ToolTip = tip,
+        ToolTip = UiSetup.Tip(tip),
         Width = 26,
         Height = 26,
         Background = Brushes.Transparent,
@@ -249,7 +286,7 @@ internal sealed class ShelfWindow : Window
     private sealed class NameConverter : System.Windows.Data.IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) =>
-            value is string path ? Path.GetFileName(path.TrimEnd('\\', '/')) : "";
+            value is string path ? Bidi.Value(Path.GetFileName(path.TrimEnd('\\', '/'))) : "";
 
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture) =>
             throw new NotSupportedException();

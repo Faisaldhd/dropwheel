@@ -62,6 +62,7 @@ internal sealed class WheelWindow : Window
     private Win32.POINT _anchor;
     private bool _finished;
     private bool _repeat;
+    private double _fit = 1.0;
     private DispatcherTimer? _closeTimer;
 
     public WheelWindow(
@@ -98,6 +99,12 @@ internal sealed class WheelWindow : Window
         FontFamily = Theme.UiFont;
         Focusable = true;
         Content = _canvas;
+        UiSetup.Configure(this);
+        // The disc is circular and its slices run clockwise; mirroring it would move every slice.
+        // Only the text inside the slices and the hub follow the reading direction.
+        _canvas.FlowDirection = System.Windows.FlowDirection.LeftToRight;
+        _hubContent.FlowDirection = LanguageManager.FlowDirection;
+        _tabs.FlowDirection = LanguageManager.FlowDirection;
         _canvas.RenderTransformOrigin = new Point(0.5, 0.5);
         _canvas.RenderTransform = new ScaleTransform(0.9, 0.9);
         _tabTrack.Child = _tabs;
@@ -113,7 +120,11 @@ internal sealed class WheelWindow : Window
             var flags = Win32.WS_EX_TOOLWINDOW | (mode == WheelMode.Drag ? Win32.WS_EX_NOACTIVATE : 0);
             Win32.AddExStyle(Handle, flags);
         };
-        DpiChanged += (_, _) => Dispatcher.BeginInvoke(PositionAtAnchor);
+        DpiChanged += (_, _) => Dispatcher.BeginInvoke(() =>
+        {
+            FitToWorkArea();
+            PositionAtAnchor();
+        });
 
         DragEnter += OnDragOver;
         DragOver += OnDragOver;
@@ -158,7 +169,11 @@ internal sealed class WheelWindow : Window
     {
         _anchor = screenPoint;
         Show();
+        FitToWorkArea();
         PositionAtAnchor();
+        // The HWND settles its new size on the next layout pass; position once more before the
+        // fade-in becomes visible (the window starts at Opacity 0).
+        Dispatcher.BeginInvoke(PositionAtAnchor);
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         var duration = TimeSpan.FromMilliseconds(140);
         BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
@@ -186,6 +201,33 @@ internal sealed class WheelWindow : Window
         var x = Math.Clamp(_anchor.X - w / 2, work.Left, Math.Max(work.Left, work.Right - w));
         var y = Math.Clamp(_anchor.Y - h / 2, work.Top, Math.Max(work.Top, work.Bottom - h));
         Win32.SetWindowPos(Handle, new IntPtr(-1), x, y, 0, 0, Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+    }
+
+    /// <summary>
+    /// Shrinks the disc when the work area is too small for it (for example a 1366×768 laptop at
+    /// 200 % scaling). A LayoutTransform keeps the Canvas coordinate system unchanged, so the
+    /// angular layout and hit testing stay exact; only the presented size changes.
+    /// </summary>
+    private void FitToWorkArea()
+    {
+        if (!Win32.GetWindowRect(Handle, out var rect))
+            return;
+        var width = rect.Right - rect.Left;
+        var height = rect.Bottom - rect.Top;
+        if (width <= 0 || height <= 0)
+            return;
+        var dpi = width / (Size * _fit);
+        var work = Win32.WorkAreaAt(_anchor);
+        var availableWidth = (work.Right - work.Left) / dpi;
+        var availableHeight = (work.Bottom - work.Top) / dpi;
+        var fit = Math.Clamp(Math.Min((availableWidth - 12) / Size, (availableHeight - 12) / Size), 0.55, 1.0);
+        if (Math.Abs(fit - _fit) < 0.01)
+            return;
+        _fit = fit;
+        _canvas.LayoutTransform = new ScaleTransform(fit, fit);
+        Width = Size * fit;
+        Height = Size * fit;
+        UpdateLayout();
     }
 
     /// <summary>True when a physical screen point lies on the wheel.</summary>
@@ -231,6 +273,25 @@ internal sealed class WheelWindow : Window
             SetHighlight(0);
     }
 
+    /// <summary>
+    /// Re-renders the open wheel after a live language switch. The slice geometry is untouched:
+    /// only the labels, hub and tabs are rebuilt, and the current highlight is kept.
+    /// </summary>
+    public void Relocalize()
+    {
+        if (_finished)
+            return;
+        var highlight = _highlight;
+        FlowDirection = LanguageManager.FlowDirection;
+        _hubContent.FlowDirection = LanguageManager.FlowDirection;
+        _tabs.FlowDirection = LanguageManager.FlowDirection;
+        LoadOperations();
+        Build();
+        AnimateSlicesIn();
+        if (highlight >= 0 && _ops.Count > 0)
+            SetHighlight(Math.Min(highlight, _ops.Count - 1));
+    }
+
     /// <summary>The drag ended somewhere: close unless the drop landed on us.</summary>
     public void OnDragEnded()
     {
@@ -253,6 +314,7 @@ internal sealed class WheelWindow : Window
     public void RenderPreview(string file, int highlight)
     {
         _canvas.RenderTransform = Transform.Identity;
+        _canvas.LayoutTransform = Transform.Identity;
         foreach (var group in _groups)
         {
             // Offscreen rendering doesn't advance animations; show the final state.
@@ -264,7 +326,7 @@ internal sealed class WheelWindow : Window
         if (highlight >= 0 && highlight < _ops.Count)
             SetHighlight(highlight);
         Content = null;
-        var root = new Grid { Background = SelfTest.Desktop(), Width = Size, Height = Size };
+        var root = new Grid { Background = SelfTest.Desktop(), Width = Size, Height = Size, FlowDirection = LanguageManager.FlowDirection };
         root.Children.Add(_canvas);
         _canvas.HorizontalAlignment = HorizontalAlignment.Center;
         _canvas.VerticalAlignment = VerticalAlignment.Center;
@@ -617,9 +679,16 @@ internal sealed class WheelWindow : Window
 
     private static StackPanel SliceLabel(Operation op)
     {
-        // Slices that first download a tool are shown a little faded.
-        var panel = new StackPanel { MaxWidth = 96, IsHitTestVisible = false, Opacity = op is Shell.NeedsToolOperation ? 0.6 : 1 };
         var isFormat = op.Wheel == WheelKind.Convert && op.Label.Length <= 6 && op.Label.ToUpperInvariant() == op.Label;
+        // Slices that first download a tool are shown a little faded. Format names such as MP4 stay
+        // left-to-right even in Arabic, because they are identifiers rather than prose.
+        var panel = new StackPanel
+        {
+            MaxWidth = 96,
+            IsHitTestVisible = false,
+            Opacity = op is Shell.NeedsToolOperation ? 0.6 : 1,
+            FlowDirection = isFormat ? System.Windows.FlowDirection.LeftToRight : LanguageManager.FlowDirection,
+        };
         if (!isFormat)
         {
             panel.Children.Add(new TextBlock
@@ -700,7 +769,7 @@ internal sealed class WheelWindow : Window
                 Padding = new Thickness(7, 1, 7, 2),
                 Background = active ? Theme.AccentGradient : Brushes.Transparent,
                 Cursor = Mode == WheelMode.Click ? Cursors.Hand : null,
-                ToolTip = AppSettings.WheelName(wheel),
+                ToolTip = UiSetup.Tip(AppSettings.WheelName(wheel)),
                 Child = new TextBlock
                 {
                     Text = key == Input.ModifierKey.None ? AppSettings.WheelName(wheel) : AppSettings.KeyName(key),
@@ -794,5 +863,5 @@ internal sealed class WheelWindow : Window
             _detail.Text = DescribeItems();
     }
 
-    private string DescribeItems() => _items.Count == 1 ? _items[0].Name : Items(_items.Count);
+    private string DescribeItems() => _items.Count == 1 ? Bidi.Value(_items[0].Name) : Items(_items.Count);
 }
