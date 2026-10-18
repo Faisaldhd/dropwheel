@@ -195,7 +195,8 @@ internal static class Controls
             var t = (current - min) / (double)(max - min);
             fill.Width = Math.Max(0, t * width);
             thumb.Margin = new Thickness(t * (width - 18), 0, 0, 0);
-            label.Text = current.ToString();
+            // Technical values keep Western digits in Arabic too.
+            label.Text = current.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
         void SetFrom(Point p)
         {
@@ -268,6 +269,14 @@ internal static class Controls
             click();
         };
         return button;
+    }
+
+    /// <summary>Replaces the caption of a button built by <see cref="Button"/> without losing its glyph.</summary>
+    public static void SetText(Border button, string text)
+    {
+        if (button.Child is StackPanel panel && panel.Children.Count > 0
+            && panel.Children[panel.Children.Count - 1] is TextBlock label)
+            label.Text = text;
     }
 
     /// <summary>A small coloured status label, e.g. "found" / "missing".</summary>

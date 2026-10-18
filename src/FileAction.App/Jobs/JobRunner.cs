@@ -57,7 +57,7 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
         _window ??= new JobsWindow();
         using var cts = new CancellationTokenSource();
         var title = op.Wheel == WheelKind.Convert && op.Label.ToUpperInvariant() == op.Label ? T($"Převod na {op.Label}", $"Convert to {op.Label}") : op.Label;
-        var detail = items.Count == 1 ? items[0].Name : Items(items.Count);
+        var detail = items.Count == 1 ? Bidi.Value(items[0].Name) : Items(items.Count);
         var card = _window.Add(title, detail, iconPath: items[0].Path, cancel: () =>
         {
             try
@@ -100,10 +100,10 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
     {
         if (ask)
         {
-            var names = string.Join(" + ", missing.Select(ToolLocator.DisplayName));
-            var size = string.Join(" + ", missing.Select(ToolInstaller.DownloadSize));
+            var names = string.Join(" + ", missing.Select(t => Bidi.Value(ToolLocator.DisplayName(t))));
+            var size = string.Join(" + ", missing.Select(t => Bidi.Value(ToolInstaller.DownloadSize(t))));
             var owner = ForegroundHelper.Host();
-            var answer = System.Windows.MessageBox.Show(owner,
+            var answer = Dialogs.Show(owner,
                 T($"Pro tento převod je potřeba {names} (stažení {size}). Stáhnout teď? Stačí jednou.",
                   $"This conversion needs {names} ({size} download). Download it now? It's a one-time step."),
                 "DropWheel", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
@@ -116,7 +116,9 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
         foreach (var tool in missing)
         {
             using var cts = new CancellationTokenSource();
-            var card = _window.Add(T($"Stahuji {ToolLocator.DisplayName(tool)}", $"Downloading {ToolLocator.DisplayName(tool)}"), ToolInstaller.DownloadSize(tool), () =>
+            var toolName = Bidi.Value(ToolLocator.DisplayName(tool));
+            var toolSize = Bidi.Value(ToolInstaller.DownloadSize(tool));
+            var card = _window.Add(T($"Stahuji {toolName}", $"Downloading {toolName}"), toolSize, () =>
             {
                 try
                 {

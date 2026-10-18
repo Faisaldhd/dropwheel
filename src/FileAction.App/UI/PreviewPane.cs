@@ -237,7 +237,8 @@ internal sealed class PreviewPane : UserControl
             if (duration is > 0)
             {
                 var seconds = duration.Value;
-                caption = T($"Délka {FormatDuration(seconds)}", $"Duration {FormatDuration(seconds)}");
+                var formatted = Bidi.Value(FormatDuration(seconds));
+                caption = T($"Délka {formatted}", $"Duration {formatted}");
                 times = [seconds * 0.25, seconds * 0.5, seconds * 0.75, seconds * 0.95];
             }
             else

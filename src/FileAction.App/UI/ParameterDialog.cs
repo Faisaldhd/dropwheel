@@ -24,11 +24,12 @@ internal sealed class ParameterDialog : Window
         Background = Theme.Page;
         FontFamily = Theme.UiFont;
         Foreground = Theme.Text;
+        UiSetup.Configure(this);
 
         var stack = new StackPanel { Margin = new Thickness(24, 20, 24, 22) };
         stack.Children.Add(new TextBlock
         {
-            Text = items.Count == 1 ? items[0].Name : Items(items.Count),
+            Text = items.Count == 1 ? Bidi.Value(items[0].Name) : Items(items.Count),
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 0, 0, 12),
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -78,7 +79,14 @@ internal sealed class ParameterDialog : Window
         buttons.Children.Add(ok);
         buttons.Children.Add(cancel);
         stack.Children.Add(buttons);
-        Content = stack;
+        // A video preview plus several fields can be taller than a 200 % laptop work area.
+        Content = new ScrollViewer
+        {
+            Content = stack,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            MaxHeight = Math.Max(200, SystemParameters.WorkArea.Height - 16),
+        };
 
         Loaded += (_, _) =>
         {
