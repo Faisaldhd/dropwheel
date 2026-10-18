@@ -40,7 +40,7 @@ public static class ArchiveBackend
 
             var entries = Directory.GetFileSystemEntries(temp);
             if (entries.Length == 0)
-                throw new ConversionException(T("Archiv je prázdný.", "The archive is empty."));
+                throw new ConversionException(T("error.archive.empty"));
             if (entries.Length == 1)
             {
                 var name = Path.GetFileName(entries[0]);
@@ -107,7 +107,7 @@ public static class ArchiveBackend
         }
         catch (Exception ex) when (ex is InvalidFormatException or ArchiveOperationException or CryptographicException)
         {
-            throw new ConversionException(T($"Archiv nelze rozbalit: {ex.Message}", $"Cannot extract the archive: {ex.Message}"), ex);
+            throw new ConversionException(T("error.archive.extract", ex.Message), ex);
         }
     }
 
@@ -117,7 +117,7 @@ public static class ArchiveBackend
         var relative = entryKey.Replace('\\', '/').TrimStart('/');
         var path = Path.GetFullPath(Path.Combine(fullDestination, relative));
         if (!path.StartsWith(fullDestination, StringComparison.OrdinalIgnoreCase))
-            throw new ConversionException(T($"Archiv obsahuje nebezpečnou cestu: {entryKey}", $"The archive contains an unsafe path: {entryKey}"));
+            throw new ConversionException(T("error.archive.unsafePath", entryKey));
         return path;
     }
 
@@ -178,7 +178,7 @@ public static class ArchiveBackend
     }
 
     public static string ArchiveNameFor(IReadOnlyList<FileItem> items) =>
-        items.Count == 1 ? items[0].BaseName : T("Archiv", "Archive");
+        items.Count == 1 ? items[0].BaseName : T("fileType.archive");
 
     /// <summary>Repacks an archive into another archive format.</summary>
     public static async Task<string> RepackAsync(FileItem item, string format, OperationContext ctx)

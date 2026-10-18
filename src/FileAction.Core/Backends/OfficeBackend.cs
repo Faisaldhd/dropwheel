@@ -26,7 +26,7 @@ public static class OfficeBackend
 
     public static async Task<string> ConvertToTempAsync(OperationContext ctx, string input, string format, string? inputFilter = null) =>
         await TryConvertToTempAsync(ctx, input, format, inputFilter).ConfigureAwait(false)
-        ?? throw new ConversionException(T("LibreOffice soubor nepřevedl (je dokument v pořádku a nezamčený heslem?).", "LibreOffice could not convert the file (is it intact and not password-protected?)."));
+        ?? throw new ConversionException(T("error.office.convertFailed"));
 
     /// <summary>
     /// Conversion into a fresh temporary folder, or null when LibreOffice wrote no document (for example when

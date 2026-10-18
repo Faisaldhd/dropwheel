@@ -74,7 +74,7 @@ public static partial class FfmpegBackend
             }
             catch (ConversionException) when (noAudio)
             {
-                throw new ConversionException(T("Soubor neobsahuje zvukovou stopu.", "The file has no audio track."));
+                throw new ConversionException(T("error.video.noAudio"));
             }
         }
 
@@ -128,13 +128,13 @@ public static partial class FfmpegBackend
     {
         text = text.Trim().Replace(',', '.');
         if (text.Length == 0)
-            throw new ConversionException(T("Chybí čas.", "Missing time."));
+            throw new ConversionException(T("error.video.missingTime"));
         var parts = text.Split(':');
         double seconds = 0;
         foreach (var p in parts)
         {
             if (!double.TryParse(p, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) || v < 0)
-                throw new ConversionException(T($"Neplatný čas: {text}", $"Invalid time: {text}"));
+                throw new ConversionException(T("error.video.invalidTime", text));
             seconds = seconds * 60 + v;
         }
         return seconds;

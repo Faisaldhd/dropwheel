@@ -33,7 +33,7 @@ public static class PdfBackend
             return [single];
         }
 
-        var folder = OutputPaths.UniqueDirectory(dir, $"{item.BaseName} ({T("stránky", "pages")})");
+        var folder = OutputPaths.UniqueDirectory(dir, $"{item.BaseName} ({T("suffix.pages")})");
         Directory.CreateDirectory(folder);
         var digits = count.ToString().Length;
         try
@@ -96,7 +96,7 @@ public static class PdfBackend
             sb.Append(markdown ? ToMarkdownParagraphs(text) : text);
         }
         if (sb.Length == 0)
-            throw new ConversionException(T("PDF neobsahuje žádný text (nejspíš je to sken). Zkuste převod na JPG/PNG.", "The PDF contains no text (probably a scan). Try converting it to JPG/PNG."));
+            throw new ConversionException(T("error.pdf.noText"));
         return sb.ToString();
     }
 
@@ -165,7 +165,7 @@ public static class PdfBackend
         try
         {
             if (produced is null || !HasTableData(produced))
-                throw new ConversionException(T("V tomto PDF nebyly nalezeny žádné tabulky.", "No tables found in this PDF."));
+                throw new ConversionException(T("error.pdf.noTables"));
             var final = OutputPaths.Unique(ctx.OutputDirFor(item.Path), item.BaseName, "xlsx");
             File.Move(produced, final);
             return final;
@@ -208,7 +208,7 @@ public static class PdfBackend
     public static async Task<IEnumerable<string>> SplitAsync(FileItem item, OperationContext ctx, IProgress<double> progress)
     {
         var dir = ctx.OutputDirFor(item.Path);
-        var folder = OutputPaths.UniqueDirectory(dir, $"{item.BaseName} ({T("stránky", "pages")})");
+        var folder = OutputPaths.UniqueDirectory(dir, $"{item.BaseName} ({T("suffix.pages")})");
         Directory.CreateDirectory(folder);
         try
         {
@@ -261,7 +261,7 @@ public static class PdfBackend
         }
         catch (PdfReaderException ex)
         {
-            throw new ConversionException(T($"PDF {Path.GetFileName(path)} nelze otevřít: {ex.Message}", $"Cannot open PDF {Path.GetFileName(path)}: {ex.Message}"), ex);
+            throw new ConversionException(T("error.pdf.cannotOpen", Path.GetFileName(path), ex.Message), ex);
         }
     }
 }

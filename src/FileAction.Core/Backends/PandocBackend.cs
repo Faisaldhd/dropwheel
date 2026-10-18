@@ -13,7 +13,7 @@ public static class PandocBackend
         "odt" => "odt",
         "epub" => "epub",
         "rtf" => "rtf",
-        _ => throw new ConversionException(T($"Pandoc neumí číst formát {format}.", $"Pandoc cannot read {format}.")),
+        _ => throw new ConversionException(T("error.pandoc.cannotRead", format)),
     };
 
     public static string WriterFor(string format) => format switch
@@ -25,7 +25,7 @@ public static class PandocBackend
         "odt" => "odt",
         "epub" => "epub3",
         "rtf" => "rtf",
-        _ => throw new ConversionException(T($"Pandoc neumí zapsat formát {format}.", $"Pandoc cannot write {format}.")),
+        _ => throw new ConversionException(T("error.pandoc.cannotWrite", format)),
     };
 
     public static async Task ConvertAsync(OperationContext ctx, string input, string inputFormat, string output, string format)

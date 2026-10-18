@@ -90,7 +90,7 @@ public static partial class SubtitleBackend
         {
             var cues = Parse(await File.ReadAllTextAsync(item.Path, ctx.CancellationToken).ConfigureAwait(false));
             if (cues.Count == 0)
-                throw new ConversionException(T("V souboru nejsou žádné titulky.", "The file contains no subtitles."));
+                throw new ConversionException(T("error.subs.none"));
             var text = format switch
             {
                 "srt" => ToSrt(cues),

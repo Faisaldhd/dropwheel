@@ -25,7 +25,7 @@ public static class SpreadsheetBackend
             "csv" or "tsv" => [new Sheet(Formats.BaseNameOf(path), ReadDelimited(path, format == "tsv" ? '\t' : null))],
             "xlsx" or "xlsm" => ReadXlsx(path),
             "xls" => ReadXls(path),
-            _ => throw new ConversionException(T($"Tabulku formátu {format} lze převést jen s LibreOffice.", $"{format} spreadsheets need LibreOffice.")),
+            _ => throw new ConversionException(T("error.sheet.needsLibreOffice", format)),
         };
     }
 
@@ -210,7 +210,7 @@ public static class SpreadsheetBackend
             }
         }
         if (sheets.Count == 0)
-            workbook.Worksheets.Add(T("List1", "Sheet1"));
+            workbook.Worksheets.Add(T("sheet.defaultName"));
         workbook.SaveAs(output);
     }
 
@@ -218,7 +218,7 @@ public static class SpreadsheetBackend
     {
         var clean = new string(raw.Where(c => "[]:*?/\\".IndexOf(c) < 0).ToArray()).Trim();
         if (clean.Length == 0)
-            clean = T("List", "Sheet");
+            clean = T("sheet.namePrefix");
         if (clean.Length > 31)
             clean = clean[..31];
         var name = clean;
