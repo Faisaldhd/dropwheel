@@ -30,7 +30,7 @@ elease\DropWheel\DropWheel.exe (326,656 B, sha256 4201477b...) — REA
   build (~2 MB) that requires .NET 10 on the user's PC? Trimming alone will not reach 50 MB with WPF + Magick + Skia.
 
 ## Next
-R-2 → R-5 → `UPDATE_PROMPT.md` (UpdateConfig.Repository = Faisaldhd/dropwheel-releases).
+R-2 → R-5 → `UPDATE_PROMPT.md` (UpdateConfig.Repository = Faisaldhd/dropwheel).
 
 ## Legal (R-6 … R-9) — done this session
 - **R-6 fixed**: `scripts/fix_changes.py` deleted; `scripts/_*` added to `.gitignore`.

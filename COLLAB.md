@@ -28,5 +28,5 @@
 
 ## Git
 - Remote: `origin` = `https://github.com/Faisaldhd/dropwheel` (private). This is the ONLY remote.
-- Releases (installers only): `Faisaldhd/dropwheel-releases` (public).
+- Releases (installers only): `Faisaldhd/dropwheel` (public).
 - Branch: `main`. Tag every release `vX.Y.Z`.

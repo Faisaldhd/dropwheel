@@ -4,11 +4,11 @@ Auto-update comes back, but it points ONLY to the owner's own GitHub. It must ne
 
 ## Hosting model
 - **Source code:** a PRIVATE repo, owned by Faisal (for example `<owner>/dropwheel`).
-- **Installers:** a separate PUBLIC repo used only for releases (for example `<owner>/dropwheel-releases`).
+- **Installers:** a separate PUBLIC repo used only for releases (for example `Faisaldhd/dropwheel`).
   - The app reads releases anonymously, so this repo must be public.
   - It contains no source code: only a README and the releases.
   - Never embed a GitHub token in the app.
-- Put the repo name in ONE constant (`UpdateConfig.Repository = "<owner>/dropwheel-releases"`) and leave a clear TODO until the owner gives the real name.
+- Put the repo name in ONE constant (`UpdateConfig.Repository = "Faisaldhd/dropwheel"`) and leave a clear TODO until the owner gives the real name.
 
 ## 1. Restore the updater from git history
 The updater was removed in the 2.0.0 cleanup. Restore `Updates.cs`, `Updater.cs`, the tray item, the notification, the Settings toggle and the installer `--updated` run entry from the commit before that removal (`git log --diff-filter=D --name-only`).
@@ -65,7 +65,7 @@ The single source is the csproj `<Version>`. The installer `AppVersion` reads it
 - Update CHANGES.md: "Auto-update (signed) from our own releases".
 
 ## 6. Owner checklist (put this at the end of README.md)
-1. Create a GitHub account (or use an existing one), then two repos: `dropwheel` (private, for the source) and `dropwheel-releases` (public, for the releases).
+1. Create a GitHub account (or use an existing one), then two repos: `dropwheel` (private, for the source) and `dropwheel` (public, for the releases).
 2. Send the repo name to the developer; it goes into `UpdateConfig.Repository`.
 3. Install the GitHub CLI and log in: `winget install GitHub.cli`, then `gh auth login`.
 4. Run `scripts\make-update-key.ps1` ONCE and back up the key file. Without it, you can never ship an update to existing users.
