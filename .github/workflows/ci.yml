@@ -52,6 +52,14 @@ jobs:
           dotnet build src/FileAction.App/FileAction.App.csproj -c Release --no-restore
           dotnet build tests/FileAction.Tests/FileAction.Tests.csproj -c Release --no-restore
 
+      - name: Install FFmpeg and Pandoc (integration tests)
+        shell: pwsh
+        run: |
+          choco install ffmpeg pandoc --no-progress -y
+          $env:PATH = "$env:PATH;$env:ProgramData\chocolatey\bin"
+          ffmpeg -version | Select-Object -First 1
+          pandoc --version | Select-Object -First 1
+
       - name: Test
         shell: pwsh
         run: >
@@ -168,11 +176,35 @@ jobs:
             Write-Warning "setup is $setupMb MB, above the 30 MB target of R-2"
           }
 
+      - name: Portable zip
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          Compress-Archive -Path release/DropWheel/* -DestinationPath "release/DropWheel-portable-$version.zip" -Force
+          Get-Item "release/DropWheel-portable-$version.zip" | Select-Object Name, Length
+
       - name: Upload setup
         uses: actions/upload-artifact@v4
         with:
           name: DropWheel-Setup-${{ steps.version.outputs.version }}
-          path: release/DropWheel-Setup-*.exe
+          path: |
+            release/DropWheel-Setup-*.exe
+            release/DropWheel-portable-*.zip
+          retention-days: 14
+
+      - name: Diagnose report
+        shell: pwsh
+        run: |
+          # R-18: the report is what the owner sends back when the app misbehaves on a locked-down PC.
+          & release/DropWheel/DropWheel.exe --diagnose release/diagnose.txt
+          if ($LASTEXITCODE -ne 0) { throw "--diagnose failed with $LASTEXITCODE" }
+          Get-Content release/diagnose.txt | Select-Object -First 40
+
+      - name: Upload diagnose
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnose
+          path: release/diagnose.txt
           retention-days: 14
 
   screenshots:

@@ -58,6 +58,12 @@ internal sealed class GlobalInput : IDisposable
 
     public bool IsDragging => _dragging;
 
+    /// <summary>True when both low-level hooks are installed.</summary>
+    public bool HooksInstalled => _keyboardHook != IntPtr.Zero && _mouseHook != IntPtr.Zero;
+
+    /// <summary>The Win32 error of the hook that failed to install, or 0 (for logs and --diagnose).</summary>
+    public int HookError { get; private set; }
+
     public Win32.POINT Cursor => new() { X = Volatile.Read(ref _cursorX), Y = Volatile.Read(ref _cursorY) };
 
     public void Start()
@@ -70,7 +76,10 @@ internal sealed class GlobalInput : IDisposable
             _threadId = Win32.GetCurrentThreadId();
             var module = Win32.GetModuleHandle(null);
             _keyboardHook = Win32.SetWindowsHookEx(Win32.WH_KEYBOARD_LL, _keyboardProc, module, 0);
+            var keyboardError = Marshal.GetLastWin32Error();
             _mouseHook = Win32.SetWindowsHookEx(Win32.WH_MOUSE_LL, _mouseProc, module, 0);
+            var mouseError = Marshal.GetLastWin32Error();
+            HookError = _keyboardHook == IntPtr.Zero ? keyboardError : _mouseHook == IntPtr.Zero ? mouseError : 0;
             ready.Set();
             while (Win32.GetMessage(out _, IntPtr.Zero, 0, 0) > 0)
             {

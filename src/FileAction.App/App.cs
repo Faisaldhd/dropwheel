@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using FileAction.App.Actions;
+using FileAction.App.Diagnostics;
 using FileAction.App.Input;
 using FileAction.App.Jobs;
 using FileAction.App.Shell;
@@ -17,14 +18,32 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        AppLog.Initialize();
+
         if (args.Length >= 1 && args[0] == "--self-test")
             return SelfTest.Run(args.Length >= 2 ? args[1] : "self-test");
+        if (args.Contains("--diagnose"))
+            return Diagnose.Run(args.SkipWhile(a => a != "--diagnose").Skip(1).FirstOrDefault());
         if (args.Contains("--unregister"))
         {
             // Called by the uninstaller.
             ShellIntegration.SetContextMenu(false);
             ShellIntegration.SetAutostart(false);
             return 0;
+        }
+
+        // R-21: a low-integrity process cannot write to %APPDATA%/%TEMP% or receive input from normal windows,
+        // which makes the app look like it "opens and disappears". Say so instead of failing silently.
+        if (Integrity.IsLow)
+        {
+            AppLog.Error($"refusing to start: low-integrity process ({Integrity.Describe()})");
+            MessageBox.Show(
+                "DropWheel was started from a low-integrity location, so it cannot save settings or watch the " +
+                "keyboard and mouse.\n\nCopy DropWheel to a normal folder (for example " +
+                "%LOCALAPPDATA%\\Programs\\DropWheel) or run the installer, then start it again.\n\n" +
+                "Run \"DropWheel.exe --diagnose\" for details.",
+                "DropWheel", MessageBoxButton.OK, MessageBoxImage.Error);
+            return 3;
         }
 
         using var instance = SingleInstance.TryAcquire();
@@ -62,21 +81,28 @@ internal sealed class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        CrashGuard.Install(this);
 
         _settings = AppSettings.Load();
+        AppLog.Info($"settings loaded from {Path.Combine(AppSettings.Folder, "settings.json")}");
         LanguageManager.Apply(_settings.Language);
+        AppLog.Info($"language: {LanguageManager.Current} (preference {LanguageManager.Preference}), rtl={LanguageManager.IsRtl}");
         Theme.Refresh();
         _tools = new ToolLocator();
         var jobs = new JobRunner(_settings, _tools);
         SettingsWindow.DownloadTool = tool => jobs.DownloadToolsAsync([tool], ask: false);
 
         _input = new GlobalInput(Dispatcher);
+        var hooksFailed = false;
         try
         {
             _input.Start();
+            AppLog.Info($"input hooks installed (keyboard={_input.HooksInstalled}, last Win32 error {_input.HookError})");
         }
         catch (InvalidOperationException ex)
         {
+            hooksFailed = true;
+            AppLog.Error($"input hooks failed (Win32 error {_input.HookError})", ex);
             Dialogs.Show(ex.Message, "DropWheel", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
@@ -92,9 +118,17 @@ internal sealed class App : Application
             }
         });
         _tray = CreateTray();
+        AppLog.Info("tray icon created");
+        if (hooksFailed)
+        {
+            _tray.Show("DropWheel", T(
+                "DropWheel nemůže na tomto PC sledovat myš a klávesnici (může to blokovat bezpečnostní software). Použijte Ctrl+Alt+Mezerník nebo klepněte pravým tlačítkem na DropWheel.",
+                "DropWheel can't watch the mouse and keyboard on this PC (security software may block it). Use Ctrl+Alt+Space or right-click DropWheel."), true);
+        }
         SettingsWindow.Operations = () => _controller.AllOperations;
         _hotkey = new HotkeyListener(_controller.OnHotkey);
         ApplyHotkey();
+        AppLog.Info("hotkey applied");
         _instance.Listen(Dispatcher, HandleArgs);
 
         ShellIntegration.Refresh();
