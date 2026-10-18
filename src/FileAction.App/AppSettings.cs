@@ -1,11 +1,20 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using FileAction.App.Input;
 using FileAction.Core;
 using static FileAction.Core.Loc;
 
 namespace FileAction.App;
+
+/// <summary>The UI language the user picked; <see cref="UiLanguage.System"/> follows the Windows display language.</summary>
+public enum UiLanguage
+{
+    System,
+    English,
+    Arabic,
+}
 
 public enum HotkeyPreset
 {
@@ -28,8 +37,8 @@ public sealed class AppSettings
     public ModifierKey ActionsKey { get; set; } = ModifierKey.Alt;
     public HotkeyPreset Hotkey { get; set; } = HotkeyPreset.CtrlAltSpace;
 
-    /// <summary>Null = follow the Windows display language.</summary>
-    public Language? Language { get; set; }
+    /// <summary>System = follow the Windows display language.</summary>
+    public UiLanguage Language { get; set; } = UiLanguage.System;
 
     /// <summary>Empty = save results next to the original file.</summary>
     public string? OutputDirectory { get; set; }
@@ -79,13 +88,50 @@ public sealed class AppSettings
         try
         {
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize(File.ReadAllText(FilePath), SettingsJson.Default.AppSettings) ?? new AppSettings();
+            {
+                var json = File.ReadAllText(FilePath);
+                return JsonSerializer.Deserialize(MigrateLanguage(json), SettingsJson.Default.AppSettings) ?? new AppSettings();
+            }
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
             // Broken settings file: start with defaults.
         }
         return new AppSettings();
+    }
+
+    /// <summary>
+    /// Older builds stored <c>Language</c> as a nullable English/Czech enum. The model is now
+    /// System/English/Arabic, and an unknown, legacy or null value means "follow Windows". Only that
+    /// member is rewritten, so an old settings file never loses the other preferences.
+    /// </summary>
+    internal static string MigrateLanguage(string json)
+    {
+        try
+        {
+            if (JsonNode.Parse(json) is not JsonObject root || !root.TryGetPropertyValue("Language", out var language))
+                return json;
+            root["Language"] = JsonValue.Create(ReadLanguage(language).ToString());
+            return root.ToJsonString();
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
+        {
+            // Keep the original text; normal loading below decides whether it is usable.
+            return json;
+        }
+    }
+
+    private static UiLanguage ReadLanguage(JsonNode? language)
+    {
+        if (language is not JsonValue value || !value.TryGetValue<string>(out var text) || string.IsNullOrWhiteSpace(text))
+            return UiLanguage.System;
+        return text.Trim().ToLowerInvariant() switch
+        {
+            "system" => UiLanguage.System,
+            "english" => UiLanguage.English,
+            "arabic" => UiLanguage.Arabic,
+            _ => UiLanguage.System,
+        };
     }
 
     public void Save()
