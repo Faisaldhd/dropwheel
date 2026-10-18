@@ -4,17 +4,6 @@
 
 DropWheel is based on [FileAction](https://github.com/Metamorfolog/file_action) by Metamorfolog (MIT). It is an independent Windows take on the idea and is not affiliated with Tangerine.
 
-<p align="center">
-  <img src="docs/screenshots/en/wheel-video-convert.png" width="32%" alt="Convert wheel for a video" />
-  <img src="docs/screenshots/en/wheel-image-tools.png" width="32%" alt="Tools wheel for an image" />
-  <img src="docs/screenshots/en/wheel-actions.png" width="32%" alt="Actions wheel" />
-</p>
-<p align="center">
-  <img src="docs/screenshots/en/wheel-light.png" width="32%" alt="Light mode" />
-  <img src="docs/screenshots/en/settings.png" width="32%" alt="Settings" />
-  <img src="docs/screenshots/en/jobs.png" width="32%" alt="Progress" />
-</p>
-
 ## How it works
 
 1. Grab a file: in File Explorer, on the desktop, an image or link in your browser, an e-mail attachment, a file inside a ZIP folder…
