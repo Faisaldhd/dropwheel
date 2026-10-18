@@ -1,5 +1,7 @@
 @echo off
-rem Builds the patched DropWheel (Windows x64) with the locally downloaded .NET 10 SDK.
+rem Builds the patched DropWheel (Windows x64, framework-dependent) with the locally downloaded .NET 10 SDK.
+rem The app itself no longer carries the .NET runtime: the setup installs the .NET 10 Desktop Runtime
+rem when the target PC does not have it, so the build needs -r win-x64 --self-contained false.
 setlocal
 set "ROOT=%~dp0"
 set "SDK=%ROOT%tools\dotnet-sdk"
@@ -25,13 +27,19 @@ set "PATH=%SDK%;%PATH%"
 "%SDK%\dotnet.exe" --version
 if errorlevel 1 exit /b 4
 
-echo Building...
-"%SDK%\dotnet.exe" publish "%ROOT%src\FileAction.App\FileAction.App.csproj" -c Release -r win-x64 --self-contained -o "%ROOT%publish"
+echo Building ^(framework-dependent, win-x64^)...
+"%SDK%\dotnet.exe" publish "%ROOT%src\FileAction.App\FileAction.App.csproj" -c Release -r win-x64 --self-contained false -o "%ROOT%publish"
 if errorlevel 1 (
     echo [X] Build failed.
     exit /b 5
 )
+if not exist "%ROOT%publish\DropWheel.exe" (
+    echo [X] Build failed: publish did not produce DropWheel.exe.
+    exit /b 6
+)
 echo [OK] %ROOT%publish\DropWheel.exe
+echo      Framework-dependent: the PC needs the .NET 10 Desktop Runtime ^(the setup installs it^).
 exit /b 0
 
-rem Installer: "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=2.0.0 installer\DropWheel.iss
+rem Release (publish to ..\release\DropWheel + zip + setup):  release.cmd
+rem Installer only:  "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" /DAppVersion=2.0.0 installer\DropWheel.iss
