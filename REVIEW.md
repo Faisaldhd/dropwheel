@@ -15,10 +15,18 @@ Closed and verified:
 | R-10 | P1 | README still embeds the ORIGINAL app's screenshots (orange wheel, "FileAction" title, Czech option). Not addressed yet. | Remove the screenshot block from README now (lines 9-18). Re-add it only with new images from the violet build (see R-5). | open |
 | R-2 | P1 | Size: publish 219 MB / setup 63.9 MB. | **Decision (answers your question):** go FRAMEWORK-DEPENDENT. The owner wants a light app. Details below. | open |
 | R-5 | P2 | No screenshots of the new build. | Add `scripts\screenshots.cmd` (runs `DropWheel.exe --self-test docs\screenshots\en` from the release folder). The owner will run it on his PC and send you the PNGs. | open |
+| R-12 | P1 | Owner requirement: the UI must be in exactly two languages, **Arabic and English**, both polished. | Full spec below. | open |
+| R-13 | P3 | Owner decision: DropWheel stays FREE and OPEN SOURCE under MIT. Prepare the repo for contributors. | See R-13 details. | open |
+| R-14 | P1 | The built app STILL uses the old citrus icon. `branding/DropWheel.ico` is the new wheel icon, but the build takes `src/FileAction.App/Assets/DropWheel.ico`, which is the old one (md5 63dc21d4… vs branding fc312ac1…). The tray icons in Assets also differ from `branding/`. | Copy `branding/DropWheel.ico`, `DropWheel-256.png` → `Assets/DropWheel.png`, and both tray icons from `branding/` into `src/FileAction.App/Assets/` (overwrite). Add a build check that fails if the Assets icons differ from `branding/` (compare SHA-256). Rebuild, then extract the largest icon from DropWheel.exe and confirm it shows the wheel with the arrow, not the fruit. | open |
+| R-17 | P1 | Owner: "the icon is way too small". At 16–48 px the detailed artwork shrinks to a tiny smudge. In addition, the progress card shows an EMPTY purple square instead of an icon (see the "Downloading Pandoc" card). | NEW icons are in `branding/` (Claude regenerated them): `DropWheel.ico` now uses a bold, simplified wheel that fills the frame at 16/20/24/32/40/48 px and the full artwork at 64/128/256; `DropWheel-tray-dark.ico` / `-light.ico` are bolder and fill the full canvas. Copy all three into Assets (this is part of R-14). For the progress card: when the job is a tool download (no source file), show the DropWheel icon or a download glyph, never an empty box. Check the window title-bar, taskbar, Alt+Tab, tray and Start-menu icons at 100% and 150% scaling. | open |
+| R-18 | P0 | On the owner's PC (corporate CrowdStrike Falcon), the portable app opened Settings, then **disappeared silently**. The drag+key gesture never worked, and `%APPDATA%\DropWheel` was never created, so there is no log and no way to diagnose. App.cs uses ShutdownMode.OnExplicitShutdown, so closing Settings should not exit: this is a crash or a kill. | 1) Crash safety: catch AppDomain.UnhandledException, DispatcherUnhandledException and TaskScheduler.UnobservedTaskException; write `crash-<time>.txt`; show a dialog "DropWheel stopped: <reason>" with Copy details. 2) Log fallback: if `%APPDATA%\DropWheel` can't be created, log to `%LOCALAPPDATA%\DropWheel`, then `%TEMP%`, then next to the exe. Log startup steps: settings loaded, tray created, mouse hook installed (Win32 error code), keyboard hook installed, hotkey registered. 3) If SetWindowsHookEx fails or no hook callback arrives within 5 s of a real drag, show a tray balloon: "DropWheel can't watch the mouse/keyboard on this PC (security software may block it). Use Ctrl+Alt+Space or right-click → DropWheel." 4) Add `DropWheel.exe --diagnose`: prints the environment (paths writable?, hooks OK?, tools found?) to a text file and opens it. The owner will run it on his PC. | open |
+| R-19 | P0 | **Owner constraint:** the only PC is a company laptop with corporate security (CrowdStrike). From now on, NOTHING built from this repo may be RUN on it: no DropWheel.exe, no installer, no --self-test, no tool downloads. All building, testing and screenshots move to GitHub Actions (free Windows runners; the repo is public). | Add `.github/workflows/ci.yml` on `windows-latest`, triggered on push and workflow_dispatch: 1) set up .NET 10; 2) `dotnet build` (0 warnings) and `dotnet test`; 3) publish (framework-dependent once R-2 lands); 4) build the Inno installer (install Inno via choco); 5) run `DropWheel.exe --self-test shots` (en+ar, dark+light) and `--diagnose`; 6) upload artifacts: installer, portable zip, screenshots, diagnose report, test results. Add a status badge to README. Fetch FFmpeg/Pandoc in CI for the integration tests. Keep secrets out of the workflow (none are needed yet). Locally on this PC: edit code and run git only. If you need a build check, push and read the CI result (`gh run watch`, `gh run view --log-failed`). Report CI links in STATUS.md. | open |
+| R-20 | P1 | **Enterprise-friendly mode.** The owner wants DropWheel to be easy for a corporate security team to evaluate and approve. | 1) **Code signing:** apply to SignPath Foundation (free for OSS); sign DropWheel.exe, all DropWheel*.dll and the installer in CI (R-19). Document the steps in `docs/signing.md`; the owner does the application. Until it's approved, the CI pipeline keeps an unsigned build. 2) **No-hook mode:** setting "Keyboard & mouse monitoring": On (default) / Off. With Off, NO SetWindowsHookEx is installed at all; the wheel opens via Explorer right-click → DropWheel…, via a small always-on-top drop zone window (drag files onto it), and via the tray menu → "Open wheel for clipboard/selection". Also support `DropWheel.exe --no-hooks` and a policy override `HKLM\SOFTWARE\Policies\DropWheel\DisableHooks=1` (and `DisableDownloads=1`) so IT can enforce it. 3) **No downloads:** setting "Download helper tools automatically" (default On); when Off or disabled by policy, only use tools found on PATH, from winget, or set by the user. Never download executables. 4) **Portable zip** from CI: no installer, no registry, no autostart, no context menu unless the user enables it; settings stored next to the exe when a `portable.txt` marker exists. 5) **SECURITY.md for reviewers:** exactly what DropWheel does on a machine: hooks used and why, files and registry keys written, network endpoints (only the tool downloads, and only when enabled), no telemetry, how to deploy silently (`/VERYSILENT`), and the policy keys above. | open |
+| R-21 | P0 (root cause found) | **The "blocked" behaviour was NOT CrowdStrike.** Every file you create in this workspace carries **`Mandatory Label\Low Mandatory Level`** (inherited; verified with `icacls` on `release\DropWheel\DropWheel.exe`), because your Harness sandbox runs at Low integrity. Executables with that label start as LOW-integrity processes, which cannot write to `%TEMP%`, `%APPDATA%` or `%LOCALAPPDATA%` and cannot receive input from medium-integrity windows. That explains the installer's "Access denied" in Temp, the missing settings folder, the failed Pandoc download, the dead gesture hooks and the silent exit. | 1) Never ship or hand over binaries built in this workspace. Releases come ONLY from GitHub Actions (R-19); the owner downloads them from GitHub. 2) The app must detect when it runs at Low integrity (`GetTokenInformation(TokenIntegrityLevel)`): show a clear message ("DropWheel was started with low integrity, so it can't watch the keyboard or save files. Copy it to a normal folder or reinstall."), log it, and exit cleanly. 3) Add this to the `--diagnose` report (R-18). 4) Correct STATUS.md and SECURITY.md wherever they blame CrowdStrike. | open |
+| R-22 | P2 | The workspace feels scattered (owner). | See R-22 details: one clean tree, prompts in docs/prompts, local-only stuff in `_local\`, junk deleted. | open |
+| R-15 | P2 | Owner tested the portable build on his PC: it runs and the violet theme is correct. But Settings → Language still shows **Čeština** (CHANGES.md claims Czech was removed), and the header uses the old citrus icon (R-14). | Remove Čeština from the language picker now; R-12 replaces it with: System / العربية / English. Grep for "cs", "Čeština" and "Czech" in src/ and installer/ → 0 hits, except third-party licence files. | open |
+| R-16 | P1 | The owner's first real conversion failed. The toast "Downloading Pandoc 35 MB" ended with "Cannot write to the target folder. Choose another output folder in Settings." That message is WRONG: the failure is in the helper download into `%LOCALAPPDATA%\DropWheel\tools`, not in the output folder, so the user is sent to fix the wrong setting. Likely cause on this PC: the corporate EDR (CrowdStrike Falcon) blocks unsigned processes from writing .exe files there. | 1) Separate the errors: tool download/install failures must say which tool, the exact path and the OS error (e.g. "Couldn't save Pandoc to C:\…\tools (Access denied)"), plus actions: Retry · Open folder · Use my own Pandoc… (a file picker to point to an existing pandoc.exe/ffmpeg.exe) · Copy details. 2) Before downloading, test write access to the tools folder; if it's denied, fall back to `%LOCALAPPDATA%\Programs\DropWheel\tools`, then to a user-chosen folder. 3) Detect tools already on PATH or installed by winget (Gyan.FFmpeg, JohnMacFarlane.Pandoc) BEFORE offering a download. 4) Log the full exception with the path to `%APPDATA%\DropWheel\log.txt`. Add tests for the error-message mapping. | open |
 | R-11 | P2 | STATUS.md "Next" still says `Faisaldhd/dropwheel-releases`. That is outdated: we use ONE public repo. | `UpdateConfig.Repository = "Faisaldhd/dropwheel"` (see `UPDATE_PROMPT.md` and `COLLAB.md`). | open |
-| R-12 | P0 | English only in practice: `Loc.T(czech, english)` discards the Czech text at runtime, the strings are hard-coded in 250+ call sites, and there is no RTL or Arabic at all. The owner and his users read Arabic. | Arabic + English: string tables, `Loc.T("key")`, live language switch, RTL layout, Arabic plurals, glossary, docs. Details below. | open |
-| R-13 | P2 | The source repository is private and has no open-source housekeeping. | Publish the source publicly with the standard community files and CI. Details below. | open |
-| R-14 | P1 | The built exe and installer still carry the OLD icon: `src\FileAction.App\Assets\*.ico` were the pre-brand artwork (violet grapefruit slice) while `branding\` already holds the new flat wheel-and-arrow. | Copy `branding\*.ico` (and the 256 px PNG) over `Assets\`, add a SHA-256 guard so a stale copy fails the build, rebuild. | fixed in ad504ff |
 
 ### R-2 details (framework-dependent)
 - Publish `--self-contained false` for win-x64, and keep `DebugType=none`.
@@ -30,35 +38,78 @@ Closed and verified:
 - **Report** the publish folder size and setup size before and after. Target: setup ≤ 30 MB.
 - **Test** on a clean machine or VM without .NET: the installer must install the runtime and the app must start. If you can't test that, write the exact manual steps in STATUS.md for the owner.
 
-### R-12 details (Arabic + English)
-- **Tables first.** Every user-visible string is an entry in `src\FileAction.App\Strings\en.json` and
-  `Strings\ar.json`. Code calls `Loc.T("key")`; placeholders use `{0}`, `{1}`… and `Loc.T("key", args)`.
-  No two-argument `T(czech, english)` call survives in `src\FileAction.App` or `src\FileAction.Core`.
-- **Tested.** A unit test asserts that `en.json` and `ar.json` have exactly the same keys and, per key, exactly
-  the same placeholder set, and that no value is empty. A second test asserts that the app has no missing key
-  at startup for the default wheel.
-- **Arabic quality.** Natural MSA, not word-for-word. Correct plural forms (zero / one / two / few / many / other),
-  not just singular/plural. A glossary in `docs\glossary-ar.md` fixes recurring terms; `docs\ar-strings-review.md`
-  lists the strings that a native reviewer should confirm. `README.ar.md` mirrors the English README.
-- **Bidi and numbers.** File names, sizes, percentages, times and formats are wrapped in Unicode isolates
-  (U+2066…U+2069) so they stay readable inside RTL sentences. Technical values keep Western digits.
-- **Live switch.** Setting → Language: System / العربية / English. Switching re-renders the wheel, tray menu,
-  jobs window and all open dialogs without restart, and persists the choice.
-- **RTL.** `FlowDirection` follows the language on every window; the wheel, shelf and job list mirror; alignment
-  and padding are direction-aware.
-- **DPI.** Check 100 %, 150 % and 200 % scaling after the layout changes.
+### R-12 details (Arabic + English, polished)
+1. **Infrastructure**
+   - All user-visible text goes through one localization layer (`Loc`), with string tables in `src/FileAction.Core/Strings/en.json` and `ar.json`, and the same keys in both. Zero hard-coded UI strings: grep for string literals in WPF code and fix every hit.
+   - Add a unit test that fails if any key is missing in either language, or if any `{0}` placeholder doesn't match between the two.
+2. **Language setting:** Settings → Language with **System / العربية / English**. "System" picks Arabic when the Windows display language is Arabic, otherwise English. Switching takes effect immediately, without a restart.
+3. **Right-to-left (Arabic)**
+   - Set `FlowDirection=RightToLeft` on every window, dialog, progress card, shelf and tray menu.
+   - Mirror the layouts: close buttons, icons before text, progress direction.
+   - In the wheel: slice labels and the centre text are RTL. The wheel geometry is NOT mirrored, but the slice order goes clockwise from the top in both languages.
+   - Keep these LTR inside Arabic text: file names, paths, format names (MP4, PDF), numbers, sizes (MB), times. Use Unicode isolation (U+2066..U+2069) so they don't jump around.
+4. **Typography:** use a font with good Arabic glyphs. Segoe UI renders Arabic well on Windows 10/11; check that the bold and semibold weights render. Arabic text must never be clipped: increase line height where needed and test at 100%, 150% and 200% DPI.
+5. **Arabic quality (very important)**
+   - Use natural Modern Standard Arabic, short and clear like a native app. No word-for-word translation.
+   - Keep a glossary (`docs/glossary-ar.md`) and use it consistently, for example:
+     - Convert = تحويل · Compress = ضغط · Trim = قص · Merge = دمج · Split = تقسيم
+     - Rotate = تدوير · Copy = نسخ · Move = نقل · Copy path = نسخ المسار · Terminal = الطرفية
+     - Float = تثبيت عائم · Share = مشاركة · Settings = الإعدادات · Licenses = التراخيص
+     - "Saved next to the original" = حُفظ بجانب الملف الأصلي
+   - Keep format names in Latin letters (MP4, JPG, PDF).
+   - Use correct Arabic plural and dual forms for counts (ملف / ملفان / ٣ ملفات / ١١ ملفًا). Implement a small Arabic plural helper. Numerals: Western digits (0-9) by default.
+   - Write the Arabic error messages properly; they must not read like machine translation.
+6. **Installer:** Inno Setup with exactly two languages, Arabic and English. Use `Arabic.isl`; if it isn't bundled with your Inno version, take it from the official Inno Setup translations. Make the installer wizard RTL in Arabic. Remove Czech completely.
+7. **README:** English `README.md`, plus `README.ar.md` with a short guide in Arabic.
+8. **Review loop:** when done, write `docs/ar-strings-review.md` listing every Arabic string next to its English source. Claude will review the Arabic and send corrections in REVIEW.md.
+9. **Self-test:** `--self-test` renders every window in BOTH languages (en/ar) and both themes, so the owner can check the RTL layout from the screenshots.
 
-### R-13 details (open source)
-- Source repository public, same single repo `Faisaldhd/dropwheel` (releases stay public too).
-- `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `.github\ISSUE_TEMPLATE\*` and a PR template.
-- GitHub Actions CI on `windows-latest`: restore, build `FileAction.App` + `FileAction.Core` + tests, run tests.
-- README gets the CI badge and a "build from source" section; MIT licence and the FileAction attribution stay.
-- Zero personal paths, usernames or tokens in the tree (`git grep` clean).
+### R-13 details (open-source readiness; do LAST, after UPDATE_PROMPT)
+- Keep `LICENSE` as MIT (Metamorfolog line + our line). State "Free and open source (MIT)" in README.md, README.ar.md and the About text.
+- Add `CONTRIBUTING.md` in English and Arabic: how to build (`build.cmd`), the test command, code style, the rule "one feature per PR with tests", how to add or translate strings (en.json/ar.json + glossary), and that all contributions are under MIT.
+- Add `.github/ISSUE_TEMPLATE/bug_report.yml` (Windows version, DropWheel version, steps, expected/actual, `%APPDATA%\DropWheel` log attached) and `feature_request.yml`, plus `.github/pull_request_template.md`.
+- Add a `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1).
+- Add `SECURITY.md`: how to report vulnerabilities privately (GitHub private vulnerability reporting), plus a short note on signed updates.
+- Turn on GitHub Discussions only if the owner agrees (ask in STATUS.md).
+- Optional, ask the owner first in STATUS.md: prepare a short summary of generic fixes and the Arabic translation that could be offered upstream to Metamorfolog/file_action as a goodwill contribution. Do NOT open PRs upstream without the owner's approval.
+
+### R-22 details (workspace tidy-up; owner: "it feels scattered")
+Target layout. Move with `git mv` inside the repo and plain moves outside it, then delete the junk:
+
+```
+DropWheel_1\                      (Harness workspace — keep this name)
+├── README.md                     short map of this folder (rewrite it to match the tree below)
+├── DropWheel\                    THE git repo (pushed to GitHub) — source only
+│   ├── README.md · README.ar.md · LICENSE · THIRD-PARTY-NOTICES.md · CHANGES.md
+│   ├── STATUS.md · REVIEW.md · COLLAB.md       (team files stay at the root)
+│   ├── src\  tests\  installer\  scripts\  licenses\  branding\
+│   ├── docs\
+│   │   ├── prompts\    FIX_PROMPT.md, THEME_PROMPT.md, UPDATE_PROMPT.md  (git mv; update the links in COLLAB/REVIEW)
+│   │   ├── glossary-ar.md, signing.md, ar-strings-review.md …
+│   │   └── screenshots\  (CI output only)
+│   ├── build.cmd · release.cmd · FileAction.sln · nuget.config · .gitignore
+│   └── (ignored, local only) .appdata\ .dotnet-cli\ .nuget\ .tmp\ artifacts\ tools\
+├── _local\                       NOT in git, local machine stuff
+│   ├── sdk\        dotnet-sdk.zip, innosetup*.exe, 7zr.exe, 7zextra* (from DropWheel_1\tools)
+│   ├── testdata\   (from DropWheel_1\TestData)
+│   └── old-builds\ (from DropWheel_1\release; these are Low-integrity local builds, see R-21; delete when CI works)
+```
+
+Delete:
+- `DropWheel_1\FileAction\` (leftover)
+- `DropWheel_1\Claude outputs\`
+- `DropWheel\release\` (empty)
+- `DropWheel_1\release\DropWheel-fd\` (experiment)
+- `tools\pylibs\`, unless a script really needs it
+
+Update `build.cmd` and `release.cmd` to the new SDK path (`..\_local\sdk`). Run a build and the tests after the move, so nothing breaks. One commit: "chore: tidy workspace layout".
 
 ## NEXT (in order)
-1. R-2 packaging: framework-dependent publish, installer runtime detect/download/verify/install, size report.
-2. R-2 interop: drop `Microsoft.Windows.SDK.NET.dll` (OCR/Share through `[ComImport]` or a narrower target).
-3. R-12: Arabic + English (infrastructure, then RTL, then text and glossary).
-4. R-5: screenshots script, both languages.
-5. `UPDATE_PROMPT.md` (signed auto-update from `Faisaldhd/dropwheel` releases).
-6. R-13: open-source housekeeping.
+0. R-22 (tidy-up, 10 minutes) and R-19 (CI on GitHub Actions, P0; stop running builds on this PC), then R-18 (crash/diagnostics, P0), R-20 (enterprise-friendly mode), R-14 (icon), R-15 (Czech leftovers) and R-16 (wrong error + tool download fallback) first: the owner is testing now.
+1. R-10: remove the old screenshots from README now. Commit + push.
+2. R-11: fix the repository name in STATUS.md / any config.
+3. R-2 (framework-dependent) as above. Commit + push.
+4. R-12 (Arabic + English).
+5. R-5: add the script; it must capture both languages. Mark it "needs owner" in STATUS.md.
+6. `UPDATE_PROMPT.md` (signed auto-update from `Faisaldhd/dropwheel` releases).
+7. R-13 (open-source readiness).
