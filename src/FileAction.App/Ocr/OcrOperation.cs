@@ -1,10 +1,12 @@
-using System.IO;
+﻿using System.IO;
 using System.Text;
 using FileAction.Core;
 using FileAction.Core.Backends;
-using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
+#if WINDOWS10_0_19041_0_OR_GREATER
+using Windows.Graphics.Imaging;
 using Windows.Storage;
+#endif
 using static FileAction.Core.Loc;
 
 namespace FileAction.App.Ocr;
@@ -13,12 +15,18 @@ namespace FileAction.App.Ocr;
 /// "Extract text": recognises text in images and scanned PDFs with the OCR engine built into Windows
 /// (runs locally, uses the languages installed in Windows). Saves a .txt and copies the text.
 /// </summary>
+/// <remarks>
+/// The WinRT-projection build (the versioned <c>net10.0-windows10.0.x</c> target) uses the CsWinRT
+/// types directly. The plain <c>net10.0-windows</c> target has no projection, so <see cref="OcrEngine"/>
+/// is the small facade from <c>WinRtOcrCompat.cs</c> over <c>WinRtOcr</c> and the
+/// recognition step goes through raw COM. Both paths keep the same public behaviour and error strings.
+/// </remarks>
 internal sealed class OcrOperation : Operation
 {
     private static bool? _available;
 
     public OcrOperation()
-        : base("tools.ocr", WheelKind.Tools, T("Text z obrázku", "Extract text"), Glyphs.Text, "OCR")
+        : base("tools.ocr", WheelKind.Tools, T("Text z obrÃ¡zku", "Extract text"), Glyphs.Text, "OCR")
     {
     }
 
@@ -51,8 +59,8 @@ internal sealed class OcrOperation : Operation
         var engine = OcrEngine.TryCreateFromUserProfileLanguages()
             ?? OcrEngine.AvailableRecognizerLanguages.Select(OcrEngine.TryCreateFromLanguage).FirstOrDefault(e => e is not null)
             ?? throw new ConversionException(T(
-                "Windows nemá nainstalované rozpoznávání textu. Přidejte jazyk v Nastavení → Čas a jazyk → Jazyk a oblast.",
-                "Windows has no text recognition installed. Add a language in Settings → Time & language → Language & region."));
+                "Windows nemÃ¡ nainstalovanÃ© rozpoznÃ¡vÃ¡nÃ­ textu. PÅ™idejte jazyk v NastavenÃ­ â†’ ÄŒas a jazyk â†’ Jazyk a oblast.",
+                "Windows has no text recognition installed. Add a language in Settings â†’ Time & language â†’ Language & region."));
 
         var outputs = new List<string>();
         var all = new StringBuilder();
@@ -77,7 +85,7 @@ internal sealed class OcrOperation : Operation
                     ctx.Progress.Report((i + (p + 1.0) / pages.Count) / items.Count);
                 }
                 if (text.Length == 0)
-                    throw new ConversionException(T("V souboru se nenašel žádný text.", "No text was found in the file."));
+                    throw new ConversionException(T("V souboru se nenaÅ¡el Å¾Ã¡dnÃ½ text.", "No text was found in the file."));
 
                 outputs.Add(await OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), $"{item.BaseName} ({T("text", "text")})", "txt",
                     tmp => File.WriteAllTextAsync(tmp, text.ToString(), new UTF8Encoding(false), ctx.CancellationToken)));
@@ -92,14 +100,14 @@ internal sealed class OcrOperation : Operation
         }
 
         CopyToClipboard?.Invoke(all.ToString());
-        return new OperationResult(outputs, Note: T("Text je i ve schránce.", "The text is also on the clipboard."));
+        return new OperationResult(outputs, Note: T("Text je i ve schrÃ¡nce.", "The text is also on the clipboard."));
     }
 
     private static IReadOnlyList<string> PagesOf(FileItem item, string temp, OperationContext ctx)
     {
         if (item.Format == "pdf")
             return PdfBackend.RenderPagesToPng(item.Path, temp, 300, ctx.CancellationToken);
-        // Magick reads every format we support (HEIC, AVIF, SVG…); hand Windows a plain PNG.
+        // Magick reads every format we support (HEIC, AVIF, SVGâ€¦); hand Windows a plain PNG.
         var png = Path.Combine(temp, "image.png");
         ImageBackend.ConvertAsync(item.Path, png, "png", ctx.Settings, ctx.CancellationToken).GetAwaiter().GetResult();
         return [png];
@@ -107,6 +115,7 @@ internal sealed class OcrOperation : Operation
 
     public static async Task<string> RecognizeAsync(OcrEngine engine, string png)
     {
+#if WINDOWS10_0_19041_0_OR_GREATER
         var file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(png));
         using var stream = await file.OpenAsync(FileAccessMode.Read);
         var decoder = await BitmapDecoder.CreateAsync(stream);
@@ -124,5 +133,11 @@ internal sealed class OcrOperation : Operation
             ExifOrientationMode.RespectExifOrientation, ColorManagementMode.DoNotColorManage);
         var result = await engine.RecognizeAsync(bitmap);
         return string.Join("\n", result.Lines.Select(l => l.Text)).Trim();
+#else
+        // The raw-COM path blocks while it waits for each WinRT asynchronous operation, so it must not
+        // run on the caller's thread (the OCR job itself already runs on the thread pool).
+        return await Task.Run(() => engine.Recognize(png)).ConfigureAwait(false);
+#endif
     }
 }
+
