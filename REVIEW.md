@@ -18,6 +18,7 @@ Closed and verified:
 | R-11 | P2 | STATUS.md "Next" still says `Faisaldhd/dropwheel-releases`. That is outdated: we use ONE public repo. | `UpdateConfig.Repository = "Faisaldhd/dropwheel"` (see `UPDATE_PROMPT.md` and `COLLAB.md`). | open |
 | R-12 | P0 | English only in practice: `Loc.T(czech, english)` discards the Czech text at runtime, the strings are hard-coded in 250+ call sites, and there is no RTL or Arabic at all. The owner and his users read Arabic. | Arabic + English: string tables, `Loc.T("key")`, live language switch, RTL layout, Arabic plurals, glossary, docs. Details below. | open |
 | R-13 | P2 | The source repository is private and has no open-source housekeeping. | Publish the source publicly with the standard community files and CI. Details below. | open |
+| R-14 | P1 | The built exe and installer still carry the OLD icon: `src\FileAction.App\Assets\*.ico` were the pre-brand artwork (violet grapefruit slice) while `branding\` already holds the new flat wheel-and-arrow. | Copy `branding\*.ico` (and the 256 px PNG) over `Assets\`, add a SHA-256 guard so a stale copy fails the build, rebuild. | fixed in ad504ff |
 
 ### R-2 details (framework-dependent)
 - Publish `--self-contained false` for win-x64, and keep `DebugType=none`.

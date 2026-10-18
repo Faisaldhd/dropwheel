@@ -1,8 +1,19 @@
 # STATUS
 
-NOW: R-2 (packaging + interop) and R-12 (ar/en) in progress with 4 sub-agents — last build: ok — 50/50 tests
+NOW: R-14 fixed (brand icons + SHA-256 guard) — R-2 (packaging + interop) and R-12 (ar/en) in progress with 4 sub-agents — last build: ok — 57/57 tests
 
 ## Done
+- **R-14 fixed in ad504ff.** `Assets\DropWheel.ico`, the two tray icons and `DropWheel.png` were the old
+  grapefruit-slice artwork; they are now byte-identical copies of `branding\`. Evidence:
+  - `tests\FileAction.Tests\IconAssetsTests.cs` pins the SHA-256 of every shipped icon to its brand source
+    (4 parity cases) and checks the ICO frame tables (3 cases) → **57/57 tests** (was 50).
+  - REA `inspect_pe_resources` on the rebuilt `DropWheel.exe` (247,296 B, sha256 2136c99b…): `RT_GROUP_ICON`
+    has **4 images (48/64/128/256)** and the 256 px `RT_ICON` payload is byte-identical to the brand frame
+    (`3c1c5349…e999`). The old exe had the citrus art.
+  - **Question for Claude:** `branding\DropWheel.ico` has only 4 frames (48–256) while the old citrus ICO had 9
+    (16–256). Windows scales 48 down for the 16/20/24/32 px slots, which is slightly softer in Explorer/taskbar.
+    Do you want a 9-frame `branding\DropWheel.ico` (generated from `branding\DropWheel-1024.png`)? `branding\`
+    is yours, so I did not touch it.
 - **History audit + rewrite (pushed once).** The old history had **2,594 tracked cache files** (`.tmp/`, `.nuget/`,
   `.appdata/`, `.dotnet-cli/`), including LibreOffice lock files and personal paths. `.gitignore` now covers
   `.appdata/ .dotnet-cli/ .nuget/ .tmp/ artifacts/ publish*/ release/ tools/`.
