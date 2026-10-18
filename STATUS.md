@@ -1,6 +1,6 @@
 # STATUS
 
-NOW: R-4/R-3 done, R-1 rebuilt (violet 2.0.0) — R-2/R-5 open — last build: ok — last commit: see git log
+NOW: R-4/R-3/R-1 done — R-2 (size) and R-5 (screenshots) open — last build: ok — last commit: see git log
 
 ## Done
 - **History audit + rewrite (pushed once).** The old history had **2,594 tracked cache files** (`.tmp/`, `.nuget/`,
@@ -12,7 +12,11 @@ NOW: R-4/R-3 done, R-1 rebuilt (violet 2.0.0) — R-2/R-5 open — last build: o
 - **R-4 fixed**: all scratch `_*.py` helpers removed from the workspace root.
 - **R-3 fixed**: `CHANGES.md` corrected — internal names stay `FileAction.*` by owner rule; only user-visible
   identity is DropWheel.
-- **R-1 fixed**: flat dark+violet theme applied (`#8224D4` / `#B48AE0`), accent gradient replaced by solid fill,
+- **R-1 fixed (verified)**: rebuilt 
+elease\DropWheel\DropWheel.exe (326,656 B, sha256 4201477b...) — REA
+  inspect_pe_resources shows one RT_GROUP_ICON with **9 images (16,20,24,32,40,48,64,128,256)**, the new brand icon.
+  Installer rebuilt: 63.9 MB, sha256 702E77F25DE467092FF198A9B3E4E17460ADFBA42EF5E7429650879AE9EB19DF.
+- Old theme notes: flat dark+violet theme applied (`#8224D4` / `#B48AE0`), accent gradient replaced by solid fill,
   glow reduced to 14/0.45-0.3, dark by default, new `branding\DropWheel.ico` in the exe and installer, tray icons
   `DropWheel-tray-dark/light.ico` chosen at startup from `SystemUsesLightTheme`.
 
