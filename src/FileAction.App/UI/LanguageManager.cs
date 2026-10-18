@@ -81,13 +81,11 @@ internal static class LanguageManager
     }
 
     /// <summary>
-    /// The bridge to <see cref="Loc"/>. Phase 1 switches layout and direction; the Arabic string
-    /// tables (a separate R-12 work item) plug in here by using the Arabic member of Loc's language.
+    /// The bridge to <see cref="Loc"/>: the key-based tables are driven by the same resolved language, so
+    /// the string table and the reading direction can never disagree.
     /// </summary>
     private static void ApplyTextLanguage()
     {
-        // Loc currently exposes only English and Czech, so English is the safe fallback for Arabic
-        // until the string-table migration lands. The direction switch is already live.
-        Loc.Current = Language.English;
+        Loc.Current = Current == UiLanguage.Arabic ? Language.Arabic : Language.English;
     }
 }
