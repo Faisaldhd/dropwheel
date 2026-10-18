@@ -31,8 +31,21 @@
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
   </PropertyGroup>
 
-  <!-- Only when publishing for a platform (trimming needs a runtime identifier). -->
+  <!--
+    The app ships framework-dependent: the installer adds the .NET 10 Desktop Runtime when it is
+    missing, so the publish folder only carries DropWheel and its libraries (no runtime, no WPF).
+
+    A runtime identifier is still needed to get the native apphost (DropWheel.exe) and the RID-specific
+    native libraries (Magick, Skia, pdfium). Trimming is only meaningful for a self-contained publish
+    (the SDK rejects it with NETSDK1102 otherwise), so it stays enabled for that case alone.
+  -->
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <SelfContained>false</SelfContained>
+    <!-- The installer accepts the .NET 10 Desktop Runtime or newer, so let the app roll forward to a
+         higher major version when only that one is installed. -->
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' and '$(SelfContained)' == 'true'">
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>partial</TrimMode>
     <_SuppressWpfTrimError>true</_SuppressWpfTrimError>
