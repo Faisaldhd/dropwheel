@@ -183,7 +183,7 @@ public interface IWinRtIteratorOfStorageItem
 
     [PreserveSig] int MoveNext(out byte value);
 
-    [PreserveSig] int GetMany(uint startIndex, nint items, out uint value);
+    [PreserveSig] int GetMany(nint items, uint capacity, out uint value);
 }
 
 /// <summary>Managed <c>DataRequested</c> handler: fills the <c>DataPackage</c> for each share request.</summary>
@@ -407,11 +407,25 @@ public sealed class WinRtStorageItemIterator : IWinRtIteratorOfStorageItem, IWin
         return 0;
     }
 
-    public int GetMany(uint startIndex, nint items, out uint value)
+    public int GetMany(nint items, uint capacity, out uint value)
     {
         value = 0;
+        if (items == 0)
+            return 0;
+
+        // IIterator.GetMany has no start index: it fills from the current position, like repeated
+        // Current/MoveNext. It is not used by the share sheet today, but the vtable must be correct.
+        while (value < capacity && _index + 1 < _items.Length)
+        {
+            _index++;
+            var item = _items[_index];
+            Marshal.AddRef(item);
+            Marshal.WriteIntPtr(items, (int)value * IntPtr.Size, item);
+            value++;
+        }
         return 0;
     }
 }
+
 
 
