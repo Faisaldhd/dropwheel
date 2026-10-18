@@ -26,13 +26,22 @@ internal static class SelfTest
             Directory.CreateDirectory(outDir);
             _ = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             JobCard.Animate = false;
-            foreach (var (language, dark, folder) in new[] { (Language.English, true, "en"), (Language.English, false, "en-light"), (Language.Czech, true, "cs") })
+            foreach (var (language, dark, folder) in new[]
+                     {
+                         (UiLanguage.English, true, "en"),
+                         (UiLanguage.English, false, "en-light"),
+                         (UiLanguage.Arabic, true, "ar"),
+                         (UiLanguage.Arabic, false, "ar-light"),
+                     })
             {
-                Loc.Current = language;
+                LanguageManager.Apply(language);
                 Theme.Override = dark;
                 Theme.Refresh();
-                RenderAll(Path.Combine(outDir, folder), language == Language.English, log);
+                RenderAll(Path.Combine(outDir, folder), language, log);
             }
+            LanguageManager.Apply(UiLanguage.English);
+            Theme.Override = null;
+            Theme.Refresh();
 
             log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
             // Saved after every step, so a hard crash (which skips the catch below) still shows where it stopped.
@@ -60,11 +69,14 @@ internal static class SelfTest
         }
     }
 
-    private static void RenderAll(string outDir, bool english, List<string> log)
+    private static void RenderAll(string outDir, UiLanguage language, List<string> log)
     {
         Directory.CreateDirectory(outDir);
-        string N(string cs, string en) => english ? en : cs;
-        var settings = new AppSettings();
+        var rtl = language == UiLanguage.Arabic;
+        // Arabic text arrives with the string tables; until then the Arabic variant shows the same
+        // English labels with a real RightToLeft layout, which is exactly what this preview checks.
+        string N(string cs, string en) => en;
+        var settings = new AppSettings { Language = language };
         var tools = new ToolLocator();
         var core = WheelController.BuildOperations();
         var actions = FileActions.Build(settings, () => { });
@@ -86,6 +98,8 @@ internal static class SelfTest
         foreach (var s in samples)
         {
             var window = new WheelWindow(s.Mode, s.Wheel, s.Files.Select(f => new FileItem(f)).ToList(), settings, Source, (_, _, _) => { });
+            Check(window.FlowDirection == (rtl ? System.Windows.FlowDirection.RightToLeft : System.Windows.FlowDirection.LeftToRight),
+                "wheel flow direction");
             window.RenderPreview(Path.Combine(outDir, s.Name + ".png"), s.Highlight);
             window.Close();
             log.Add($"ok {Path.GetFileName(outDir)}/{s.Name}");
@@ -93,8 +107,18 @@ internal static class SelfTest
 
         SettingsWindow.Operations = () => [.. core, .. actions];
         var settingsWindow = new SettingsWindow(settings, tools, () => { });
+        Check(settingsWindow.FlowDirection == (rtl ? System.Windows.FlowDirection.RightToLeft : System.Windows.FlowDirection.LeftToRight),
+            "settings flow direction");
         SaveWindow(settingsWindow, Path.Combine(outDir, "settings.png"), 560);
         log.Add($"ok {Path.GetFileName(outDir)}/settings");
+
+        var shelf = ShelfWindow.CreateForPreview(
+            new[] { N(@"C:\Fotky\dovolená.jpg", @"C:\Photos\vacation.jpg"), @"C:\Documents\contract.pdf" });
+        Check(shelf.FlowDirection == (rtl ? System.Windows.FlowDirection.RightToLeft : System.Windows.FlowDirection.LeftToRight),
+            "shelf flow direction");
+        SaveWindow(shelf, Path.Combine(outDir, "shelf.png"), 290, desktop: true);
+        shelf.Close();
+        log.Add($"ok {Path.GetFileName(outDir)}/shelf");
 
         var jobs = new JobsWindow();
         var running = jobs.Add(N("Převod na MP4", "Convert to MP4"), N("klip.mov", "clip.mov"), () => { }, @"C:\x.mov");
@@ -108,6 +132,8 @@ internal static class SelfTest
         settings.FavoriteOperations = ["image.to.webp", "image.compress"];
         settings.HiddenOperations = ["image.to.tiff"];
         var editor = new WheelEditorWindow(settings, [.. core, .. actions], () => { });
+        Check(editor.FlowDirection == (rtl ? System.Windows.FlowDirection.RightToLeft : System.Windows.FlowDirection.LeftToRight),
+            "wheel editor flow direction");
         SaveWindow(editor, Path.Combine(outDir, "wheel-editor.png"), 640);
         log.Add($"ok {Path.GetFileName(outDir)}/wheel-editor");
 
@@ -128,6 +154,8 @@ internal static class SelfTest
 
         var trim = core.Single(o => o.Id == "video.trim");
         var dialog = new ParameterDialog(trim, [new FileItem(N(@"C:\Videa\klip.mov", @"C:\Videos\clip.mov"))]);
+        Check(dialog.FlowDirection == (rtl ? System.Windows.FlowDirection.RightToLeft : System.Windows.FlowDirection.LeftToRight),
+            "parameter dialog flow direction");
         SaveWindow(dialog, Path.Combine(outDir, "trim-dialog.png"), 360);
         log.Add($"ok {Path.GetFileName(outDir)}/parameter dialog");
     }
@@ -135,12 +163,41 @@ internal static class SelfTest
     /// <summary>The settings file is written with source-generated JSON (no reflection in the trimmed build).</summary>
     private static void TestSettingsRoundTrip(List<string> log)
     {
-        var settings = new AppSettings { Hotkey = HotkeyPreset.CtrlAltW, FavoriteOperations = ["image.to.webp"], Language = Language.Czech };
+        var settings = new AppSettings { Hotkey = HotkeyPreset.CtrlAltW, FavoriteOperations = ["image.to.webp"], Language = UiLanguage.Arabic };
         var json = System.Text.Json.JsonSerializer.Serialize(settings, SettingsJson.Default.AppSettings);
         var back = System.Text.Json.JsonSerializer.Deserialize(json, SettingsJson.Default.AppSettings)!;
-        Check(back.Hotkey == HotkeyPreset.CtrlAltW && back.FavoriteOperations.Single() == "image.to.webp" && back.Language == Language.Czech, "settings JSON round trip");
+        Check(back.Hotkey == HotkeyPreset.CtrlAltW && back.FavoriteOperations.Single() == "image.to.webp" && back.Language == UiLanguage.Arabic, "settings JSON round trip");
         Check(json.Contains("\"CtrlAltW\""), "enums stored as names");
-        log.Add("ok settings json");
+        Check(json.Contains("\"Arabic\""), "language stored as a name");
+
+        // Old builds wrote null/English/Czech; unknown values must fall back to System without
+        // discarding the rest of the file.
+        var legacy = new (string Json, UiLanguage Expected)[]
+        {
+            ("{\"Language\":\"English\"}", UiLanguage.English),
+            ("{\"Language\":\"Arabic\"}", UiLanguage.Arabic),
+            ("{\"Language\":\"Czech\"}", UiLanguage.System),
+            ("{\"Language\":null}", UiLanguage.System),
+            ("{\"Language\":1}", UiLanguage.System),
+            ("{\"Language\":\"Klingon\"}", UiLanguage.System),
+            ("{}", UiLanguage.System),
+        };
+        foreach (var (source, expected) in legacy)
+        {
+            var migrated = System.Text.Json.JsonSerializer.Deserialize(AppSettings.MigrateLanguage(source), SettingsJson.Default.AppSettings)!;
+            Check(migrated.Language == expected, $"legacy language {source}");
+        }
+
+        Check(LanguageManager.Resolve(UiLanguage.System, "ar-SA") == UiLanguage.Arabic, "system language Arabic");
+        Check(LanguageManager.Resolve(UiLanguage.System, "en-GB") == UiLanguage.English, "system language English");
+        Check(LanguageManager.Resolve(UiLanguage.Arabic, "en-GB") == UiLanguage.Arabic, "explicit Arabic");
+        Check(LanguageManager.Resolve(UiLanguage.English, "ar-SA") == UiLanguage.English, "explicit English");
+
+        LanguageManager.Apply(UiLanguage.Arabic);
+        Check(Bidi.Value("report.pdf") == "\u2066report.pdf\u2069", "bidi isolate in RTL");
+        LanguageManager.Apply(UiLanguage.English);
+        Check(Bidi.Value("report.pdf") == "report.pdf", "no bidi isolate in LTR");
+        log.Add("ok settings json + language migration + bidi");
     }
 
     /// <summary>Reading the Explorer selection goes through late-bound COM, which trimming could break.</summary>
@@ -244,6 +301,8 @@ internal static class SelfTest
             Width = width,
             Background = desktop ? Desktop() : window.Background ?? Brushes.White,
             Child = content,
+            // The window itself is never shown here; the preview root must carry its direction.
+            FlowDirection = window.FlowDirection,
         };
         if (content is ScrollViewer scroll)
             scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
