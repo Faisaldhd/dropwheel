@@ -41,7 +41,7 @@ public sealed class ToolLocator
     }
 
     public string Require(ExternalTool tool) =>
-        Find(tool) ?? throw new ConversionException(T($"Chybí nástroj {DisplayName(tool)}. {InstallHint(tool)}", $"{DisplayName(tool)} is missing. {InstallHint(tool)}"));
+        Find(tool) ?? throw new ConversionException(T("error.tool.missing", DisplayName(tool), InstallHint(tool)));
 
     public static string DisplayName(ExternalTool tool) => tool switch
     {
@@ -53,9 +53,9 @@ public sealed class ToolLocator
 
     public static string InstallHint(ExternalTool tool) => tool switch
     {
-        ExternalTool.Ffmpeg => T("Nainstalujte ho příkazem: ", "Install it with: ") + "winget install Gyan.FFmpeg",
-        ExternalTool.Pandoc => T("Nainstalujte ho příkazem: ", "Install it with: ") + "winget install JohnMacFarlane.Pandoc",
-        ExternalTool.LibreOffice => T("Nainstalujte ho příkazem: ", "Install it with: ") + "winget install TheDocumentFoundation.LibreOffice",
+        ExternalTool.Ffmpeg => T("tool.installCommand") + "winget install Gyan.FFmpeg",
+        ExternalTool.Pandoc => T("tool.installCommand") + "winget install JohnMacFarlane.Pandoc",
+        ExternalTool.LibreOffice => T("tool.installCommand") + "winget install TheDocumentFoundation.LibreOffice",
         _ => "",
     };
 
