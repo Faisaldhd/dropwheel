@@ -68,6 +68,8 @@ internal static class WinRtOcr
         {
             var getLanguages = WinRt.Method<WinRt.GetObjectDelegate>(factory, 7);
             WinRt.Check(getLanguages(factory, out var vector));
+            if (vector == 0)
+                return [];
             lock (Gate)
                 LifetimeHandles.Add(vector);
 
@@ -309,6 +311,8 @@ internal static class WinRtOcr
         {
             var getLines = WinRt.Method<WinRt.GetObjectDelegate>(result, 6);
             WinRt.Check(getLines(result, out var lines));
+            if (lines == 0)
+                return "";
             try
             {
                 var getSize = WinRt.Method<WinRt.GetUInt32Delegate>(lines, 7);
@@ -372,6 +376,7 @@ internal static class WinRtOcr
         }
     }
 }
+
 
 
 
