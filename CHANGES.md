@@ -17,8 +17,8 @@ nothing points back upstream: no update checks, no GitHub links, no automatic me
 
 ## Rebranded
 
-- Projects, namespaces, assemblies and folders: `FileAction.Core`, `FileAction.App`, `FileAction.Linux`, `FileAction.Tests`,
-  `FileAction.sln`.
+- User-visible identity only: product, exe, windows, tray, installer and README are **DropWheel**. Internal
+  project/namespace names stay FileAction.* by owner rule (renaming them adds risk without user value).
 - Paths: `%APPDATA%\DropWheel` (settings), `%LOCALAPPDATA%\DropWheel` (tools), `Downloads\DropWheel` (inbox).
   A one-time migration moves the old `FileAction` folders and the old autostart value on first start.
 - Registry: the autostart value, the Explorer context-menu verb, the single-instance mutex and pipe names, the AUMID.
