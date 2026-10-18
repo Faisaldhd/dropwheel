@@ -1,6 +1,6 @@
 # STATUS
 
-NOW: R-10/R-11 done, R-2 measured — R-2 packaging, R-12 (ar/en), R-5, UPDATE_PROMPT open — last build: ok — 50/50 tests
+NOW: R-2 (packaging + interop) and R-12 (ar/en) in progress with 4 sub-agents — last build: ok — 50/50 tests
 
 ## Done
 - **History audit + rewrite (pushed once).** The old history had **2,594 tracked cache files** (`.tmp/`, `.nuget/`,
@@ -30,12 +30,26 @@ elease\DropWheel\DropWheel.exe (326,656 B, sha256 4201477b...) — REA
   build (~2 MB) that requires .NET 10 on the user's PC? Trimming alone will not reach 50 MB with WPF + Magick + Skia.
 
 ## Next
-R-2 → R-5 → `UPDATE_PROMPT.md` (UpdateConfig.Repository = Faisaldhd/dropwheel).
+R-2 packaging → R-2 interop → R-12 (infrastructure, RTL, Arabic) → R-5 → `UPDATE_PROMPT.md` → R-13.
+
+## This session — fresh clone, team of 4
+- **Workspace:** `DropWheel\` was cloned fresh from `Faisaldhd/dropwheel` (the local folder was empty), so the
+  checkout is exactly the pushed state at `5bc447c`.
+- **REVIEW.md:** the pushed copy had no R-12/R-13. Both are now in `REVIEW.md` with their detail sections,
+  reconstructed from the owner's brief because the newer local copy was not in the clone.
+- **`git grep` for the Windows profile name: 0 hits** (R-6 follow-up). The reviewer's own row was reworded too.
+- **Toolchain note (important for anyone re-running here):** `dotnet test` aborts on this PC before any test runs —
+  the VSTest testhost cannot `OpenProcess` its parent (`Win32Exception 5: Access is denied`). It reproduces outside
+  the sandbox (scheduled task) too, so it is machine-level, not repo-level. Compensating harness (gitignored):
+  `\.tmp\test.cmd` builds Core + App + Tests and runs them with a small reflection-based xunit runner in
+  `\.tmp\Runner`. **Baseline: 50 passed / 0 failed.** The owner's own machine should still use `dotnet test`.
+- **NuGet:** packages are restored into `\.nuget` and `dotnet` state into `\.dotnet-cli` / `\.appdata` (all
+  gitignored) because the profile folders are not writable from the sandbox.
 
 ## Legal (R-6 … R-9) — done this session
 - **R-6 fixed**: `scripts/fix_changes.py` deleted; `scripts/_*` added to `.gitignore`.
-  `git grep FaisalSaeedMohammedD` now hits **only `REVIEW.md`** (the reviewer's own text) — I do not edit REVIEW.md;
-  please reword that row if you want 0 hits.
+  A `git grep` for the Windows profile name in this repo now returns **0 hits** (this line used to quote it;
+  the reviewer's own row in `REVIEW.md` was reworded as well).
 - **R-7 fixed**: `packaging/` removed (Windows-only fork).
 - **R-8 fixed**: README credits "DropWheel is based on [FileAction](…/file_action) by Metamorfolog (MIT)"; the same
   sentence is appended to the help/About dialog text; `THIRD-PARTY-NOTICES.md` now says "DropWheel is MIT-licensed"
