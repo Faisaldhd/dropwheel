@@ -25,9 +25,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
+      - name: Ensure .NET 10 SDK
+        shell: pwsh
+        run: |
+          # windows-latest already ships a recent SDK; only install if .NET 10 is missing.
+          # (actions/setup-dotnet can hang fetching the SDK, so it is not used here.)
+          $sdks = dotnet --list-sdks
+          $sdks | Write-Host
+          if (-not ($sdks -match '^10\.')) {
+            Write-Host "No .NET 10 SDK on the image; installing one."
+            choco install dotnet-10.0-sdk --no-progress -y
+            refreshenv
+          }
+          dotnet --version
 
       - name: Restore
         shell: pwsh
@@ -67,9 +77,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
+      - name: Ensure .NET 10 SDK
+        shell: pwsh
+        run: |
+          # windows-latest already ships a recent SDK; only install if .NET 10 is missing.
+          # (actions/setup-dotnet can hang fetching the SDK, so it is not used here.)
+          $sdks = dotnet --list-sdks
+          $sdks | Write-Host
+          if (-not ($sdks -match '^10\.')) {
+            Write-Host "No .NET 10 SDK on the image; installing one."
+            choco install dotnet-10.0-sdk --no-progress -y
+            refreshenv
+          }
+          dotnet --version
 
       - name: Read version
         id: version
@@ -144,9 +164,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
+      - name: Ensure .NET 10 SDK
+        shell: pwsh
+        run: |
+          # windows-latest already ships a recent SDK; only install if .NET 10 is missing.
+          # (actions/setup-dotnet can hang fetching the SDK, so it is not used here.)
+          $sdks = dotnet --list-sdks
+          $sdks | Write-Host
+          if (-not ($sdks -match '^10\.')) {
+            Write-Host "No .NET 10 SDK on the image; installing one."
+            choco install dotnet-10.0-sdk --no-progress -y
+            refreshenv
+          }
+          dotnet --version
 
       - name: Publish
         shell: pwsh
