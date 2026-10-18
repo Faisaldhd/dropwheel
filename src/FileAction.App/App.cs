@@ -240,7 +240,7 @@ internal sealed class App : Application
 
             The result is saved next to the original file; the original stays untouched.
             """);
-        MessageBox.Show(text, T("Jak DropWheel funguje", "How DropWheel works"), MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageBox.Show(text + "\n\nDropWheel is based on FileAction by Metamorfolog (MIT).", T("Jak DropWheel funguje", "How DropWheel works"), MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
@@ -269,5 +269,19 @@ internal sealed class App : Application
         _tray?.Dispose();
         _settings.Save();
         base.OnExit(e);
+    }
+
+    private static void OpenLicenses()
+    {
+        try
+        {
+            var dir = System.IO.Path.Combine(AppContext.BaseDirectory, "licenses");
+            if (!System.IO.Directory.Exists(dir))
+                dir = AppContext.BaseDirectory;
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dir) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or System.IO.IOException)
+        {
+        }
     }
 }

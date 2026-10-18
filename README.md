@@ -1,10 +1,8 @@
 # DropWheel
 
-🇬🇧 **English** · 🇨🇿 [Čeština](README.cs.md)
+**Click-free file conversion for Windows.** Grab a file, tap a key while dragging, and drop it on a format in a radial wheel. Everything runs locally; your files never leave your PC.
 
-**Click-free file conversion for Windows (and Linux).** Grab a file, tap a key while dragging, and drop it on a format in a radial wheel. Everything runs locally; your files never leave your PC.
-
-Inspired by the wonderful [Tangerine](https://tangerineformac.com/) for macOS. DropWheel is based on [DropWheel](https://github.com/Metamorfolog/file_action), MIT. It is an independent Windows take on the idea and is not affiliated with Tangerine.
+DropWheel is based on [FileAction](https://github.com/Metamorfolog/file_action) by Metamorfolog (MIT). It is an independent Windows take on the idea and is not affiliated with Tangerine.
 
 <p align="center">
   <img src="docs/screenshots/en/wheel-video-convert.png" width="32%" alt="Convert wheel for a video" />

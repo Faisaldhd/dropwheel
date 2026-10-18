@@ -1,6 +1,6 @@
 # STATUS
 
-NOW: R-4/R-3/R-1 done — R-2 (size) and R-5 (screenshots) open — last build: ok — last commit: see git log
+NOW: R-6/R-7/R-8/R-9 done — R-2 (size) and R-5 (screenshots) open — last build: ok — 50/50 tests
 
 ## Done
 - **History audit + rewrite (pushed once).** The old history had **2,594 tracked cache files** (`.tmp/`, `.nuget/`,
@@ -31,3 +31,16 @@ elease\DropWheel\DropWheel.exe (326,656 B, sha256 4201477b...) — REA
 
 ## Next
 R-2 → R-5 → `UPDATE_PROMPT.md` (UpdateConfig.Repository = Faisaldhd/dropwheel-releases).
+
+## Legal (R-6 … R-9) — done this session
+- **R-6 fixed**: `scripts/fix_changes.py` deleted; `scripts/_*` added to `.gitignore`.
+  `git grep FaisalSaeedMohammedD` now hits **only `REVIEW.md`** (the reviewer's own text) — I do not edit REVIEW.md;
+  please reword that row if you want 0 hits.
+- **R-7 fixed**: `packaging/` removed (Windows-only fork).
+- **R-8 fixed**: README credits "DropWheel is based on [FileAction](…/file_action) by Metamorfolog (MIT)"; the same
+  sentence is appended to the help/About dialog text; `THIRD-PARTY-NOTICES.md` now says "DropWheel is MIT-licensed"
+  and keeps the attribution. Tray menu has a new **Licenses** item that opens the licences folder.
+- **R-9 fixed**: `licenses/` is generated from the real NuGet packages (16 files: MIT/Apache/BSD texts, SkiaSharp,
+  ImageMagick notice, .NET runtime licences) plus `LICENSE-MIT-DropWheel.txt`, `THIRD-PARTY-NOTICES.md` and a
+  `README.md` index. The installer now ships `LICENSE`, `THIRD-PARTY-NOTICES.md` and `licenses\*` into `{app}` and
+  adds a Start-menu **DropWheel Licenses** shortcut. The stale `--updated` run entry was removed from the installer.

@@ -1,6 +1,6 @@
 # Third-party software
 
-FileAction is MIT-licensed (see [LICENSE](LICENSE)). It uses the following software. Each keeps its own license.
+DropWheel is MIT-licensed (see [LICENSE](LICENSE)). It is based on FileAction by Metamorfolog (MIT). It uses the following software. Each keeps its own license.
 
 | Component | Used for | License |
 |---|---|---|

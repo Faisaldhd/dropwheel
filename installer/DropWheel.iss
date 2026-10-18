@@ -33,14 +33,17 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "..\..\release\DropWheel\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\licenses\*"; DestDir: "{app}\licenses"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
 Name: "{userprograms}\DropWheel"; Filename: "{app}\DropWheel.exe"
+Name: "{userprograms}\DropWheel Licenses"; Filename: "{app}\licenses"
 
 [Run]
 Filename: "{app}\DropWheel.exe"; Description: "{cm:LaunchProgram,DropWheel}"; Flags: nowait postinstall skipifsilent
 ; Silent install = in-app update: start the new version again.
-Filename: "{app}\DropWheel.exe"; Parameters: "--updated"; Flags: nowait; Check: WizardSilent
 
 [UninstallDelete]
 ; FFmpeg and Pandoc downloaded on demand by the app.

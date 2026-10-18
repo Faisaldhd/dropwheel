@@ -20,3 +20,4 @@ bin/
 obj/
 tools/
 tools/dotnet-sdk/
+scripts/_*
