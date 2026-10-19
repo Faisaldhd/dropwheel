@@ -24,3 +24,7 @@ scripts/_*
 
 # The floating-tool source folder is not the downloaded helper-tools folder.
 !src/FileAction.App/UI/Tools/
+
+# The generated tool window sheet is committed on purpose.
+!docs/screenshots/tools/
+!docs/screenshots/tools/**
