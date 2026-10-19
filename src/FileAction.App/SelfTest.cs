@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.Media3D;
 using FileAction.App.Actions;
 using FileAction.App.Jobs;
 using FileAction.App.UI;
@@ -369,8 +370,11 @@ internal static class SelfTest
             foreach (var child in LogicalTreeHelper.GetChildren(node))
                 if (child is DependencyObject dependency)
                     Walk(dependency);
-            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
-                Walk(VisualTreeHelper.GetChild(node, i));
+            if (node is Visual || node is Visual3D)
+            {
+                for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
+                    Walk(VisualTreeHelper.GetChild(node, i));
+            }
         }
 
         Walk(root);
