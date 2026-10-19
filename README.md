@@ -4,7 +4,7 @@
 
 **Click-free file conversion for Windows.** Grab a file, tap a key while dragging, and drop it on a format in a radial wheel. Everything runs locally; your files never leave your PC.
 
-Downloads are built and tested by GitHub Actions (`.github/workflows/ci.yml`): every push builds the app, runs the test suite, and produces the installer, the portable zips and a `--diagnose` report as artifacts. Nothing is built or run on the owner's machine.
+Downloads are built and tested by GitHub Actions (`.github/workflows/ci.yml`): every push builds the app, runs the test suite, and produces the installer, the portable zip and a `--diagnose` report as artifacts. Nothing is built or run on the owner's machine.
 
 DropWheel is based on [FileAction](https://github.com/Metamorfolog/file_action) by Metamorfolog (MIT). It is an independent Windows take on the idea and is not affiliated with Tangerine.
 
@@ -71,21 +71,23 @@ DropWheel handles images, PDFs, spreadsheets, subtitles and archives on its own.
 
 ## Install
 
-DropWheel is published on the [Releases](https://github.com/Faisaldhd/dropwheel/releases) page as a portable, self-contained zip for Windows x64. Nothing is installed, nothing is added to startup or to the Explorer menu unless you opt in, and no administrator rights are needed.
+DropWheel is published on the [Releases](https://github.com/Faisaldhd/dropwheel/releases) page for Windows x64 as a portable, self-contained zip (`DropWheel-<version>-portable-win-x64.zip`) and a per-user installer (`DropWheel-Setup-<version>.exe`), with `SHA256SUMS.txt` covering both. Nothing is added to startup or to the Explorer menu unless you opt in, and no administrator rights are needed for DropWheel itself.
 
-1. Download `DropWheel-<version>-portable-win-x64.zip` and `SHA256SUMS.txt` from the latest release.
-2. Compare the SHA-256 of the zip with the line for that file in `SHA256SUMS.txt` (PowerShell):
+1. Download `DropWheel-<version>-portable-win-x64.zip` and `SHA256SUMS.txt` (and `DropWheel-Setup-<version>.exe` if you would rather use the installer) from the latest release.
+2. Compare the SHA-256 of each file you downloaded with its line in `SHA256SUMS.txt` (PowerShell):
 
    ```powershell
    Get-FileHash ".\DropWheel-<version>-portable-win-x64.zip" -Algorithm SHA256
    ```
 
    The value must match that line exactly.
-3. Unzip it anywhere you can write (for example `%LOCALAPPDATA%\Programs\DropWheel`) and run `DropWheel.exe`.
+3. Unzip it to `%LOCALAPPDATA%\Programs\DropWheel` (recommended) and run `DropWheel.exe`, or run the Setup exe (it installs to the same folder for the current user and adds a Start-menu shortcut).
 
-The zip is self-contained: it includes the .NET runtime, so no .NET install is required. It is unsigned for now, so Windows SmartScreen may ask once (“More info”, then “Run anyway”); [SECURITY.md](SECURITY.md) lists exactly what the app writes and which endpoints it can contact.
+A copy started from a low-integrity location (a sandbox, temp or `Downloads` copy carrying a Low integrity label) cannot write its settings or receive input, while `%LOCALAPPDATA%\Programs\DropWheel` is a normal user-writable location.
 
-Settings and the log stay next to `DropWheel.exe` (the zip contains a `portable.txt` marker). If that folder is read-only, the log falls back to `%LOCALAPPDATA%` or `%TEMP%`; the app itself can be removed by deleting its folder.
+The portable zip is self-contained: it includes the .NET runtime, so no .NET install is required; the installer installs the free .NET 10 Desktop Runtime from Microsoft if the PC does not have it yet. The build is unsigned for now, so Windows SmartScreen may ask once (“More info”, then “Run anyway”); [SECURITY.md](SECURITY.md) lists exactly what the app writes and which endpoints it can contact.
+
+With the portable zip, settings and the log stay next to `DropWheel.exe` (the zip contains a `portable.txt` marker); the installer keeps them in `%APPDATA%\DropWheel`. If the portable folder is read-only, the log falls back to `%LOCALAPPDATA%` or `%TEMP%`; the portable copy can be removed by deleting its folder, and the installed copy is removed from Settings → Apps.
 
 **Company-safe by default:** global keyboard/mouse monitoring is **off** and helper-tool downloads are **off**. Nothing is written to `HKLM`. Turn gestures on in **Settings → Company mode**, and downloads in the same place. `--no-hooks` disables the hooks, and the policy keys `HKLM\SOFTWARE\Policies\DropWheel\DisableHooks=1` / `DisableDownloads=1` let IT force either feature off.
 
