@@ -88,9 +88,6 @@ internal sealed class SettingsWindow : Window
     /// <summary>Self-test hook: how many tabs the window shows.</summary>
     internal static int TabCount => 6;
 
-    /// <summary>Number of tabs, for the self-test's raw-key audit over every page.</summary>
-    internal int TabCount => _pages.Count;
-
     /// <summary>
     /// Self-test hook: selects one tab (0 = General, 1 = Wheels, 2 = Quality, 3 = Integration,
     /// 4 = Updates, 5 = About) so a preview run can capture every page.

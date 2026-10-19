@@ -129,7 +129,7 @@ internal static class SelfTest
         var settingsWindow = new SettingsWindow(settings, tools, () => { });
         Check(settingsWindow.FlowDirection == (rtl ? System.Windows.FlowDirection.RightToLeft : System.Windows.FlowDirection.LeftToRight),
             "settings flow direction");
-        for (var tab = 0; tab < settingsWindow.TabCount; tab++)
+        for (var tab = 0; tab < SettingsWindow.TabCount; tab++)
         {
             settingsWindow.SelectTab(tab);
             settingsWindow.UpdateLayout();
