@@ -19,6 +19,9 @@ internal interface IToolWindowSpec
     /// <summary>Localization key for the window title.</summary>
     string TitleKey { get; }
 
+    /// <summary>Localization key for the primary button; tools whose action is not "Apply" override it.</summary>
+    string ApplyLabelKey => "tool.window.apply";
+
     /// <summary>Chrome height/width and preview min/max (see <see cref="ToolSizes"/>).</summary>
     ToolSpecLayout Layout { get; }
 

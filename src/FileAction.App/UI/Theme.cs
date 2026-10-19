@@ -71,6 +71,16 @@ internal static class Theme
     public static readonly SolidColorBrush Error = Freeze(new SolidColorBrush(Color.FromRgb(0xF0, 0x5A, 0x5A)));
     public static readonly SolidColorBrush Success = Freeze(new SolidColorBrush(Color.FromRgb(0x3C, 0xC3, 0x6E)));
 
+    /// <summary>2.4.0 protection badge: pink, tuned per theme and never hardcoded at the call site.</summary>
+    public static readonly Color ProtectBadgeDarkColor = Color.FromRgb(0xF0, 0x6F, 0xA8);
+
+    public static readonly Color ProtectBadgeLightColor = Color.FromRgb(0xD6, 0x40, 0x7F);
+
+    /// <summary>The pink used for the lock badge, icons and status text.</summary>
+    public static Color ProtectBadgeColor => IsDark ? ProtectBadgeDarkColor : ProtectBadgeLightColor;
+
+    public static Brush ProtectBadge => Solid(ProtectBadgeColor);
+
     public static readonly FontFamily Icons = new("Segoe Fluent Icons, Segoe MDL2 Assets");
     public static readonly FontFamily UiFont = new("Segoe UI Variable Text, Segoe UI");
     public static readonly FontFamily DisplayFont = new("Segoe UI Variable Display, Segoe UI");
