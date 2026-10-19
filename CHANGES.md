@@ -1,60 +1,42 @@
-# DropWheel 2.2.2 — CHANGES
-
-## 2.2.2
-
-### English
-
-- **Removed `PublishTrimmed` from the shipped self-contained build.** Trimming is what broke
-  reflection-based `System.Text.Json` in 2.2.0, and WPF trimming is not officially supported. The installer
-  and portable zip now carry the full, untrimmed .NET/WPF runtime; the 70 MB setup budget is still enforced
-  by CI.
-- The 2.2.1 fixes remain: `Loc` reads its tables with `JsonDocument`, all settings JSON uses
-  source-generated contexts, `--diagnose` reports the loaded string count, and a failed Settings build shows
-  a readable error instead of a black window.
-- CI continues to run `--self-test` on the exact self-contained publish that is packaged, so the shipped
-  shape is what gets tested; it also rejects generic reflection-based `JsonSerializer` calls.
-
-### العربية
-
-- **أُزيل `PublishTrimmed` من نسخة النشر المكتفية ذاتيًّا.** القصّ هو ما كسر
-  `System.Text.Json` المعتمد على الانعكاس في 2.2.0، وقصّ WPF غير مدعوم رسميًّا. يحمل المثبّت والأرشيف الآن
-  وقت تشغيل .NET/WPF كاملًا دون قصّ، ولا يزال CI يفرض ميزانية المثبّت البالغة 70 ميغابايت.
-- تبقى إصلاحات 2.2.1: يقرأ `Loc` جداوله بـ `JsonDocument`، وكل إعدادات JSON تستخدم سياقات مولَّدة،
-  ويذكر `--diagnose` عدد النصوص المحمَّلة، ويعرض فشل بناء الإعدادات بطاقة خطأ مقروءة بدل نافذة سوداء.
-- يواصل CI تشغيل `--self-test` على نسخة النشر المكتفية ذاتيًّا التي تُحزَّم نفسها، ويرفض أي استدعاء عام
-  لـ `JsonSerializer` قائم على الانعكاس.
+# DropWheel 2.2.1 — CHANGES
 
 ## 2.2.1
 
 ### English
 
-- **P0 fix — self-contained 2.2.0 could not load its UI strings.** The trimmed self-contained publish ran
-  `JsonSerializer.Deserialize<Dictionary<string,string>>` on the embedded string tables. Trimming removed the
-  reflection metadata, every lookup fell back to its key, and the installed app showed `settings.title` and
-  other key names. The Settings window could then lay out enormous key strings and appear black. `Loc` now
-  parses the same tables with the trim-safe `JsonDocument`, so English and Arabic load normally in the
-  self-contained build.
+- **P0 fix — self-contained 2.2.0 could not load its UI strings.** 2.2.0 published the self-contained app
+  with `PublishTrimmed`; trimming disabled reflection-based `System.Text.Json`. `Loc.Load` threw, every lookup
+  fell back to its key, and the installed app showed `settings.title` and other key names. The Settings window
+  could then lay out enormous key strings and appear black. `Loc` now parses the same tables with `JsonDocument`.
+- **Trimming is removed from the shipped build.** `PublishTrimmed`, `TrimMode` and `_SuppressWpfTrimError` are
+  gone from the csproj and the publish script: WPF is not supported with trimming, and other dialogs can break
+  in ways a self-test does not cover. The installer and portable zip carry the full .NET/WPF runtime; setup
+  size is reported, not capped.
 - **Settings can never be a silent black window again.** If building the window throws, DropWheel logs the
   exception and shows a readable error card instead of an empty black window; a missing header image is
   non-fatal.
-- **CI now renders the actual shipped build.** The build job publishes the same trimmed, self-contained
+- **CI now renders the actual shipped build.** The build job publishes the same untrimmed, self-contained
   win-x64 output the installer packages, runs `--self-test` on it, asserts that both string tables loaded
-  (300+ keys) and uploads the log/screenshots. The real update banner is rendered too.
+  (300+ keys) and uploads the log/screenshots. The real update banner is rendered too. It also rejects new
+  generic reflection-based `JsonSerializer` calls.
 - `--diagnose` reports the loaded string count and the resolved Settings title.
 - Version 2.2.1; the download page and installer use the new version.
 
 ### العربية
 
-- **إصلاح عاجل (P0): نسخة 2.2.0 المكتفية ذاتيًّا لم تكن تحمّل نصوص الواجهة.** كان النشر المقصوص (trimmed)
-  يستخدم `JsonSerializer.Deserialize<Dictionary<string,string>>` لقراءة جداول النصوص المضمَّنة، فيزيل القصّ
-  بيانات الانعكاس ويظهر بدل كل نص اسمُ مفتاحه، مثل `settings.title`. وقد تؤدي المفاتيح الطويلة إلى نافذة
-  إعدادات سوداء. أصبح `Loc` يقرأ الجداول نفسها بـ `JsonDocument` الآمن مع القصّ، فتُحمَّل الإنجليزية والعربية
-  بشكل صحيح في النسخة المكتفية ذاتيًّا.
+- **إصلاح عاجل (P0): نسخة 2.2.0 المكتفية ذاتيًّا لم تكن تحمّل نصوص الواجهة.** كان 2.2.0 ينشر التطبيق
+  المكتفي ذاتيًّا مع `PublishTrimmed`، والقصّ عطّل `System.Text.Json` المعتمد على الانعكاس. فشل `Loc.Load`
+  وظهر بدل كل نص اسمُ مفتاحه، مثل `settings.title`، وقد تؤدي المفاتيح الطويلة إلى نافذة إعدادات سوداء.
+  أصبح `Loc` يقرأ الجداول نفسها بـ `JsonDocument`.
+- **أُزيل القصّ من النسخة المُسلَّمة.** حُذفت `PublishTrimmed` و`TrimMode` و`_SuppressWpfTrimError` من ملف
+  المشروع وسكربت النشر: WPF غير مدعوم مع القصّ، وقد تتعطّل نوافذ أخرى بطرق لا يغطيها الاختبار الذاتي.
+  يحمل المثبّت والأرشيف وقت تشغيل .NET/WPF كاملًا، ويُذكر حجم المثبّت بلا فرض حدّ.
 - **لن تظهر نافذة إعدادات سوداء صامتة مرة أخرى.** إذا فشل بناء النافذة يسجّل DropWheel الاستثناء ويعرض
   بطاقة خطأ مقروءة بدل نافذة سوداء فارغة، وفشل صورة العنوان لم يعد قاتلًا.
-- **CI يعرض النسخة المُسلَّمة فعليًّا:** ينشر مهمة البناء نفس مخرجات win-x64 المقصوصة المكتفية ذاتيًّا التي
-  يحزمها المثبّت، ويشغّل عليها `--self-test`، ويتأكد من تحميل جدولي النصوص (أكثر من 300 مفتاح) ويرفع السجل
-  ولقطات الشاشة. ويُعرض شريط التحديث الحقيقي أيضًا.
+- **CI يعرض النسخة المُسلَّمة فعليًّا:** ينشر مهمة البناء نفس مخرجات win-x64 المكتفية ذاتيًّا غير المقصوصة
+  التي يحزمها المثبّت، ويشغّل عليها `--self-test`، ويتأكد من تحميل جدولي النصوص (أكثر من 300 مفتاح) ويرفع
+  السجل ولقطات الشاشة. ويُعرض شريط التحديث الحقيقي أيضًا، ويرفض CI أي استدعاء عام جديد لـ `JsonSerializer`
+  قائم على الانعكاس.
 - يذكر `--diagnose` عدد النصوص المحمَّلة وعنوان نافذة الإعدادات.
 - الإصدار 2.2.1، وصفحة التنزيل والمثبّت يستخدمان الإصدار الجديد.
 

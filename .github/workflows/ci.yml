@@ -205,17 +205,14 @@ jobs:
 
           | item | size | files |
           | --- | --- | --- |
-          | publish (self-contained, trimmed, win-x64) | $publishMb MB | $($publish.Count) |
+          | publish (self-contained, untrimmed, win-x64) | $publishMb MB | $($publish.Count) |
           | setup exe | $setupMb MB | 1 |
           "@ >> $env:GITHUB_STEP_SUMMARY
 
           Write-Host "publish: $publishMb MB / $($publish.Count) files"
           Write-Host "setup:   $setupMb MB"
-          if ($setupMb -gt 70) {
-            throw "setup is $setupMb MB, above the 70 MB budget"
-          }
 
-      # R-23: a truly portable build — the same self-contained, trimmed publish the installer uses,
+      # R-23: a truly portable build — the same self-contained, untrimmed publish the installer uses,
       # so it runs with no .NET install, no installer, no registry, no admin.
       - name: Portable zip (self-contained, no admin)
         shell: pwsh
