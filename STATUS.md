@@ -1,6 +1,6 @@
 # STATUS
 
-NOW: 2.2.1 RELEASED (P0 hotfix) — v2.2.1 tagged at c539fbb — release run 39260122051 green — 6 assets live — Pages downloads 2.2.1
+NOW: 2.2.1 RELEASED (P0 hotfix) — v2.2.1 tagged at babf42b — release run 39266161349 green — untrimmed build — Pages downloads 2.2.1
 
 ## 2.2.1 — P0 HOTFIX RELEASED (19 October 2026)
 
@@ -8,12 +8,12 @@ NOW: 2.2.1 RELEASED (P0 hotfix) — v2.2.1 tagged at c539fbb — release run 392
 
 ### Root cause (confirmed, not guessed)
 
-- `FileAction.App.csproj` enables `PublishTrimmed` and `TrimMode=partial` whenever `SelfContained=true`; the
-  installer and portable zip both ship that publish. Trimming disables reflection-based `System.Text.Json`.
-  `Loc.Load` used `JsonSerializer.Deserialize<Dictionary<string, string>>`, so it threw, the exception was
-  caught, and every lookup fell back to its key. The first self-contained `--self-test` proved it:
-  `image.compress -> smoke (catalog.image.compress.suffix).jpg`, `pack.zip -> fileType.archive.zip`, and every
-  Settings label a key.
+- 2.2.0's `FileAction.App.csproj` enabled `PublishTrimmed` and `TrimMode=partial` whenever
+  `SelfContained=true`; the installer and portable zip both shipped that publish. Trimming disables
+  reflection-based `System.Text.Json`. `Loc.Load` used `JsonSerializer.Deserialize<Dictionary<string, string>>`,
+  so it threw, the exception was caught, and every lookup fell back to its key. The first self-contained
+  `--self-test` proved it: `image.compress -> smoke (catalog.image.compress.suffix).jpg`,
+  `pack.zip -> fileType.archive.zip`, and every Settings label a key. **2.2.1 removes trimming entirely.**
 - CI did not catch it because `--self-test` and the screenshot job published **framework-dependent**, never
   the trimmed self-contained build the installer ships. The self-contained `--diagnose` also ran, but it did
   not assert that strings had loaded.
@@ -26,13 +26,17 @@ NOW: 2.2.1 RELEASED (P0 hotfix) — v2.2.1 tagged at c539fbb — release run 392
 
 ### Fix
 
-- `Loc` now parses the same embedded JSON with the trim-safe `JsonDocument`; `Loc.KeyCount` is exposed for
-  diagnostics. Both 346-key tables load in the self-contained build.
+- `Loc` now parses the same embedded JSON with `JsonDocument`; `Loc.KeyCount` is exposed for diagnostics.
+  Both 346-key tables load in the self-contained build.
+- **`PublishTrimmed`, `TrimMode` and `_SuppressWpfTrimError` are removed** from the csproj and the publish
+  script. WPF is not supported with trimming, so the shipped installer/portable build carries the full
+  runtime; setup size is reported, not capped. The untrimmed setup is still only **60.03 MB**.
 - `SettingsWindow.Build` catches any failure, logs it and shows a readable error card instead of a black
   window; the header image is non-fatal.
 - `--diagnose` and the startup log report the loaded key count and the resolved Settings title.
-- CI now publishes the **exact trimmed self-contained output the installer ships** and runs `--self-test` on
-  it with the real update service, asserting 300+ keys in English and Arabic.
+- CI now publishes the **exact untrimmed self-contained output the installer ships** and runs `--self-test`
+  on it with the real update service, asserting 300+ keys in English and Arabic. The static guard against
+  generic reflection-based `JsonSerializer` calls remains.
 - Version 2.2.1 in the csproj, installer and download page; upgrades in place with the same AppId and keeps
   settings.
 
@@ -40,15 +44,15 @@ NOW: 2.2.1 RELEASED (P0 hotfix) — v2.2.1 tagged at c539fbb — release run 392
 
 | Check | Result |
 |---|---|
-| Code commit | `c539fbb` (`merge(2.2.1)`) |
-| Main CI | [run 39259081186](https://github.com/Faisaldhd/dropwheel/actions/runs/39259081186) — build/test, self-contained UI, screenshots and package/installer smoke all green |
+| Code commit | `babf42b` (`merge(2.2.1)` — untrimmed) |
+| Main CI | [run 39266130795](https://github.com/Faisaldhd/dropwheel/actions/runs/39266130795) — build/test, self-contained UI, screenshots and package/installer smoke green |
 | Self-contained UI | **346 keys English, 346 Arabic**, all settings/wheel windows rendered with the real update service; `self-contained-self-test` artifact |
-| Shipped diagnose | `strings: 346 keys, settings.title="DropWheel – settings"` from the 2.2.1 self-contained `--diagnose` artifact |
-| Release | [v2.2.1](https://github.com/Faisaldhd/dropwheel/releases/tag/v2.2.1) — [run 39260122051](https://github.com/Faisaldhd/dropwheel/actions/runs/39260122051) green; **Latest** |
-| Setup | `DropWheel-2.2.1-Setup.exe` — 44,279,083 B (42.23 MB), product/file version **2.2.1** |
-| Setup SHA-256 | `5e7b0eb3a88aa5836bf6aee5b8d84b1c108fdc5bc9d451ec54462d244c1c1a01` (matches both setup names in `SHA256SUMS.txt`) |
+| Shipped diagnose | `strings: 346 keys, settings.title="DropWheel – settings"` from the 2.2.1 untrimmed `--diagnose` artifact |
+| Release | [v2.2.1](https://github.com/Faisaldhd/dropwheel/releases/tag/v2.2.1) — [run 39266161349](https://github.com/Faisaldhd/dropwheel/actions/runs/39266161349) green; **Latest** |
+| Setup | `DropWheel-2.2.1-Setup.exe` — 62,941,219 B (**60.03 MB**), product/file version **2.2.1** |
+| Setup SHA-256 | `307625314638e45792843b6b3709aee02a4d807671553ecced91bf7285b28067` (matches both setup names in `SHA256SUMS.txt`) |
 | Signature | 64-byte P1363 ECDSA P-256, **valid** against `UpdateKey.PublicKeyBase64` |
-| Portable | `DropWheel-2.2.1-portable-win-x64.zip` — 62,731,251 B |
+| Portable | `DropWheel-2.2.1-portable-win-x64.zip` — 89,242,266 B (85.11 MB) |
 | Six assets | versioned setup + sig, stable `DropWheel-Setup.exe`, versioned zip + sig, `SHA256SUMS.txt` |
 | Download page | <https://faisaldhd.github.io/dropwheel/> shows **Version 2.2.1**; button targets `releases/latest/download/DropWheel-Setup.exe`; the alias resolves through the GitHub release-assets redirect |
 
