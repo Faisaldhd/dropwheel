@@ -35,24 +35,52 @@
    (`2.3.0`, not `2.3.0.0`) unless the tag has a non-zero revision. Tags such as `v2.3.0` therefore compare
    equal to `new Version(2, 3, 0)`; asset names still use `Version.ToString(3)` via `UpdateConfig`.
 
-## Requests from update-ui
+## Requests from settings-tabs
 
-### 1. `src/FileAction.App/UI/SettingsWindow.cs` (owner: settings-tabs) — pass the saving callback
+### 1. Strings — merged, nothing to do
 
-When the Updates tab embeds the banner, pass the window's saving action:
+The six-tab window uses exactly the 2.2.0 keys from `AGENT_RULES.md`. They arrived with the strings branch
+(main `ce3dcdc` / `7cc3e30`), so `LocaleUsageTests` passes now. Reused keys: `settings.language.*`,
+`settings.gesture.*`, `settings.wheels.customize.*`, `settings.keyboard.*`, `settings.results.*`,
+`settings.quality.*`, `settings.company.*`, `settings.tools.*`, `settings.footer`, `language.english`,
+`language.arabic`. `settings.updates.automatic.*` and `settings.updates.check*` are **not** used here: the
+update banner owns the automatic-check switch and every check/download state (no second toggle).
 
-```csharp
-UpdateBanner.Create(SettingsWindow.Updates, _settings, Save)
-```
+Notes on two strings, for whoever edits the tables next:
 
-`Save` writes `settings.json` and calls the app's `OnSettingsChanged`, which starts/stops the 24 h timer.
-Passing `_changed` directly would only update memory until the next save/exit.
+- `settings.updates.detail` is shown as the description above the banner when an update service exists.
+  When it does not (self-test build / no service), the tab shows `settings.updates.unavailable` instead —
+  that key was added by the strings branch exactly for this state and is more accurate than the old
+  "show detail instead" wording.
+- `settings.about.website` is "Website" (no `{0}`). About renders it as a link to
+  `https://github.com/Faisaldhd/dropwheel` and appends that URL to the label when the localized value does
+  not contain a URL, so the address is visible in both languages. No table change needed.
 
-### 2. `src/FileAction.App/SelfTest.cs` (not owned by update-ui) — optional banner screenshots
+### 2. App.cs (not mine): assign the update service
 
-The self-test renders `settings.png` with `SettingsWindow.Updates == null`, so it covers only the disabled
-"updates are not available" banner. To capture the violet states, set `SettingsWindow.Updates` to a fake
-`IUpdateService` whose `Available` is an `UpdateInfo` for e.g. `9.9.9` (release page
-`https://github.com/Faisaldhd/dropwheel/releases/tag/v9.9.9`) before constructing `SettingsWindow`, render
-`updates-available.png`, then restore `SettingsWindow.Updates = null`. A `Checking`/`Downloading` capture needs
-the fake to raise `StateChanged`/report progress; do not do network work in the self-test.
+`SettingsWindow.Updates` (the static property on main) has to be set by `App.cs` once the update service
+exists, e.g. `SettingsWindow.Updates = _updates;`. Until then the Updates tab shows
+`settings.updates.unavailable` and no banner. `UpdateBanner.Create` is called with the service, this
+window's `AppSettings` and the window's `Save` callback.
+
+### 3. Self-test tabs (`SelfTest.cs` is not mine)
+
+`SettingsWindow` exposes `internal static int TabCount` (= 6) and
+`internal void SelectTab(int index)` (0 = General, 1 = Wheels, 2 = Quality, 3 = Integration,
+4 = Updates, 5 = About). For per-tab screenshots, `SelfTest.RenderAll` must construct a **fresh**
+`SettingsWindow` for each index (because `SaveWindow` detaches `window.Content`, so one window cannot be
+rendered twice), call `SelectTab(i)` and then `SaveWindow`; suggested names
+`settings-general.png` … `settings-about.png`. Not required for this branch.
+
+### 4. Design note
+
+The three gesture-key chooser cards are in **General**, under `settings.general.gestures.title/detail`
+(as approved). **Wheels** shows customise, pause and the keyboard shortcut plus the
+`settings.general.gestures.detail` pointer to General — no control is duplicated. The watch and
+download toggles are greyed out and non-interactive when the HKLM policy locks them.
+
+### 5. Merge-resolution warning (SettingsWindow.cs)
+
+Inside a `Window`, WPF's `Window.ThemeMode` instance property shadows the app's `ThemeMode` enum name, so
+`ThemeMode.System` gives CS0176. The file uses `using AppThemeMode = FileAction.App.ThemeMode;`. Keep that
+alias when resolving future merges — do not "simplify" it back.
