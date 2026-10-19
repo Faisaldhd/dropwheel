@@ -40,6 +40,7 @@
   "job.download.downloading": "Downloading {0}",
   "job.download.ready": "Ready; it won't be downloaded again.",
   "error.output.notWritable": "Cannot write to the target folder. Choose another output folder in Settings.",
+  "error.output.dropFolderFallback": "That folder can't be written to, so the result was saved next to the file.",
   "error.file": "File error: {0}",
   "error.image.process": "Could not process the image: {0}",
   "jobs.title": "DropWheel – progress",

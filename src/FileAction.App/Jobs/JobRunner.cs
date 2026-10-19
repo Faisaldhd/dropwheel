@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using FileAction.App.Diagnostics;
 using FileAction.App.Actions;
@@ -70,12 +71,21 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
             {
             }
         });
+        // A folder detected under the cursor receives this drop's results only when it still exists,
+        // is writable and is not the folder the file already lives in. Anything else keeps the 2.2.x
+        // behaviour (next to the source, or the folder chosen in Settings); a folder that exists but
+        // refuses a write says so instead of failing silently.
+        var sourcePath = items.Count > 0 ? items[0].Path : string.Empty;
+        var detected = OutputTarget.Resolve(sourcePath, outputDir, Directory.Exists, CanWrite);
+        if (detected.Status == OutputTargetStatus.NotWritable)
+            Notifications.Show(T("app.error.title"), T("error.output.dropFolderFallback"), error: true);
         var context = new OperationContext
         {
             Tools = tools,
             Progress = new Progress<double>(card.Report),
             CancellationToken = cts.Token,
-            OutputDirectory = outputDir ?? (string.IsNullOrWhiteSpace(settings.OutputDirectory) ? null : settings.OutputDirectory),
+            OutputDirectory = detected.Directory ??
+                (string.IsNullOrWhiteSpace(settings.OutputDirectory) ? null : settings.OutputDirectory),
             Parameters = parameters,
             Settings = settings.Quality,
         };
@@ -184,4 +194,20 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
         ImageMagick.MagickException => T("error.image.process", ex.Message),
         _ => $"{ex.GetType().Name}: {ex.Message}",
     };
+
+    /// <summary>Probe: can a file be created in this folder right now? Never throws.</summary>
+    private static bool CanWrite(string folder)
+    {
+        var probe = Path.Combine(folder, ".dropwheel-write-probe-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            File.WriteAllText(probe, "x");
+            File.Delete(probe);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            return false;
+        }
+    }
 }
