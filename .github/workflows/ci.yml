@@ -61,6 +61,36 @@ jobs:
           dotnet build tests/FileAction.Tests/FileAction.Tests.csproj -c Release --no-restore
           if ($LASTEXITCODE -ne 0) { throw "build Tests failed" }
 
+      - name: Self-contained UI self-test (trimmed publish)
+        shell: pwsh
+        timeout-minutes: 15
+        run: |
+          # This is the exact shape the installer ships. The framework-dependent screenshot job cannot
+          # catch trimming/resource regressions, so the self-contained build renders every window here.
+          dotnet publish src/FileAction.App/FileAction.App.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishTrimmed=true -p:TrimMode=partial `
+            -o release/selfcontained
+          if ($LASTEXITCODE -ne 0) { throw "self-contained publish failed" }
+          $out = "release/self-test"
+          $process = Start-Process -FilePath release/selfcontained/DropWheel.exe `
+            -ArgumentList '--self-test', $out -PassThru -Wait
+          if (Test-Path "$out/self-test.txt") {
+            Get-Content "$out/self-test.txt" | Select-Object -Last 60
+          } else {
+            Write-Warning "self-contained --self-test wrote no self-test.txt"
+          }
+          if ($process.ExitCode -ne 0) { throw "self-contained --self-test failed with $($process.ExitCode)" }
+
+      - name: Upload self-contained self-test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-contained-self-test
+          path: release/self-test/**
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Update signing self-test
         shell: pwsh
         run: |
