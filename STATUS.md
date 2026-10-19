@@ -1,6 +1,49 @@
 # STATUS
 
-NOW: 2.2.0 RELEASED — v2.2.0 tagged at 1336145 — release run 39252160456 green — 6 assets live — Pages download verified
+NOW: 2.2.1 RELEASED (P0 hotfix) — v2.2.1 tagged at c539fbb — release run 39260122051 green — 6 assets live — Pages downloads 2.2.1
+
+## 2.2.1 — P0 HOTFIX RELEASED (19 October 2026)
+
+2.2.1 fixes the installed self-contained 2.2.0 showing a **black Settings window titled `settings.title`**.
+
+### Root cause (confirmed, not guessed)
+
+- The trimmed self-contained publish could not read its embedded string tables. `Loc.Load` used
+  `JsonSerializer.Deserialize<Dictionary<string, string>>`; trimming removed the reflection metadata it needs,
+  the exception was caught, and every lookup fell back to its key. The first self-contained `--self-test`
+  proved it: `image.compress -> smoke (catalog.image.compress.suffix).jpg`, `pack.zip -> fileType.archive.zip`,
+  and every Settings label a key. The framework-dependent screenshot job never exercised this path.
+- The Settings window therefore received very long key strings (one Segmented label wrapped letter by letter)
+  and could end as an empty dark window when its build path failed. The title was set before the failure, so
+  the user saw exactly `settings.title` on a black window.
+
+### Fix
+
+- `Loc` now parses the same embedded JSON with the trim-safe `JsonDocument`; `Loc.KeyCount` is exposed for
+  diagnostics. Both 346-key tables load in the self-contained build.
+- `SettingsWindow.Build` catches any failure, logs it and shows a readable error card instead of a black
+  window; the header image is non-fatal.
+- `--diagnose` and the startup log report the loaded key count and the resolved Settings title.
+- CI now publishes the **exact trimmed self-contained output the installer ships** and runs `--self-test` on
+  it with the real update service, asserting 300+ keys in English and Arabic.
+- Version 2.2.1 in the csproj, installer and download page; upgrades in place with the same AppId and keeps
+  settings.
+
+### Evidence
+
+| Check | Result |
+|---|---|
+| Code commit | `c539fbb` (`merge(2.2.1)`) |
+| Main CI | [run 39259081186](https://github.com/Faisaldhd/dropwheel/actions/runs/39259081186) — build/test, self-contained UI, screenshots and package/installer smoke all green |
+| Self-contained UI | **346 keys English, 346 Arabic**, all settings/wheel windows rendered with the real update service; `self-contained-self-test` artifact |
+| Shipped diagnose | `strings: 346 keys, settings.title="DropWheel – settings"` from the 2.2.1 self-contained `--diagnose` artifact |
+| Release | [v2.2.1](https://github.com/Faisaldhd/dropwheel/releases/tag/v2.2.1) — [run 39260122051](https://github.com/Faisaldhd/dropwheel/actions/runs/39260122051) green; **Latest** |
+| Setup | `DropWheel-2.2.1-Setup.exe` — 44,279,083 B (42.23 MB), product/file version **2.2.1** |
+| Setup SHA-256 | `5e7b0eb3a88aa5836bf6aee5b8d84b1c108fdc5bc9d451ec54462d244c1c1a01` (matches both setup names in `SHA256SUMS.txt`) |
+| Signature | 64-byte P1363 ECDSA P-256, **valid** against `UpdateKey.PublicKeyBase64` |
+| Portable | `DropWheel-2.2.1-portable-win-x64.zip` — 62,731,251 B |
+| Six assets | versioned setup + sig, stable `DropWheel-Setup.exe`, versioned zip + sig, `SHA256SUMS.txt` |
+| Download page | <https://faisaldhd.github.io/dropwheel/> shows **Version 2.2.1**; button targets `releases/latest/download/DropWheel-Setup.exe`; the alias resolves through the GitHub release-assets redirect |
 
 ## 2.2.0 — RELEASED (19 October 2026, approved by Claude)
 
