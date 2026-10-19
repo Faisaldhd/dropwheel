@@ -1,6 +1,6 @@
 # STATUS
 
-NOW: 2.2.0 READY FOR REVIEW — all ten agents merged — main CI 39247825190 green — no v2.2.0 tag
+NOW: 2.2.0 READY FOR REVIEW — all ten agents merged — main CI 39248890995 green — no v2.2.0 tag
 
 ## 2.2.0 — READY FOR REVIEW (19 October 2026)
 
@@ -11,8 +11,8 @@ owner's decision after review. `REVIEW.md` was read but not edited.
 
 | Check | Evidence |
 |---|---|
-| Code commit | `0173530` (all ten agent branches merged; `STATUS.md` is the only later change) |
-| Main CI — build + test + package + installer smoke + screenshots | [run 39247825190](https://github.com/Faisaldhd/dropwheel/actions/runs/39247825190) — green on `7354ba2`; the final `.iss` uninstall-key merge (`0173530`) is re-validated by the head-commit run on the Actions page |
+| Code commit | `6e8e3e7` (all ten agent branches merged; code at `0173530`, this STATUS update is the head) |
+| Main CI — build + test + package + installer smoke + screenshots | [run 39248890995](https://github.com/Faisaldhd/dropwheel/actions/runs/39248890995) — green on `6e8e3e7`; earlier [39247825190](https://github.com/Faisaldhd/dropwheel/actions/runs/39247825190) green on `7354ba2` |
 | Tests | **192 / 192 passed**, 0 failed, 0 skipped (trx from [run 39245752210](https://github.com/Faisaldhd/dropwheel/actions/runs/39245752210)) |
 | Setup | `DropWheel-2.2.0-Setup.exe` — **42.21 MB** (44,262,876 B), budget 70 MB |
 | Portable zip | `DropWheel-2.2.0-portable-win-x64.zip` — **59.83 MB** (62,731,211 B) |
