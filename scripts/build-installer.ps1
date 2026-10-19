@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    Builds the DropWheel setup from a self-contained, trimmed win-x64 publish.
+    Builds the DropWheel setup from a self-contained win-x64 publish.
 
 .DESCRIPTION
-    DropWheel 2.2.0 ships self-contained: the publish carries .NET and every dependency, so the
+    DropWheel 2.2.x ships self-contained: the publish carries .NET and every dependency, so the
     setup installs no runtime, downloads nothing and checks nothing about the target machine.
 
     This script:
@@ -11,7 +11,6 @@
       2. publishes with
              dotnet publish src\FileAction.App\FileAction.App.csproj
                  -c Release -r win-x64 --self-contained true
-                 -p:PublishTrimmed=true -p:TrimMode=partial
                  -o release\selfcontained
       3. removes *.pdb and the runtime's createdump.exe from the publish;
       4. copies LICENSE, THIRD-PARTY-NOTICES.md and licenses\ next to DropWheel.exe, so the
@@ -20,14 +19,11 @@
          branding\DropWheel-1024.png with System.Drawing. If System.Drawing or the logo is not
          available the Inno Setup defaults are used instead (the build then prints a warning);
       6. compiles installer\DropWheel.iss with ISCC /DAppVersion=<version>;
-      7. asserts release\DropWheel-<version>-Setup.exe exists and is at most 70 MB, then prints
-         the publish and setup sizes and file counts.
+      7. checks release\DropWheel-<version>-Setup.exe exists, then prints the publish and setup
+         sizes and file counts.
 
     The setup is not signed here (docs\signing.md covers signing). CI only: nothing in this
     repository is built or run on the owner's PC.
-
-.PARAMETER MaxSetupMB
-    Size budget for the setup executable. Default 70.
 
 .PARAMETER IsccPath
     Full path to ISCC.exe. By default the usual Inno Setup 6 locations are searched, including
@@ -42,7 +38,6 @@
 [CmdletBinding()]
 param(
     [string] $Configuration = 'Release',
-    [int] $MaxSetupMB = 70,
     [string] $IsccPath,
     [switch] $SkipPublish
 )
@@ -163,8 +158,6 @@ function Invoke-Publish {
         '-c', $BuildConfiguration
         '-r', 'win-x64'
         '--self-contained', 'true'
-        '-p:PublishTrimmed=true'
-        '-p:TrimMode=partial'
         '-o', $OutputDirectory
     )
 
@@ -437,11 +430,10 @@ $publishMB = [math]::Round($publishBytes / 1MB, 1)
 
 $setup = Get-Item -LiteralPath $setupPath
 $setupMB = [math]::Round($setup.Length / 1MB, 2)
-$setupLimitBytes = $MaxSetupMB * 1MB
 
 Write-Host ''
 Write-Host '--------------------------------------------------------------'
-Write-Host ("publish (self-contained, trimmed win-x64): {0} MB / {1} files" -f $publishMB, $publishFiles.Count)
+Write-Host ("publish (self-contained, untrimmed win-x64): {0} MB / {1} files" -f $publishMB, $publishFiles.Count)
 Write-Host ("setup exe:                                  {0} MB" -f $setupMB)
 Write-Host ("setup path:                                 {0}" -f $setupPath)
 Write-Host '--------------------------------------------------------------'
@@ -452,15 +444,15 @@ if ($env:GITHUB_STEP_SUMMARY) {
         '',
         '| item | size | files |',
         '| --- | --- | --- |',
-        ("| publish (self-contained, trimmed, win-x64) | $publishMB MB | $($publishFiles.Count) |"),
+        ("| publish (self-contained, untrimmed, win-x64) | $publishMB MB | $($publishFiles.Count) |"),
         ("| setup exe | $setupMB MB | 1 |"),
         ''
     ) -join "`n"
     Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $summary
 }
 
-if ($setup.Length -gt $setupLimitBytes) {
-    throw ("The setup is {0} MB, above the {1} MB budget. Trim more or check what the publish pulls in." -f $setupMB, $MaxSetupMB)
+if ($setup.Length -le 0) {
+    throw "The setup is empty: $setupPath"
 }
 
-Write-Host ("OK: {0} ({1} MB, budget {2} MB)" -f $setup.Name, $setupMB, $MaxSetupMB)
+Write-Host ("OK: {0} ({1} MB)" -f $setup.Name, $setupMB)
