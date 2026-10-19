@@ -30,7 +30,7 @@ internal sealed class MetadataTool : IToolWindowSpec
     public string TitleKey => "tool.metadata.title";
 
     /// <summary>The bottom-right button of this tool reads "Save", not the shared "Apply".</summary>
-    public string? PrimaryLabelKey => "tool.metadata.save";
+    public string PrimaryLabelKey => "tool.metadata.save";
 
     public ToolSpecLayout Layout => Panel;
 

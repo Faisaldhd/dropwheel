@@ -20,10 +20,10 @@ internal interface IToolWindowSpec
     string TitleKey { get; }
 
     /// <summary>
-    /// Localization key of the bottom-right primary button; null keeps the shared "Apply". Additive, so a
-    /// tool registers no label and nothing else changes.
+    /// Localization key for the bottom-right primary button. Tools override this with their own verb
+    /// ("Save Annotated Copy", "Merge PDFs", ...); the default keeps older tools on "Apply".
     /// </summary>
-    string? PrimaryLabelKey => null;
+    string PrimaryLabelKey => "tool.window.apply";
 
     /// <summary>Chrome height/width and preview min/max (see <see cref="ToolSizes"/>).</summary>
     ToolSpecLayout Layout { get; }
