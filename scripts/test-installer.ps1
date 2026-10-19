@@ -14,7 +14,10 @@
       5. after seeding the two Explorer context-menu keys and the Send-to shortcut (the app
          creates them only when the user opts in), a silent uninstall removes them, the Run
          value, the program folder and the Start-menu shortcut;
-      6. a silent uninstall keeps the settings folder and the downloaded helper programs.
+      6. a silent uninstall keeps the settings folder and the downloaded helper programs;
+      7. the installed DropWheel.exe passes --self-test and --diagnose with at least 300 localized
+         keys and no raw key in the output (2.2.0 shipped an installed build whose string tables
+         were empty, so this gate must run on the installed copy, not on the publish folder).
 
     Run it only in CI, after scripts\build-installer.ps1 (the "Package" job). Everything is
     removed again, so the test can be repeated on the same machine. Any failure exits non-zero.
@@ -69,6 +72,9 @@ $uninstallLog = Join-Path $tempRoot 'dropwheel-uninstall.log'
 $installPath = $null
 $appDataExistedBefore = $false
 $localAppDataExistedBefore = $false
+$selfTestDir = $null
+$selfTestLog = $null
+$diagnosePath = $null
 $failed = $false
 $failureMessage = ''
 
@@ -134,6 +140,26 @@ function Invoke-SetupProcess {
             try { $process.Kill($true) } catch { try { $process.Kill() } catch { } }
             Stop-DropWheelProcesses
             throw "$What did not finish within $TimeoutSeconds s."
+        }
+        return $process.ExitCode
+    } finally {
+        try { $process.Dispose() } catch { }
+    }
+}
+
+function Invoke-AppProcess {
+    # Same contract as Invoke-SetupProcess, but for the installed app: a GUI-subsystem exe does not
+    # set $LASTEXITCODE under &, and a hung self-test must fail the job instead of hanging it.
+    param([string] $FilePath, [string[]] $Arguments, [string] $What, [int] $Seconds = 600)
+
+    Write-Host ("  {0} {1}" -f $FilePath, ($Arguments -join ' '))
+    $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru
+    try {
+        if (-not $process.WaitForExit($Seconds * 1000)) {
+            # A hung app must fail the job quickly instead of leaving a 6-hour build.
+            try { $process.Kill($true) } catch { try { $process.Kill() } catch { } }
+            Stop-DropWheelProcesses
+            throw "$What did not finish within $Seconds s."
         }
         return $process.ExitCode
     } finally {
@@ -216,6 +242,69 @@ function Invoke-SmokeTest {
     Assert-That (-not (Test-Path -LiteralPath $desktopShortcut)) 'no desktop shortcut was created (task is unchecked by default)'
     foreach ($uninstallKey in $uninstallKeyNames) {
         if (Test-Path -LiteralPath $uninstallKey) { Write-Host "  uninstall entry: $uninstallKey" }
+    }
+
+    # The installed copy is what users run. 2.2.0 shipped an installed build whose embedded string
+    # tables were stripped by trimming; CI had only exercised a framework-dependent publish, so
+    # every label became a raw key and nothing failed until the app was installed. Gate the exact
+    # installed bytes here, before the shell-entry seeding and the uninstall.
+    Write-Step 'Running the installed app: --self-test and --diagnose'
+    $script:selfTestDir = Join-Path $tempRoot ('dropwheel-installed-selftest-' + [guid]::NewGuid().ToString('N'))
+    $script:selfTestLog = Join-Path $selfTestDir 'self-test.txt'
+    $selfTestExit = Invoke-AppProcess -FilePath $installedExe `
+        -Arguments @('--self-test', ('"{0}"' -f $selfTestDir)) `
+        -What 'The installed --self-test' -Seconds 900
+    Assert-That ($selfTestExit -eq 0) "the installed --self-test exited with 0 (got $selfTestExit)"
+    Assert-That (Test-Path -LiteralPath $selfTestLog) 'the installed --self-test wrote self-test.txt'
+
+    $selfTestText = if (Test-Path -LiteralPath $selfTestLog) { Get-Content -LiteralPath $selfTestLog -Raw } else { '' }
+    # -cmatch on purpose: -match is case-insensitive and would also match the benign
+    # "skipped ocr (failed: ...)" line. Only the app's own uppercase FAILED: marker is fatal.
+    Assert-That ($selfTestText -cnotmatch '(?m)^FAILED:') 'the installed --self-test reported no failed check'
+    Assert-That ($selfTestText -notmatch 'raw localization key') 'the installed self-test rendered no raw localization key'
+    Assert-That ($selfTestText -notmatch 'settings\.title') 'the installed self-test output contains no raw "settings.title" key'
+
+    $keyCounts = @([regex]::Matches($selfTestText, 'localization:\s+(\d+) keys') | ForEach-Object { [int] $_.Groups[1].Value })
+    Assert-That ($keyCounts.Count -ge 1) 'the installed self-test reported its Loc key count'
+    Assert-That ($keyCounts.Count -ge 4) "the installed self-test checked all four language/theme passes ($($keyCounts.Count) reported)"
+    foreach ($keyCount in $keyCounts) {
+        Assert-That ($keyCount -ge 300) "the installed app loaded $keyCount localized keys (minimum 300)"
+    }
+
+    $script:diagnosePath = Join-Path $tempRoot 'dropwheel-installed-diagnose.txt'
+    Remove-Item -LiteralPath $diagnosePath -Force -ErrorAction SilentlyContinue
+    $diagnoseExit = Invoke-AppProcess -FilePath $installedExe `
+        -Arguments @('--diagnose', ('"{0}"' -f $diagnosePath)) `
+        -What 'The installed --diagnose' -Seconds 180
+    Assert-That ($diagnoseExit -eq 0) "the installed --diagnose exited with 0 (got $diagnoseExit)"
+    Assert-That (Test-Path -LiteralPath $diagnosePath) 'the installed --diagnose wrote its report'
+
+    $diagnoseText = if (Test-Path -LiteralPath $diagnosePath) { Get-Content -LiteralPath $diagnosePath -Raw } else { '' }
+    $localeMatch = [regex]::Match($diagnoseText, 'localization: English=(\d+) keys, Arabic=(\d+) keys')
+    Assert-That ($localeMatch.Success) 'the installed --diagnose reported both Loc table counts'
+    if ($localeMatch.Success) {
+        $englishKeys = [int] $localeMatch.Groups[1].Value
+        $arabicKeys = [int] $localeMatch.Groups[2].Value
+        Assert-That ($englishKeys -ge 300) "the installed English table has $englishKeys keys (minimum 300)"
+        Assert-That ($arabicKeys -ge 300) "the installed Arabic table has $arabicKeys keys (minimum 300)"
+    }
+
+    $activeMatch = [regex]::Match($diagnoseText, 'strings:\s+(\d+) keys')
+    Assert-That ($activeMatch.Success) 'the installed --diagnose reported the active Loc key count'
+    if ($activeMatch.Success) {
+        $activeKeys = [int] $activeMatch.Groups[1].Value
+        Assert-That ($activeKeys -ge 300) "the installed app has $activeKeys active localized keys (minimum 300)"
+    }
+
+    Assert-That ($diagnoseText -notmatch 'localization:.*ERROR') 'the installed --diagnose reports no localization error'
+    Assert-That ($diagnoseText -notmatch 'settings\.title="settings\.title"') 'the installed --diagnose did not resolve settings.title to its raw key'
+    # Any quoted dotted identifier is a key that reached the output instead of its translation.
+    Assert-That ($diagnoseText -notmatch '="[a-z][a-z0-9]*(\.[a-z0-9]+)+"') 'the installed --diagnose shows no raw dotted key as a value'
+
+    Write-Host ("  self-test key counts: {0}" -f ($keyCounts -join ', '))
+    if ($localeMatch.Success) {
+        Write-Host ("  diagnose: English={0}, Arabic={1}, active={2}" -f `
+            $localeMatch.Groups[1].Value, $localeMatch.Groups[2].Value, $activeMatch.Groups[1].Value)
     }
 
     Write-Step 'Seeding the app-created shell entries and the user data a silent uninstall must keep'
@@ -301,6 +390,12 @@ function Invoke-Cleanup {
     if ($installPath -and (Test-Path -LiteralPath $installPath)) {
         Remove-Item -LiteralPath $installPath -Recurse -Force -ErrorAction SilentlyContinue
     }
+    if ($selfTestDir -and (Test-Path -LiteralPath $selfTestDir)) {
+        Remove-Item -LiteralPath $selfTestDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if ($diagnosePath -and (Test-Path -LiteralPath $diagnosePath)) {
+        Remove-Item -LiteralPath $diagnosePath -Force -ErrorAction SilentlyContinue
+    }
     if (-not $appDataExistedBefore -and (Test-Path -LiteralPath $appDataFolder)) {
         Remove-Item -LiteralPath $appDataFolder -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -340,6 +435,16 @@ try {
         Write-Host ''
         Write-Host '--- last 40 lines of the install log ---'
         Get-Content -LiteralPath $installLog -Tail 40 | ForEach-Object { Write-Host $_ }
+    }
+    if ($selfTestLog -and (Test-Path -LiteralPath $selfTestLog)) {
+        Write-Host ''
+        Write-Host '--- last 40 lines of the installed self-test ---'
+        Get-Content -LiteralPath $selfTestLog -Tail 40 | ForEach-Object { Write-Host $_ }
+    }
+    if ($diagnosePath -and (Test-Path -LiteralPath $diagnosePath)) {
+        Write-Host ''
+        Write-Host '--- installed diagnose report (first 40 lines) ---'
+        Get-Content -LiteralPath $diagnosePath -Head 40 | ForEach-Object { Write-Host $_ }
     }
 } finally {
     Invoke-Cleanup
