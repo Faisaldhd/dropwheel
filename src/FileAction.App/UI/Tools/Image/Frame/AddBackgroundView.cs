@@ -229,6 +229,7 @@ internal sealed class AddBackgroundView
         }
 
         _customSwatch = CreateSwatch(new SolidColorBrush(ToColor(_custom)), PickCustomColor);
+        _customSwatch.ToolTip = UiSetup.Tip(T("tool.addbackground.color.custom"));
         _customSwatch.Child = new TextBlock
         {
             Text = "+",
