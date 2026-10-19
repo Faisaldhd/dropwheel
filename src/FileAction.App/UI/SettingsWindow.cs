@@ -229,7 +229,7 @@ internal sealed class SettingsWindow : Window
             }),
             glyph: "\uE896"));
 
-        // R-20: nothing is registered automatically any more; both integrations are opt-in here.
+        // R-20: nothing is registered automatically any more; all integrations are opt-in here.
         root.Children.Add(Card(T("Spustit s Windows", "Start with Windows"),
             T("Přidá zástupce do složky Po spuštění. Vypnuto = nic se nepřidá.",
                 "Adds a startup entry. Off = nothing is added."),
@@ -246,6 +246,15 @@ internal sealed class SettingsWindow : Window
             {
                 Shell.ShellIntegration.SetContextMenu(v);
                 Save();
+            }),
+            glyph: "\uE8A7"));
+        root.Children.Add(Card(T("Nabídka Odeslat do", "Send to menu"),
+            T("Přidá zástupce DropWheel do nabídky Odeslat do. Vypnuto = nic se nepřidá.",
+                "Adds a DropWheel shortcut to the Send to menu. Off = nothing is added."),
+            Toggle(Shell.ShellIntegration.IsSendToEnabled, v =>
+            {
+                Apply(() => Shell.ShellIntegration.SetSendTo(v));
+                Rebuild();
             }),
             glyph: "\uE8A7"));
 

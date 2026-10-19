@@ -26,18 +26,24 @@ internal static class Policy
     public static bool DownloadsAllowed(AppSettings settings) =>
         settings.AutoDownloadTools && !DownloadsDisabled;
 
+    /// <summary>
+    /// Interprets one policy value: <c>1</c>/<c>true</c>/<c>yes</c> (any nonzero number) enables, anything
+    /// else disables. Kept separate from <see cref="Read"/> so the rules can be tested without touching HKLM.
+    /// </summary>
+    internal static bool ParsePolicyValue(object? value) => value switch
+    {
+        int number => number != 0,
+        long number => number != 0,
+        string text => text.Trim().ToLowerInvariant() is "1" or "true" or "yes",
+        _ => false,
+    };
+
     private static bool Read(string name)
     {
         try
         {
             using var key = Registry.LocalMachine.OpenSubKey(Path);
-            return key?.GetValue(name) switch
-            {
-                int number => number != 0,
-                long number => number != 0,
-                string text => text.Trim() is "1" or "true" or "True" or "yes",
-                _ => false,
-            };
+            return ParsePolicyValue(key?.GetValue(name));
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
         {

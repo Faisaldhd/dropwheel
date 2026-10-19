@@ -29,6 +29,7 @@ public static class Program
             // Called by the uninstaller.
             ShellIntegration.SetContextMenu(false);
             ShellIntegration.SetAutostart(false);
+            ShellIntegration.SetSendTo(false);
             return 0;
         }
 
