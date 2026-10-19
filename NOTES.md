@@ -35,69 +35,24 @@
    (`2.3.0`, not `2.3.0.0`) unless the tag has a non-zero revision. Tags such as `v2.3.0` therefore compare
    equal to `new Version(2, 3, 0)`; asset names still use `Version.ToString(3)` via `UpdateConfig`.
 
-## Requests from update-apply
+## Requests from update-ui
 
-Nothing outside `src/FileAction.App/Updates/**` and `scripts/test-update-apply.ps1` was edited.
+### 1. `src/FileAction.App/UI/SettingsWindow.cs` (owner: settings-tabs) — pass the saving callback
 
-### 1. `src/FileAction.App/App.cs` (update-ui / lead) — wire the helper and `--updated`
-
-Required for the helper to work at all:
+When the Updates tab embeds the banner, pass the window's saving action:
 
 ```csharp
-// Program.Main, immediately after AppLog.Initialize() and BEFORE --self-test / the single-instance check:
-if (UpdateApplier.TryRun(args, out var updateExit))
-    return updateExit;
+UpdateBanner.Create(SettingsWindow.Updates, _settings, Save)
 ```
 
-`--apply-update` must run before `SingleInstance.TryAcquire()`: the old app is still running when the
-helper starts, so it must never be treated as a second instance. `AppLog.Initialize()` must stay before
-it so both helper hops leave a log.
+`Save` writes `settings.json` and calls the app's `OnSettingsChanged`, which starts/stops the 24 h timer.
+Passing `_changed` directly would only update memory until the next save/exit.
 
-```csharp
-// App.OnStartup — after LanguageManager.Apply(...) and Theme.Apply(...), on the first-instance start:
-var updatedIndex = Array.IndexOf(args, "--updated");
-if (updatedIndex >= 0 && updatedIndex + 1 < args.Length)
-    UpdateApplier.AnnounceUpdated(args[updatedIndex + 1]);
-else if (args.FirstOrDefault(a => a.StartsWith("--updated=", StringComparison.Ordinal)) is { } updatedFlag)
-    UpdateApplier.AnnounceUpdated(updatedFlag["--updated=".Length..]);
-```
+### 2. `src/FileAction.App/SelfTest.cs` (not owned by update-ui) — optional banner screenshots
 
-`using FileAction.App.Updates;` is needed in both `Program` and `App`. The helper relaunches with
-`--updated <version>` (space form); the `=` form is supported too because `docs/auto-update-spec.md`
-writes `--updated=<x.y.z>`. Do not handle `--updated` in `TryRun`: it must keep returning false for
-normal startup.
-
-### 2. Strings — done on main
-
-`update.updated.title`, `update.updated.body` and `update.updated.whatsNew` are in both tables on main
-(`7cc3e30`). Merging main removes the `LocaleUsageTests` failure the first branch CI run showed
-(`update.updated.title` / `.whatsNew` missing). No further string work is needed from update-apply.
-
-### 3. `.github/workflows/ci.yml` (lead; routed to release-clean)
-
-The script is CI-only and needs `windows-latest`. Exact step for the job that has a Release build:
-
-```yaml
-      - name: Apply-update helper (portable)
-        shell: pwsh
-        run: '& ./scripts/test-update-apply.ps1'
-```
-
-It starts the built `DropWheel.exe` in `--apply-update` mode (a windowless process) and checks the
-success, corrupt-zip and rollback cases. If the Release build output is missing, the script publishes a
-framework-dependent folder itself with `dotnet publish`. Never run it on the owner's PC.
-
-### 4. Note on the helper copy (for review, not a request)
-
-The portable build is a **folder** (apphost + DLLs), not a single-file exe, so a lone `DropWheel.exe`
-copy in `%TEMP%` cannot start. `PortableUpdater` therefore copies the running exe (as required) **and**
-the app's runtime files, while excluding user data (`settings.json`, `portable.txt`, `log.txt`),
-`licenses\` and `tools\`. That is what frees the install folder's exe lock without shipping a broken
-helper.
-
-## What update-apply did
-
-- Replaced the `UpdateApplier` stub; added `PortableUpdater`, `SetupUpdater` and `UpdatedWindow` under
-  `src/FileAction.App/Updates/`.
-- Added `scripts/test-update-apply.ps1` (success, corrupt-zip and true-rollback cases).
-- No changes to `App.cs`, `TrayIcon.cs`, `SettingsWindow.cs`, `UpdateBanner.cs`, `ci.yml` or the string tables.
+The self-test renders `settings.png` with `SettingsWindow.Updates == null`, so it covers only the disabled
+"updates are not available" banner. To capture the violet states, set `SettingsWindow.Updates` to a fake
+`IUpdateService` whose `Available` is an `UpdateInfo` for e.g. `9.9.9` (release page
+`https://github.com/Faisaldhd/dropwheel/releases/tag/v9.9.9`) before constructing `SettingsWindow`, render
+`updates-available.png`, then restore `SettingsWindow.Updates = null`. A `Checking`/`Downloading` capture needs
+the fake to raise `StateChanged`/report progress; do not do network work in the self-test.
