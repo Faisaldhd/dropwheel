@@ -218,6 +218,22 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Clean the self-test profile
+        if: always()
+        shell: pwsh
+        run: |
+          # The self-test runs the app normally, so it creates %APPDATA%\DropWheel. The installer smoke
+          # test asserts a clean machine; remove exactly the folders the app may have created.
+          foreach ($dir in @(
+            (Join-Path $env:APPDATA 'DropWheel'),
+            (Join-Path $env:LOCALAPPDATA 'DropWheel')
+          )) {
+            if (Test-Path -LiteralPath $dir) {
+              Remove-Item -LiteralPath $dir -Recurse -Force
+              Write-Host "removed $dir"
+            }
+          }
+
       - name: Installer silent install/uninstall smoke test
         shell: pwsh
         run: |
