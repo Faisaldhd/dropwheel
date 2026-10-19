@@ -11,6 +11,67 @@ using WpfImage = System.Windows.Controls.Image;
 
 namespace FileAction.App.UI.Tools.Pdf;
 
+/// <summary>
+/// Rebuilds open PDF tool views when Windows switches between the light and dark app theme. Theme returns
+/// fresh frozen brushes on Refresh, so a view that keeps its old elements would keep the old palette;
+/// rebuilding the body picks up the new one. Handlers are held weakly, so a closed window is collected.
+/// </summary>
+internal static class PdfThemeWatcher
+{
+    private static readonly List<WeakReference<Action>> Handlers = [];
+    private static bool _hooked;
+
+    public static void Subscribe(Action repaint)
+    {
+        lock (Handlers)
+        {
+            Handlers.RemoveAll(reference => !reference.TryGetTarget(out _));
+            Handlers.Add(new WeakReference<Action>(repaint));
+        }
+        EnsureHooked();
+    }
+
+    private static void EnsureHooked()
+    {
+        if (_hooked)
+            return;
+        _hooked = true;
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += (sender, args) =>
+        {
+            if (args.Category is not (Microsoft.Win32.UserPreferenceCategory.General
+                or Microsoft.Win32.UserPreferenceCategory.VisualStyle
+                or Microsoft.Win32.UserPreferenceCategory.Color))
+                return;
+
+            var application = Application.Current;
+            if (application is null)
+                return;
+
+            try
+            {
+                application.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    Theme.Refresh();
+                    var handlers = new List<Action>();
+                    lock (Handlers)
+                    {
+                        foreach (var reference in Handlers)
+                            if (reference.TryGetTarget(out var handler))
+                                handlers.Add(handler);
+                        Handlers.RemoveAll(reference => !reference.TryGetTarget(out _));
+                    }
+                    foreach (var handler in handlers)
+                        handler();
+                }));
+            }
+            catch (InvalidOperationException)
+            {
+                // The dispatcher is already shutting down; nothing left to repaint.
+            }
+        };
+    }
+}
+
 /// <summary>Where the two PDF tools write: the drop folder when it is usable, else next to the source.</summary>
 internal static class PdfToolOutput
 {

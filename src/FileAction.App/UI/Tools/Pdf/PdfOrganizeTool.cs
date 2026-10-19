@@ -76,8 +76,17 @@ internal sealed class PdfOrganizeView
     private readonly Task<int> _pageCount;
     private readonly Dictionary<int, BitmapSource?> _thumbnails = [];
     private readonly List<(Border Cell, int Position, int SourceIndex, WpfImage Image, TextBlock Fallback)> _cells = [];
-    private readonly WrapPanel _grid = new();
-    private readonly TextBlock _status = new()
+    private readonly Grid _root = new();
+    private WrapPanel _grid = new();
+    private TextBlock _status = Status();
+    private TextBlock _summary = Summary();
+
+    private PdfPagePlan? _plan;
+    private Point _dragStart;
+    private int _dragFrom = -1;
+    private bool _sameWidth;
+
+    private static TextBlock Status() => new()
     {
         FontSize = 13,
         Foreground = Theme.Muted,
@@ -85,17 +94,13 @@ internal sealed class PdfOrganizeView
         TextAlignment = TextAlignment.Center,
         Visibility = Visibility.Collapsed,
     };
-    private readonly TextBlock _summary = new()
+
+    private static TextBlock Summary() => new()
     {
         FontSize = 13,
         Foreground = Theme.Text,
         VerticalAlignment = VerticalAlignment.Center,
     };
-
-    private PdfPagePlan? _plan;
-    private Point _dragStart;
-    private int _dragFrom = -1;
-    private bool _sameWidth;
 
     public PdfOrganizeView(FileItem item, DropTargets? targets)
     {
@@ -107,6 +112,36 @@ internal sealed class PdfOrganizeView
 
     public ToolContent Build()
     {
+        BuildBody();
+        ShowStatus(T("tool.pdforganize.hint"));
+        // Windows can flip dark/light while the window is open; rebuild so every brush is the new palette.
+        PdfThemeWatcher.Subscribe(RepaintForTheme);
+        return new ToolContent(_root, Reset, ApplyAsync, Task.FromResult<MediaSize?>(null), ActivateAsync);
+    }
+
+    private void RepaintForTheme()
+    {
+        if (!_root.IsVisible)
+            return;
+        BuildBody();
+        if (_plan is null)
+            ShowStatus(T("tool.pdforganize.hint"));
+        else
+            Rebuild();
+    }
+
+    private void BuildBody()
+    {
+        _root.Children.Clear();
+        _root.RowDefinitions.Clear();
+        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        _summary = Summary();
+        _status = Status();
+        _grid = new WrapPanel();
+
         var head = new DockPanel { LastChildFill = true, Margin = new Thickness(0, 0, 0, 10) };
         _summary.ToolTip = T("tool.pdforganize.hint");
         var resetOrder = Controls.Button(T("tool.pdforganize.resetOrder"), Reset);
@@ -150,7 +185,7 @@ internal sealed class PdfOrganizeView
             Content = T("tool.pdforganize.sameWidth"),
             Foreground = Theme.Text,
             FontSize = 12,
-            IsChecked = false,
+            IsChecked = _sameWidth,
             VerticalContentAlignment = VerticalAlignment.Center,
         };
         sameWidth.Checked += (_, _) => _sameWidth = true;
@@ -161,19 +196,12 @@ internal sealed class PdfOrganizeView
         footer.Children.Add(sameWidth);
         footer.Children.Add(note);
 
-        var root = new Grid();
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(head, 0);
         Grid.SetRow(scroll, 1);
         Grid.SetRow(footer, 2);
-        root.Children.Add(head);
-        root.Children.Add(scroll);
-        root.Children.Add(footer);
-
-        ShowStatus(T("tool.pdforganize.hint"));
-        return new ToolContent(root, Reset, ApplyAsync, Task.FromResult<MediaSize?>(null), ActivateAsync);
+        _root.Children.Add(head);
+        _root.Children.Add(scroll);
+        _root.Children.Add(footer);
     }
 
     /// <summary>Reads the page count, then renders the page thumbnails one at a time.</summary>
@@ -449,7 +477,7 @@ internal static class PdfPageWriter
         {
             source = PdfReader.Open(sourcePath, PdfDocumentOpenMode.Import);
         }
-        catch (Exception ex) when (ex is PdfReaderException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception ex) when (ex is not ConversionException and not OutOfMemoryException)
         {
             throw new ConversionException(T("tool.pdforganize.error.open", Path.GetFileName(sourcePath)), ex);
         }

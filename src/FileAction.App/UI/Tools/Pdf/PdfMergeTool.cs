@@ -78,16 +78,19 @@ internal sealed class PdfMergeView
     private readonly PdfMergePlan _plan;
     private readonly Dictionary<string, BitmapSource?> _thumbnails = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<(Border Row, WpfImage Image, TextBlock Fallback, string Path)> _rows = [];
-    private readonly StackPanel _list = new();
-    private readonly TextBlock _summary = new()
+    private readonly Grid _root = new();
+    private StackPanel _list = new();
+    private TextBlock _summary = Summary();
+
+    private Point _dragStart;
+    private int _dragFrom = -1;
+
+    private static TextBlock Summary() => new()
     {
         FontSize = 12,
         Foreground = Theme.Muted,
         VerticalAlignment = VerticalAlignment.Center,
     };
-
-    private Point _dragStart;
-    private int _dragFrom = -1;
 
     public PdfMergeView(IReadOnlyList<FileItem> items, DropTargets? targets)
     {
@@ -97,6 +100,31 @@ internal sealed class PdfMergeView
 
     public ToolContent Build()
     {
+        BuildBody();
+        Rebuild();
+        // Windows can flip dark/light while the window is open; rebuild so every brush is the new palette.
+        PdfThemeWatcher.Subscribe(RepaintForTheme);
+        return new ToolContent(_root, Reset, ApplyAsync, Task.FromResult<MediaSize?>(null), ActivateAsync);
+    }
+
+    private void RepaintForTheme()
+    {
+        if (!_root.IsVisible)
+            return;
+        BuildBody();
+        Rebuild();
+    }
+
+    private void BuildBody()
+    {
+        _root.Children.Clear();
+        _root.RowDefinitions.Clear();
+        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+        _summary = Summary();
+        _list = new StackPanel();
+
         var head = new DockPanel { LastChildFill = true, Margin = new Thickness(0, 0, 0, 10) };
         var title = new TextBlock
         {
@@ -137,16 +165,10 @@ internal sealed class PdfMergeView
             e.Handled = true;
         };
 
-        var root = new Grid();
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         Grid.SetRow(head, 0);
         Grid.SetRow(scroll, 1);
-        root.Children.Add(head);
-        root.Children.Add(scroll);
-
-        Rebuild();
-        return new ToolContent(root, Reset, ApplyAsync, Task.FromResult<MediaSize?>(null), ActivateAsync);
+        _root.Children.Add(head);
+        _root.Children.Add(scroll);
     }
 
     /// <summary>Fills in the row thumbnails one by one; the window is usable while they load.</summary>
@@ -431,7 +453,7 @@ internal static class PdfMergeWriter
             for (var index = 0; index < input.PageCount; index++)
                 output.AddPage(input.Pages[index]);
         }
-        catch (Exception ex) when (ex is PdfReaderException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception ex) when (ex is not ConversionException and not OutOfMemoryException)
         {
             throw new ConversionException(T("tool.pdfmerge.error.pdf", Path.GetFileName(path)), ex);
         }
