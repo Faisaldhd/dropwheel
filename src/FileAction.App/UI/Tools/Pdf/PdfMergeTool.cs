@@ -97,9 +97,17 @@ internal sealed class PdfMergeView
         head.Children.Add(_summary);
         head.Children.Add(hint);
 
-        _list.AllowDrop = true;
-        _list.Background = Brushes.Transparent;
-        _list.DragOver += (_, e) =>
+        var scroll = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Content = _list,
+            AllowDrop = true,
+            Background = Brushes.Transparent,
+        };
+
+        // The whole viewport is a drop target, so dropping below the last row moves that row to the end.
+        scroll.DragOver += (_, e) =>
         {
             if (DragIndex(e.Data) is not null)
             {
@@ -107,19 +115,12 @@ internal sealed class PdfMergeView
                 e.Handled = true;
             }
         };
-        _list.Drop += (_, e) =>
+        scroll.Drop += (_, e) =>
         {
             if (DragIndex(e.Data) is not int from || _plan.Count == 0)
                 return;
             MoveRow(from, _plan.Count - 1);
             e.Handled = true;
-        };
-
-        var scroll = new ScrollViewer
-        {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Content = _list,
         };
 
         var root = new Grid();

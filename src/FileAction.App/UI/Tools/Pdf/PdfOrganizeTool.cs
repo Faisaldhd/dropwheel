@@ -278,7 +278,7 @@ internal sealed class PdfOrganizeView
             _plan?.Duplicate(position);
             Rebuild();
         }));
-        actions.Children.Add(PdfToolChrome.IconButton(Glyphs.Clear, T("tool.pdforganize.delete"), () =>
+        actions.Children.Add(PdfToolChrome.IconButton("\uE74D", T("tool.pdforganize.delete"), () =>
         {
             _plan?.Delete(position);
             Rebuild();
