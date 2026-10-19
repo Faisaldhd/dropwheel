@@ -38,6 +38,7 @@ internal static class ForegroundHelper
             ResizeMode = ResizeMode.NoResize,
             Topmost = true,
             Title = "DropWheel",
+            FlowDirection = LanguageManager.FlowDirection,
         };
         host.Show();
         var hwnd = new WindowInteropHelper(host).Handle;

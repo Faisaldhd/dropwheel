@@ -17,7 +17,7 @@ internal sealed class WheelEditorWindow : Window
 {
     private static WheelEditorWindow? _open;
     private readonly AppSettings _settings;
-    private readonly IReadOnlyList<Operation> _operations;
+    private IReadOnlyList<Operation> _operations;
     private readonly Action _changed;
     private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
@@ -72,10 +72,15 @@ internal sealed class WheelEditorWindow : Window
     /// <summary>Applies a live language switch without reopening the editor.</summary>
     public static void RelocalizeIfOpen()
     {
-        if (_open is null)
+        var open = _open;
+        if (open is null)
             return;
-        LanguageManager.Apply(_open);
-        _open.Build();
+        LanguageManager.Apply(open);
+        // The operation labels are fixed when an Operation is created, so take a fresh snapshot
+        // from the app before rebuilding the list.
+        if (SettingsWindow.Operations is { } operations)
+            open._operations = operations();
+        open.Build();
     }
 
     private void Save()
