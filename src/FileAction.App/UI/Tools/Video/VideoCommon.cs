@@ -9,6 +9,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using FileAction.Core;
 using FileAction.Core.Backends;
+using Microsoft.Win32;
 using static FileAction.Core.Loc;
 using Path = System.IO.Path;
 
@@ -282,6 +283,7 @@ internal static class VideoRunner
 /// </summary>
 internal sealed class VideoScrubber : Grid
 {
+    private readonly Border _track;
     private readonly Border _fill;
     private readonly Ellipse _thumb;
     private int _maximum = 1;
@@ -290,18 +292,19 @@ internal sealed class VideoScrubber : Grid
     public VideoScrubber()
     {
         Height = 24;
-        Background = Brushes.Transparent;
+        Background = VideoPalette.Transparent;
         Cursor = Cursors.Hand;
         // The time axis always runs left to right, also in the Arabic UI, so the pointer mapping matches
         // the painted track.
         FlowDirection = FlowDirection.LeftToRight;
-        Children.Add(new Border
+        _track = new Border
         {
             Height = 4,
             CornerRadius = new CornerRadius(2),
             Background = Theme.Track,
             VerticalAlignment = VerticalAlignment.Center,
-        });
+        };
+        Children.Add(_track);
         _fill = new Border
         {
             Height = 4,
@@ -315,7 +318,7 @@ internal sealed class VideoScrubber : Grid
         {
             Width = 18,
             Height = 18,
-            Fill = Brushes.White,
+            Fill = Theme.TextOnAccent,
             Stroke = Theme.PanelBorder,
             StrokeThickness = 1,
             HorizontalAlignment = HorizontalAlignment.Left,
@@ -373,6 +376,17 @@ internal sealed class VideoScrubber : Grid
             Scrub?.Invoke(_value);
     }
 
+    /// <summary>The window's theme changed; repaint with the current Theme brushes.</summary>
+    public void ApplyTheme()
+    {
+        _track.Background = Theme.Track;
+        _fill.Background = Theme.AccentGradient;
+        _thumb.Fill = Theme.TextOnAccent;
+        _thumb.Stroke = Theme.PanelBorder;
+        _thumb.Effect = Theme.Shadow(6);
+        Paint();
+    }
+
     private void SetFrom(Point point)
     {
         var track = Math.Max(1, ActualWidth - 18);
@@ -427,6 +441,13 @@ internal sealed class PillChoice<T> : Border
 
     public T Value => _value;
 
+    /// <summary>Repaints the pill row with the current Theme brushes.</summary>
+    public void ApplyTheme()
+    {
+        Background = Theme.Track;
+        Paint();
+    }
+
     public void Set(T value, bool notify = false)
     {
         _value = value;
@@ -440,7 +461,7 @@ internal sealed class PillChoice<T> : Border
         foreach (var (value, pill, text) in _items)
         {
             var selected = EqualityComparer<T>.Default.Equals(value, _value);
-            pill.Background = selected ? Theme.AccentGradient : Brushes.Transparent;
+            pill.Background = selected ? Theme.AccentGradient : VideoPalette.Transparent;
             text.Foreground = selected ? Theme.TextOnAccent : Theme.Text;
             text.FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal;
         }
@@ -450,16 +471,6 @@ internal sealed class PillChoice<T> : Border
 /// <summary>Four swatch chips for the solid redaction colour; the chosen one gets an accent ring.</summary>
 internal sealed class ColorChoice : StackPanel
 {
-    public sealed record Option(string Token, Color Fill);
-
-    public static readonly IReadOnlyList<Option> Options =
-    [
-        new("black", Color.FromRgb(0x18, 0x15, 0x22)),
-        new("0xFFFFFF", Colors.White),
-        new("0xC62828", Color.FromRgb(0xC6, 0x28, 0x28)),
-        new("0x8224D4", Color.FromRgb(0x82, 0x24, 0xD4)),
-    ];
-
     private static readonly string[] Labels =
     [
         "tool.videoredact.color.black",
@@ -476,9 +487,9 @@ internal sealed class ColorChoice : StackPanel
         Orientation = Orientation.Horizontal;
         VerticalAlignment = VerticalAlignment.Center;
         _value = selected;
-        for (var i = 0; i < Options.Count; i++)
+        for (var i = 0; i < VideoPalette.Options.Count; i++)
         {
-            var option = Options[i];
+            var option = VideoPalette.Options[i];
             var ring = new Border
             {
                 Width = 24,
@@ -503,6 +514,9 @@ internal sealed class ColorChoice : StackPanel
 
     public string Value => _value;
 
+    /// <summary>Repaints the selection rings with the current Theme brushes.</summary>
+    public void ApplyTheme() => Paint();
+
     public void Set(string value, bool notify = false)
     {
         _value = value;
@@ -511,17 +525,98 @@ internal sealed class ColorChoice : StackPanel
             Changed?.Invoke(value);
     }
 
-    /// <summary>The preview rectangle colour for a solid area; the accent tint stands in for blur.</summary>
-    public static Color PreviewFill(string token) =>
-        Options.FirstOrDefault(option => string.Equals(option.Token, token, StringComparison.OrdinalIgnoreCase))?.Fill
-        ?? Color.FromRgb(0x18, 0x15, 0x22);
-
     private void Paint()
     {
         for (var i = 0; i < _rings.Count; i++)
         {
-            var selected = string.Equals(Options[i].Token, _value, StringComparison.OrdinalIgnoreCase);
+            var selected = string.Equals(VideoPalette.Options[i].Token, _value, StringComparison.OrdinalIgnoreCase);
             _rings[i].BorderBrush = selected ? Theme.Accent : Theme.PanelBorder;
         }
     }
+}
+
+/// <summary>Repaint helpers for the tool-local buttons, which bake Theme brushes when they are built.</summary>
+internal static class VideoTheme
+{
+    public static void RepaintButton(Border button, bool primary = false)
+    {
+        button.Background = primary ? Theme.AccentGradient : Theme.Card;
+        button.BorderBrush = primary ? null : Theme.PanelBorder;
+        if (button.Child is not StackPanel panel)
+            return;
+        foreach (var child in panel.Children)
+        {
+            if (child is TextBlock text)
+                text.Foreground = primary ? Theme.TextOnAccent : Theme.Text;
+        }
+    }
+}
+
+/// <summary>
+/// Watches for light/dark changes while a video tool window is open. Windows raises
+/// <see cref="SystemEvents.UserPreferenceChanged"/> for an OS theme switch; the app's own theme setting
+/// applies on the next activation. Either way the view's repaint callback runs once per change, on the
+/// UI thread, and never rebuilds the window.
+/// </summary>
+internal sealed class VideoThemeHook : IDisposable
+{
+    private readonly FrameworkElement _root;
+    private readonly Action _repaint;
+    private Window? _window;
+    private bool _dark;
+    private bool _hooked;
+
+    public VideoThemeHook(FrameworkElement root, Action repaint)
+    {
+        _root = root;
+        _repaint = repaint;
+        root.Loaded += OnLoaded;
+        root.Unloaded += OnUnloaded;
+    }
+
+    private void OnLoaded(object? sender, RoutedEventArgs e)
+    {
+        if (_hooked)
+            return;
+        _hooked = true;
+        _dark = Theme.IsDark;
+        _window = Window.GetWindow(_root);
+        if (_window is not null)
+            _window.Activated += OnActivated;
+        SystemEvents.UserPreferenceChanged += OnPreferenceChanged;
+    }
+
+    private void OnUnloaded(object? sender, RoutedEventArgs e) => Detach();
+
+    private void OnActivated(object? sender, EventArgs e) => Refresh();
+
+    private void OnPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
+    {
+        if (_root.Dispatcher.CheckAccess())
+            Refresh();
+        else
+            _root.Dispatcher.BeginInvoke(Refresh);
+    }
+
+    private void Refresh()
+    {
+        Theme.Refresh();
+        if (Theme.IsDark == _dark)
+            return;
+        _dark = Theme.IsDark;
+        _repaint();
+    }
+
+    private void Detach()
+    {
+        if (!_hooked)
+            return;
+        _hooked = false;
+        if (_window is not null)
+            _window.Activated -= OnActivated;
+        SystemEvents.UserPreferenceChanged -= OnPreferenceChanged;
+        _window = null;
+    }
+
+    public void Dispose() => Detach();
 }

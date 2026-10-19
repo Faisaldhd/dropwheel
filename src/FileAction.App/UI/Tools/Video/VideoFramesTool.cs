@@ -21,6 +21,9 @@ internal sealed class VideoFramesTool : IToolWindowSpec
 
     public string TitleKey => "tool.videoframes.title";
 
+    /// <summary>The count is filled in at runtime by <see cref="VideoFramesView.UpdatePrimaryLabel"/>.</summary>
+    public string PrimaryLabelKey => "tool.videoframes.primary.initial";
+
     public ToolSpecLayout Layout => LayoutSpec;
 
     public bool Applies(IReadOnlyList<FileItem> items) =>
@@ -93,6 +96,14 @@ internal sealed class VideoFramesView
     private readonly VideoScrubber _scrubber = new();
     private readonly Border _cancel = Controls.Button("", () => { });
 
+    private Border? _previewCard;
+    private Border? _previousButton;
+    private Border? _nextButton;
+    private Border? _captureButton;
+    private Grid? _root;
+    private ToolWindow? _window;
+    private VideoThemeHook? _theme;
+
     private string? _ffmpeg;
     private VideoInfo? _info;
     private int _total = 1;
@@ -135,6 +146,7 @@ internal sealed class VideoFramesView
     public ToolContent Build()
     {
         var root = new Grid();
+        _root = root;
         for (var i = 0; i < 6; i++)
             root.RowDefinitions.Add(new RowDefinition { Height = i == 0 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
 
@@ -160,8 +172,17 @@ internal sealed class VideoFramesView
         _position.TextTrimming = TextTrimming.CharacterEllipsis;
         _scrubber.Margin = new Thickness(2, 0, 2, 6);
 
+        _theme = new VideoThemeHook(root, RepaintTheme);
+        root.Loaded += (_, _) =>
+        {
+            _window = Window.GetWindow(root) as ToolWindow;
+            UpdatePrimaryLabel();
+        };
         root.Unloaded += (_, _) =>
         {
+            _window = null;
+            _theme?.Dispose();
+            _theme = null;
             _seek?.Cancel();
             _apply?.Cancel();
         };
@@ -218,7 +239,7 @@ internal sealed class VideoFramesView
         _preview.Children.Add(_image);
         _preview.Children.Add(_placeholder);
 
-        return new Border
+        _previewCard = new Border
         {
             Background = Theme.Card,
             CornerRadius = new CornerRadius(14),
@@ -226,6 +247,7 @@ internal sealed class VideoFramesView
             Margin = new Thickness(0, 4, 0, 8),
             Child = _preview,
         };
+        return _previewCard;
     }
 
     private FrameworkElement BuildButtons()
@@ -233,11 +255,14 @@ internal sealed class VideoFramesView
         var previous = Controls.Button(T("tool.videoframes.previous"), () => SeekTo(_frame - 1), glyph: "\uE76B");
         previous.Margin = new Thickness(0, 0, 6, 0);
         var next = Controls.Button(T("tool.videoframes.next"), () => SeekTo(_frame + 1), glyph: "\uE76C");
+        _previousButton = previous;
+        _nextButton = next;
         var nav = new StackPanel { Orientation = Orientation.Horizontal };
         nav.Children.Add(previous);
         nav.Children.Add(next);
 
         var capture = Controls.Button(T("tool.videoframes.capture"), Capture, glyph: Glyphs.Camera);
+        _captureButton = capture;
 
         Controls.SetText(_cancel, T("tool.videoframes.cancel"));
         _cancel.Padding = new Thickness(10, 4, 10, 5);
@@ -303,8 +328,42 @@ internal sealed class VideoFramesView
 
     private void UpdateHeader() => _header.Text = T("tool.videoframes.captured", _captures.Count);
 
+    /// <summary>"Save N Frame(s)" on the shared primary button, refreshed as the capture list changes.</summary>
+    private void UpdatePrimaryLabel()
+    {
+        _window ??= _root is null ? null : Window.GetWindow(_root) as ToolWindow;
+        if (_window is null)
+            return;
+        _window.SetPrimaryLabel(_captures.Count == 1
+            ? T("tool.videoframes.primary.single", 1)
+            : T("tool.videoframes.primary.plural", _captures.Count));
+    }
+
+    /// <summary>Re-applies the current Theme brushes after a light/dark switch.</summary>
+    private void RepaintTheme()
+    {
+        _position.Foreground = Theme.Muted;
+        _status.Foreground = Theme.Muted;
+        _header.Foreground = Theme.Text;
+        _emptyHint.Foreground = Theme.Muted;
+        _placeholderText.Foreground = Theme.Muted;
+        _placeholder.Background = Theme.Card;
+        if (_previewCard is not null)
+            _previewCard.Background = Theme.Card;
+        _scrubber.ApplyTheme();
+        if (_previousButton is not null)
+            VideoTheme.RepaintButton(_previousButton);
+        if (_nextButton is not null)
+            VideoTheme.RepaintButton(_nextButton);
+        if (_captureButton is not null)
+            VideoTheme.RepaintButton(_captureButton);
+        VideoTheme.RepaintButton(_cancel);
+        PaintCaptures();
+    }
+
     private void PaintCaptures()
     {
+        UpdatePrimaryLabel();
         _chips.Children.Clear();
         if (_captures.IsEmpty)
         {

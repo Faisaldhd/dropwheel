@@ -24,6 +24,8 @@ internal sealed class VideoRedactTool : IToolWindowSpec
 
     public string TitleKey => "tool.videoredact.title";
 
+    public string PrimaryLabelKey => "tool.videoredact.primary";
+
     public ToolSpecLayout Layout => LayoutSpec;
 
     public bool Applies(IReadOnlyList<FileItem> items) =>
@@ -81,7 +83,7 @@ internal sealed class VideoRedactView
     private readonly List<RedactionArea> _areas = [];
 
     private readonly Grid _preview = new() { ClipToBounds = true };
-    private readonly Canvas _canvas = new() { Background = Brushes.Transparent, ClipToBounds = true };
+    private readonly Canvas _canvas = new() { Background = VideoPalette.Transparent, ClipToBounds = true };
     private readonly WpfImage _image = new() { Stretch = Stretch.Uniform, IsHitTestVisible = false };
     private readonly Border _placeholder;
     private readonly ProgressBar _spinner = new() { IsIndeterminate = true, Width = 120, Height = 4 };
@@ -100,13 +102,18 @@ internal sealed class VideoRedactView
     {
         Stroke = Theme.Accent,
         StrokeThickness = 2,
-        Fill = new SolidColorBrush(Color.FromArgb(0x22, 0x82, 0x24, 0xD4)),
+        Fill = VideoPalette.Tint(Theme.AccentColor, 0x22),
         Visibility = Visibility.Collapsed,
         IsHitTestVisible = false,
     };
     private readonly List<Rectangle> _areaShapes = [];
     private PillChoice<RedactionStyle> _styleChoice = null!;
     private ColorChoice _colorChoice = null!;
+    private Border? _previewCard;
+    private Border? _previousButton;
+    private Border? _nextButton;
+    private Grid? _root;
+    private VideoThemeHook? _theme;
 
     private string? _ffmpeg;
     private VideoInfo? _info;
@@ -177,6 +184,7 @@ internal sealed class VideoRedactView
     public ToolContent Build()
     {
         var root = new Grid();
+        _root = root;
         for (var i = 0; i < 6; i++)
             root.RowDefinitions.Add(new RowDefinition { Height = i == 0 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
 
@@ -203,8 +211,11 @@ internal sealed class VideoRedactView
         _position.Margin = new Thickness(2, 0, 0, 2);
         _position.TextTrimming = TextTrimming.CharacterEllipsis;
 
+        _theme = new VideoThemeHook(root, RepaintTheme);
         root.Unloaded += (_, _) =>
         {
+            _theme?.Dispose();
+            _theme = null;
             _seek?.Cancel();
             _apply?.Cancel();
         };
@@ -274,7 +285,7 @@ internal sealed class VideoRedactView
         _preview.Children.Add(_placeholder);
         _preview.SizeChanged += (_, _) => LayoutOverlay();
 
-        return new Border
+        _previewCard = new Border
         {
             Background = Theme.Card,
             CornerRadius = new CornerRadius(14),
@@ -282,6 +293,7 @@ internal sealed class VideoRedactView
             Margin = new Thickness(0, 4, 0, 8),
             Child = _preview,
         };
+        return _previewCard;
     }
 
     private FrameworkElement BuildPositionRow()
@@ -302,6 +314,8 @@ internal sealed class VideoRedactView
         var previous = Controls.Button(T("tool.videoredact.previous"), () => SeekTo(_frame - 1), glyph: "\uE76B");
         previous.Margin = new Thickness(0, 0, 6, 0);
         var next = Controls.Button(T("tool.videoredact.next"), () => SeekTo(_frame + 1), glyph: "\uE76C");
+        _previousButton = previous;
+        _nextButton = next;
         var nav = new StackPanel { Orientation = Orientation.Horizontal };
         nav.Children.Add(previous);
         nav.Children.Add(next);
@@ -505,10 +519,10 @@ internal sealed class VideoRedactView
             var selected = i == _selected;
             var fill = area.Style == RedactionStyle.Blur
                 ? Theme.AccentColor
-                : ColorChoice.PreviewFill(area.Color);
+                : VideoPalette.PreviewFill(area.Color);
             var rectangle = new Rectangle
             {
-                Fill = new SolidColorBrush(Color.FromArgb(area.Style == RedactionStyle.Blur ? (byte)0x44 : (byte)0x66, fill.R, fill.G, fill.B)),
+                Fill = VideoPalette.Tint(fill, area.Style == RedactionStyle.Blur ? (byte)0x44 : (byte)0x66),
                 Stroke = selected ? Theme.Accent : Theme.Muted,
                 StrokeThickness = selected ? 2 : 1,
                 IsHitTestVisible = false,
@@ -664,7 +678,7 @@ internal sealed class VideoRedactView
             var chip = new Border
             {
                 Background = index == _selected ? Theme.AccentSoft : Theme.Track,
-                BorderBrush = index == _selected ? Theme.Accent : Brushes.Transparent,
+                BorderBrush = index == _selected ? Theme.Accent : null,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(7),
                 Padding = new Thickness(8, 3, 8, 4),
@@ -684,6 +698,40 @@ internal sealed class VideoRedactView
     }
 
     private void UpdateHeader() => _header.Text = T("tool.videoredact.areas", _areas.Count);
+
+    /// <summary>Re-applies the current Theme brushes after a light/dark switch.</summary>
+    private void RepaintTheme()
+    {
+        _position.Foreground = Theme.Muted;
+        _status.Foreground = Theme.Muted;
+        _header.Foreground = Theme.Text;
+        _emptyHint.Foreground = Theme.Muted;
+        _placeholderText.Foreground = Theme.Muted;
+        _placeholder.Background = Theme.Card;
+        if (_previewCard is not null)
+            _previewCard.Background = Theme.Card;
+
+        foreach (var box in new[] { _startBox, _endBox })
+        {
+            box.Background = Theme.Card;
+            box.Foreground = Theme.Text;
+            box.BorderBrush = Theme.PanelBorder;
+        }
+
+        _scrubber.ApplyTheme();
+        _styleChoice.ApplyTheme();
+        _colorChoice.ApplyTheme();
+        if (_previousButton is not null)
+            VideoTheme.RepaintButton(_previousButton);
+        if (_nextButton is not null)
+            VideoTheme.RepaintButton(_nextButton);
+        VideoTheme.RepaintButton(_remove);
+        VideoTheme.RepaintButton(_cancel);
+        _dragRectangle.Stroke = Theme.Accent;
+        _dragRectangle.Fill = VideoPalette.Tint(Theme.AccentColor, 0x22);
+        PaintAreas();
+        PaintChips();
+    }
 
     // ---------------------------------------------------------------- preview frames
 
