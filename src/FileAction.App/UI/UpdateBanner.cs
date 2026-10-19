@@ -67,12 +67,6 @@ internal sealed class UpdateBanner : Border
         Margin = new Thickness(0, 0, 0, 8);
         Child = _content;
 
-        if (_service is not null)
-        {
-            _service.StateChanged += OnServiceStateChanged;
-            _subscribed = true;
-        }
-
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         Render();
@@ -453,9 +447,20 @@ internal sealed class UpdateBanner : Border
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // Subscribe only while the banner is actually in a window, so a tab switch cannot leave a stale
+        // banner attached to the service.
+        if (_service is not null && !_subscribed)
+        {
+            _service.StateChanged += OnServiceStateChanged;
+            _subscribed = true;
+        }
+
         LiveBanners.RemoveAll(reference => !reference.TryGetTarget(out _));
         if (!LiveBanners.Any(reference => reference.TryGetTarget(out var banner) && ReferenceEquals(banner, this)))
             LiveBanners.Add(new WeakReference<UpdateBanner>(this));
+
+        // Catch up on anything that changed between construction and the banner entering the tree.
+        Render();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
