@@ -432,6 +432,8 @@ internal sealed class AudioTrimView
 
     private async Task<string?> ApplyAsync()
     {
+        if (_applying)
+            return null;
         _applying = true;
         try
         {

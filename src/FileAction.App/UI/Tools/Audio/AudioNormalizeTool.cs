@@ -495,6 +495,8 @@ internal sealed class AudioNormalizeView
 
     private async Task<string?> ApplyAsync()
     {
+        if (_applying)
+            return null;
         _applying = true;
         try
         {
