@@ -287,11 +287,8 @@ public class PasswordProtectionTests
         var text = Encoding.Latin1.GetString(bytes);
         Assert.Contains("/AESV3", text, StringComparison.Ordinal);
 
-        // A wrong password aborts through the provider and returns null rather than throwing.
-        Assert.Null(PdfReader.Open(protectedPath, WrongPassword, PdfDocumentOpenMode.Modify, args => args.Abort = true));
-
-        using (var document = PdfReader.Open(protectedPath, Password, PdfDocumentOpenMode.Modify, args => args.Abort = true))
-            Assert.True(document.SecuritySettings.IsEncrypted);
+        Assert.False(PdfPasswordProtection.CanOpenWithPassword(protectedPath, WrongPassword));
+        Assert.True(PdfPasswordProtection.CanOpenWithPassword(protectedPath, Password));
 
         var unlockedPath = Path.Combine(scope.Directory, "sample Unlocked.pdf");
         PdfPasswordProtection.Unprotect(protectedPath, unlockedPath, Password);

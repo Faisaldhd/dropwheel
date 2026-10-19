@@ -82,14 +82,13 @@ public static class PdfPasswordProtection
 
         try
         {
-            using var document = PdfReader.Open(
-                sourcePath,
-                password,
-                PdfDocumentOpenMode.Modify,
-                args => args.Abort = true);
+            using var document = PdfReader.Open(sourcePath, password, PdfDocumentOpenMode.Modify);
             if (document is null)
                 throw new PasswordProtectionException(
                     PasswordProtectionFailure.WrongPasswordOrCorrupt, "tool.unlock.error.password");
+
+            // Force the page tree to load; a wrong password that slipped past Open fails here.
+            _ = document.PageCount;
 
             if (!document.SecuritySettings.IsEncrypted)
                 throw new PasswordProtectionException(
@@ -116,11 +115,7 @@ public static class PdfPasswordProtection
 
         try
         {
-            using var source = PdfReader.Open(
-                sourcePath,
-                password,
-                PdfDocumentOpenMode.Import,
-                args => args.Abort = true);
+            using var source = PdfReader.Open(sourcePath, password, PdfDocumentOpenMode.Import);
             if (source is null)
                 throw new PasswordProtectionException(
                     PasswordProtectionFailure.WrongPasswordOrCorrupt, "tool.unlock.error.password");
@@ -142,6 +137,26 @@ public static class PdfPasswordProtection
         {
             throw new PasswordProtectionException(
                 PasswordProtectionFailure.WrongPasswordOrCorrupt, "tool.unlock.error.password", ex);
+        }
+    }
+
+    /// <summary>
+    /// True when the password opens the PDF and its page tree is readable. Used by the unlock UI/tests to
+    /// distinguish a correct password from a wrong one without attempting anything else.
+    /// </summary>
+    public static bool CanOpenWithPassword(string path, string password)
+    {
+        try
+        {
+            using var document = PdfReader.Open(path, password, PdfDocumentOpenMode.Import);
+            if (document is null)
+                return false;
+            _ = document.PageCount;
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return false;
         }
     }
 }
