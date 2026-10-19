@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    Builds the DropWheel setup from a self-contained, trimmed win-x64 publish.
+    Builds the DropWheel setup from a self-contained win-x64 publish.
 
 .DESCRIPTION
-    DropWheel 2.2.0 ships self-contained: the publish carries .NET and every dependency, so the
+    DropWheel 2.2.x ships self-contained: the publish carries .NET and every dependency, so the
     setup installs no runtime, downloads nothing and checks nothing about the target machine.
 
     This script:
@@ -11,7 +11,6 @@
       2. publishes with
              dotnet publish src\FileAction.App\FileAction.App.csproj
                  -c Release -r win-x64 --self-contained true
-                 -p:PublishTrimmed=true -p:TrimMode=partial
                  -o release\selfcontained
       3. removes *.pdb and the runtime's createdump.exe from the publish;
       4. copies LICENSE, THIRD-PARTY-NOTICES.md and licenses\ next to DropWheel.exe, so the
@@ -163,8 +162,6 @@ function Invoke-Publish {
         '-c', $BuildConfiguration
         '-r', 'win-x64'
         '--self-contained', 'true'
-        '-p:PublishTrimmed=true'
-        '-p:TrimMode=partial'
         '-o', $OutputDirectory
     )
 
@@ -441,7 +438,7 @@ $setupLimitBytes = $MaxSetupMB * 1MB
 
 Write-Host ''
 Write-Host '--------------------------------------------------------------'
-Write-Host ("publish (self-contained, trimmed win-x64): {0} MB / {1} files" -f $publishMB, $publishFiles.Count)
+Write-Host ("publish (self-contained, untrimmed win-x64): {0} MB / {1} files" -f $publishMB, $publishFiles.Count)
 Write-Host ("setup exe:                                  {0} MB" -f $setupMB)
 Write-Host ("setup path:                                 {0}" -f $setupPath)
 Write-Host '--------------------------------------------------------------'
@@ -452,7 +449,7 @@ if ($env:GITHUB_STEP_SUMMARY) {
         '',
         '| item | size | files |',
         '| --- | --- | --- |',
-        ("| publish (self-contained, trimmed, win-x64) | $publishMB MB | $($publishFiles.Count) |"),
+        ("| publish (self-contained, untrimmed, win-x64) | $publishMB MB | $($publishFiles.Count) |"),
         ("| setup exe | $setupMB MB | 1 |"),
         ''
     ) -join "`n"
@@ -460,7 +457,7 @@ if ($env:GITHUB_STEP_SUMMARY) {
 }
 
 if ($setup.Length -gt $setupLimitBytes) {
-    throw ("The setup is {0} MB, above the {1} MB budget. Trim more or check what the publish pulls in." -f $setupMB, $MaxSetupMB)
+    throw ("The setup is {0} MB, above the {1} MB budget. Reduce the publish contents or check what it pulls in." -f $setupMB, $MaxSetupMB)
 }
 
 Write-Host ("OK: {0} ({1} MB, budget {2} MB)" -f $setup.Name, $setupMB, $MaxSetupMB)

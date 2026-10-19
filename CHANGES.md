@@ -1,4 +1,28 @@
-# DropWheel 2.2.1 — CHANGES
+# DropWheel 2.2.2 — CHANGES
+
+## 2.2.2
+
+### English
+
+- **Removed `PublishTrimmed` from the shipped self-contained build.** Trimming is what broke
+  reflection-based `System.Text.Json` in 2.2.0, and WPF trimming is not officially supported. The installer
+  and portable zip now carry the full, untrimmed .NET/WPF runtime; the 70 MB setup budget is still enforced
+  by CI.
+- The 2.2.1 fixes remain: `Loc` reads its tables with `JsonDocument`, all settings JSON uses
+  source-generated contexts, `--diagnose` reports the loaded string count, and a failed Settings build shows
+  a readable error instead of a black window.
+- CI continues to run `--self-test` on the exact self-contained publish that is packaged, so the shipped
+  shape is what gets tested; it also rejects generic reflection-based `JsonSerializer` calls.
+
+### العربية
+
+- **أُزيل `PublishTrimmed` من نسخة النشر المكتفية ذاتيًّا.** القصّ هو ما كسر
+  `System.Text.Json` المعتمد على الانعكاس في 2.2.0، وقصّ WPF غير مدعوم رسميًّا. يحمل المثبّت والأرشيف الآن
+  وقت تشغيل .NET/WPF كاملًا دون قصّ، ولا يزال CI يفرض ميزانية المثبّت البالغة 70 ميغابايت.
+- تبقى إصلاحات 2.2.1: يقرأ `Loc` جداوله بـ `JsonDocument`، وكل إعدادات JSON تستخدم سياقات مولَّدة،
+  ويذكر `--diagnose` عدد النصوص المحمَّلة، ويعرض فشل بناء الإعدادات بطاقة خطأ مقروءة بدل نافذة سوداء.
+- يواصل CI تشغيل `--self-test` على نسخة النشر المكتفية ذاتيًّا التي تُحزَّم نفسها، ويرفض أي استدعاء عام
+  لـ `JsonSerializer` قائم على الانعكاس.
 
 ## 2.2.1
 

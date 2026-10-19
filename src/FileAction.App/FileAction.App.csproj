@@ -21,7 +21,7 @@
     <ApplicationIcon>Assets\DropWheel.ico</ApplicationIcon>
     <StartupObject>FileAction.App.Program</StartupObject>
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
-    <Version>2.2.1</Version>
+    <Version>2.2.2</Version>
     <SatelliteResourceLanguages>en;ar</SatelliteResourceLanguages>
     <!--
       Smaller download: trim only libraries marked as trim-safe (the .NET runtime, the Windows SDK projection…);
@@ -36,12 +36,14 @@
   </PropertyGroup>
 
   <!--
-    The app ships framework-dependent: the installer adds the .NET 10 Desktop Runtime when it is
-    missing, so the publish folder only carries DropWheel and its libraries (no runtime, no WPF).
+    The default local publish is framework-dependent: the installer used to add the .NET 10 Desktop
+    Runtime when it was missing. The shipped installer/portable build passes SelfContained=true, which
+    carries the runtime itself.
 
     A runtime identifier is still needed to get the native apphost (DropWheel.exe) and the RID-specific
-    native libraries (Magick, Skia, pdfium). Trimming is only meaningful for a self-contained publish
-    (the SDK rejects it with NETSDK1102 otherwise), so it stays enabled for that case alone.
+    native libraries (Magick, Skia, pdfium). Self-contained builds are deliberately NOT trimmed:
+    PublishTrimmed broke reflection-based System.Text.Json in 2.2.0 (raw Loc keys, black Settings
+    window), and WPF trimming is not officially supported. The 70 MB setup budget is checked in CI.
   -->
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
     <SelfContained>false</SelfContained>
@@ -49,15 +51,7 @@
          higher major version when only that one is installed. -->
     <RollForward>Major</RollForward>
   </PropertyGroup>
-  <!-- Trimming is what keeps the self-contained setup inside the 70 MB budget, but WPF does not officially
-       support it. Every reflection-based JSON reader must be replaced by source generation or JsonDocument:
-       2.2.0 shipped Loc's reflection reader and the trimmed build showed raw keys. CI now runs the
-       self-test on this exact publish and asserts that both string tables loaded. -->
-  <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' and '$(SelfContained)' == 'true'">
-    <PublishTrimmed>true</PublishTrimmed>
-    <TrimMode>partial</TrimMode>
-    <_SuppressWpfTrimError>true</_SuppressWpfTrimError>
-  </PropertyGroup>
+  <!-- Trimming stays off for self-contained builds; see the note above. -->
 
   <ItemGroup>
     <Resource Include="Assets\DropWheel.ico" />
