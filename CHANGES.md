@@ -1,4 +1,14 @@
-# DropWheel 2.1.0 — CHANGES
+# DropWheel 2.1.1 — CHANGES
+
+## 2.1.1
+
+- **Taskbar icon (R-29):** the Settings and Wheel editor windows forced a 16 px `BitmapImage` as their
+  window icon, so the taskbar showed a 16 px image in a 24-32 px slot. Those overrides are gone; WPF now
+  uses the executable's icon, which carries all nine frames (16-256 px), so Windows picks the right size
+  at 100 % and 150 % scaling.
+- **Dark title bar (R-30):** the title bar of the Settings and Wheel editor windows is now dark when the
+  dark theme is active, via `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)`, and it follows a live
+  theme switch without a restart.
 ## 2.1.0
 
 Company-safe release.

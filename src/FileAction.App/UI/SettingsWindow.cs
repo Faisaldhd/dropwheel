@@ -40,7 +40,6 @@ internal sealed class SettingsWindow : Window
         // At 200 % display scaling an 820-DIP window is taller than a 1080p work area.
         UiSetup.FitToWorkArea(this, 680, 820, 520, 360);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/DropWheel.ico"));
         Background = Theme.Page;
         FontFamily = Theme.UiFont;
         Content = _scroll;

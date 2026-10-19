@@ -109,6 +109,7 @@ internal static class Theme
     private static void Use(bool dark)
     {
         IsDark = dark;
+        DarkTitleBar.ApplyToOpenWindows();
         _palette = dark ? DarkPalette : LightPalette;
     }
 

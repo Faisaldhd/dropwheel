@@ -49,7 +49,6 @@ internal sealed class WheelEditorWindow : Window
         UiSetup.Configure(this);
         UiSetup.FitToWorkArea(this, 640, 820, 480, 360);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/DropWheel.ico"));
         Background = Theme.Page;
         FontFamily = Theme.UiFont;
         Content = _scroll;

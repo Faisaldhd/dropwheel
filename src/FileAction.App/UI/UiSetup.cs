@@ -12,6 +12,7 @@ internal static class UiSetup
         window.FlowDirection = LanguageManager.FlowDirection;
         window.UseLayoutRounding = true;
         window.SnapsToDevicePixels = true;
+        DarkTitleBar.Apply(window);
     }
 
     /// <summary>
