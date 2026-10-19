@@ -1,11 +1,12 @@
 # STATUS
 
-NOW: 2.2.0 READY FOR REVIEW — all ten agents merged — main CI 39248890995 green — no v2.2.0 tag
+NOW: 2.2.0 RELEASED — v2.2.0 tagged at 1336145 — release run 39252160456 green — 6 assets live — Pages download verified
 
-## 2.2.0 — READY FOR REVIEW (19 October 2026)
+## 2.2.0 — RELEASED (19 October 2026, approved by Claude)
 
-DropWheel 2.2.0 is feature-complete and green on `main`. **I did not create the `v2.2.0` tag** — that is the
-owner's decision after review. `REVIEW.md` was read but not edited.
+DropWheel 2.2.0 is released: `v2.2.0` is tagged at `1336145`, the release job is green, and the six signed
+assets are live on the release page. The owner approved the release after review. `REVIEW.md` was read but
+not edited.
 
 ### Final evidence
 
@@ -13,6 +14,7 @@ owner's decision after review. `REVIEW.md` was read but not edited.
 |---|---|
 | Code commit | `6e8e3e7` (all ten agent branches merged; code at `0173530`, this STATUS update is the head) |
 | Main CI — build + test + package + installer smoke + screenshots | [run 39248890995](https://github.com/Faisaldhd/dropwheel/actions/runs/39248890995) — green on `6e8e3e7`; earlier [39247825190](https://github.com/Faisaldhd/dropwheel/actions/runs/39247825190) green on `7354ba2` |
+| Release | `v2.2.0` tagged at `1336145`; [run 39252160456](https://github.com/Faisaldhd/dropwheel/actions/runs/39252160456) — build + test, package + installer smoke, release job all green |
 | Tests | **192 / 192 passed**, 0 failed, 0 skipped (trx from [run 39245752210](https://github.com/Faisaldhd/dropwheel/actions/runs/39245752210)) |
 | Setup | `DropWheel-2.2.0-Setup.exe` — **42.21 MB** (44,262,876 B), budget 70 MB |
 | Portable zip | `DropWheel-2.2.0-portable-win-x64.zip` — **59.83 MB** (62,731,211 B) |
@@ -21,7 +23,7 @@ owner's decision after review. `REVIEW.md` was read but not edited.
 | Release dry run | test tag `v0.0.0-test2` on `6b17d73` → [run 39247356095](https://github.com/Faisaldhd/dropwheel/actions/runs/39247356095) — exactly 6 assets (below); release and tag deleted afterwards |
 | Old releases cleaned | v2.1.0 and v2.1.1 each now carry only their self-contained portable zip + `SHA256SUMS.txt`; old framework-dependent setup/zip and `diagnose.txt` are gone |
 | Download page | <https://faisaldhd.github.io/dropwheel/> — HTTP 200, GitHub Actions Pages deploy, EN/AR, refreshed CI screenshots |
-| v2.2.0 tag | **not created** (owner review required) |
+| v2.2.0 tag | **tagged at `1336145`**; release [v2.2.0](https://github.com/Faisaldhd/dropwheel/releases/tag/v2.2.0) |
 
 ### Release dry run — exactly six assets (v0.0.0-test2, deleted)
 
@@ -56,12 +58,30 @@ Lead integration commits: `bedad4b` (package job), `b535f4c` (installer spec), `
 task), `6b17d73` (checked-task count), `86fafcd` (CI screenshots), `b2be1c0` (README), `7354ba2`
 (build/release scripts).
 
+### Released assets and download verification
+
+The live v2.2.0 release page carries exactly six assets:
+
+| Asset | Size |
+|---|---|
+| `DropWheel-2.2.0-Setup.exe` | 44,270,484 B (42.22 MB) |
+| `DropWheel-2.2.0-Setup.exe.sig` | 88 B, verified with the embedded key |
+| `DropWheel-Setup.exe` (stable alias, byte-identical) | 44,270,484 B |
+| `DropWheel-2.2.0-portable-win-x64.zip` | 62,731,203 B (59.83 MB) |
+| `DropWheel-2.2.0-portable-win-x64.zip.sig` | 88 B |
+| `SHA256SUMS.txt` | 484 B, covers all five other assets |
+
+Download-page check (live): <https://faisaldhd.github.io/dropwheel/> shows Version 2.2.0 and its button
+targets `https://github.com/Faisaldhd/dropwheel/releases/latest/download/DropWheel-Setup.exe`. Downloading
+that URL returned HTTP 200, **44,270,484 bytes**, product/file version **2.2.0**, SHA-256
+`6884c3b2f904f09cc95a9d8a87f0041c95618dc3132a2041438de912f2a88332` (matches both `DropWheel-Setup.exe` and
+`DropWheel-2.2.0-Setup.exe` in `SHA256SUMS.txt`), and its ECDSA P-256 signature verified against
+`UpdateKey.PublicKeyBase64` (64-byte P1363 signature, valid).
+
 ### Known limitations / review notes
 
-- **No `v2.2.0` tag yet.** The Pages button targets
-  `https://github.com/Faisaldhd/dropwheel/releases/latest/download/DropWheel-Setup.exe`, which only exists
-  after the owner tags `v2.2.0`; the old v2.1.x setups were intentionally removed. The `v0.0.0-test2` dry
-  run proved the alias and the six-asset set.
+- **v2.2.0 is live.** The Pages button now downloads the 2.2.0 setup through the stable alias; the old
+  v2.1.x framework-dependent setups were intentionally removed.
 - Authenticode signing is still pending (SignPath); auto-update signatures are ECDSA P-256 and independent
   of Authenticode.
 - The uninstaller asks a default-keep Yes/No question (“Remove my settings…”) rather than a checkbox, because
