@@ -35,6 +35,8 @@ Enable **Settings → Pages → Source: GitHub Actions** for `https://faisaldhd.
 3. If the release asset naming changes, update `SUMS_URL` and the `SETUP_LINE` pattern at the
    top of `assets/app.js`. If the fetch fails (CORS, offline, release not published yet), the
    page shows a link to `SHA256SUMS.txt` and never a guessed hash.
+4. Each release must publish the setup twice: `DropWheel-Setup-<version>.exe` and the stable
+   `DropWheel-Setup.exe` alias used by the download button.
 
 > NOTE: GitHub release downloads redirect to `release-assets.githubusercontent.com`, which does
 > not send `Access-Control-Allow-Origin`. The `fetch` is therefore expected to fall back to the
