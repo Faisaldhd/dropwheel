@@ -16,6 +16,7 @@ public static class Catalog
         AddVideo(ops);
         AddPdf(ops);
         AddDocuments(ops);
+        AddEpub(ops);
         AddSlides(ops);
         AddSpreadsheets(ops);
         AddSubtitles(ops);
@@ -29,13 +30,24 @@ public static class Catalog
 
     // ---------------------------------------------------------------- images
 
+    /// <summary>
+    /// Image targets the packaged writer can actually encode. HEIC is readable (Magick.NET maps it), but
+    /// its bundled libheif has a HEVC decoder and an AV1 encoder only — no HEVC encoder — so writing HEIC
+    /// always fails. The target stays declared but is never offered, rather than producing a broken file.
+    /// </summary>
+    private static bool CanEncodeImage(string format) =>
+        !string.Equals(format, "heic", StringComparison.OrdinalIgnoreCase);
+
     private static void AddImages(List<Operation> ops)
     {
         foreach (var target in Formats.ImageOutputs)
         {
             ops.Add(new PerFileOperation($"image.to.{target}", WheelKind.Convert, Formats.Display(target), Glyphs.Photo, Formats.Images,
                 async (item, ctx, _) => [await Produce(item, ctx, target, tmp => ImageBackend.ConvertAsync(item.Path, tmp, target, ctx.Settings, ctx.CancellationToken))],
-                targetFormat: target, subtitle: target == "pdf" ? T("catalog.file.document") : null));
+                targetFormat: target, subtitle: target == "pdf" ? T("catalog.file.document") : null)
+            {
+                AvailableFor = (_, _) => CanEncodeImage(target),
+            });
         }
         ops.Add(new PerFileOperation("gif.to.mp4", WheelKind.Convert, "MP4", Glyphs.Video, ["gif"],
             async (item, ctx, p) => [await FfmpegBackend.ConvertAsync(item, "mp4", ctx, p)], subtitle: T("catalog.video.subtitle"))
@@ -334,6 +346,25 @@ public static class Catalog
                     OutputPaths.TryDelete(Path.GetDirectoryName(docx)!);
                 }
             }
+        }
+    }
+
+    // ---------------------------------------------------------------- EPUB
+
+    /// <summary>
+    /// EPUB is its own group: pandoc reads EPUB and writes DOCX/TXT/MD/HTML; PDF goes through the same
+    /// Pandoc→LibreOffice route as the documents group. No conversion code is duplicated here.
+    /// </summary>
+    private static void AddEpub(List<Operation> ops)
+    {
+        foreach (var target in Formats.EpubOutputs)
+        {
+            ops.Add(new PerFileOperation($"epub.to.{target}", WheelKind.Convert, Formats.Display(target), Glyphs.Document, Formats.Epub,
+                async (item, ctx, _) => [await DocumentAsync(item, target, ctx)], targetFormat: target,
+                subtitle: target switch { "docx" => T("catalog.doc.toWord.subtitle"), "md" => T("catalog.doc.toMd.subtitle"), "txt" => T("catalog.doc.toTxt.subtitle"), "html" => T("catalog.doc.toHtml.subtitle"), _ => null })
+            {
+                AvailableFor = (tools, item) => DocumentRoute(item.Format, target, tools) is not null,
+            });
         }
     }
 
