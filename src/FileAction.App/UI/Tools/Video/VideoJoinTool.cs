@@ -36,6 +36,9 @@ internal sealed class VideoJoinTool : IToolWindowSpec
 
     public string TitleKey => "tool.videojoin.title";
 
+    /// <summary>Bottom-right button: the join verb, not the generic "Apply".</summary>
+    public string PrimaryLabelKey => "tool.videojoin.primary";
+
     public ToolSpecLayout Layout => LayoutSpec;
 
     public bool Applies(IReadOnlyList<FileItem> items) =>
@@ -69,6 +72,8 @@ internal sealed class VideoJoinView
 
     private List<ClipInfo> _clips;
     private List<ClipInfo>? _initial;
+    private Grid? _root;
+    private ThemeWatcher? _theme;
     private string? _ffmpeg;
     private int _dragging = -1;
     private Point _dragStart;
@@ -76,23 +81,68 @@ internal sealed class VideoJoinView
     private CancellationTokenSource? _applyCts;
     private bool _busy;
     private bool _loading;
+    private bool _statusIsError;
 
     public VideoJoinView(IReadOnlyList<FileItem> items)
     {
         // The placeholder clips keep the strip visible while the probes are running.
         _clips = [.. items.Select(item => new ClipInfo(item.Path, 0, 0, 0, 0, false))];
-    }
 
-    public ToolContent Build()
-    {
-        var root = new Grid();
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _summary.FontSize = 11.5;
+        _summary.TextWrapping = TextWrapping.Wrap;
+        _summary.Margin = new Thickness(2, 0, 2, 4);
+        _status.FontSize = 11.5;
+        _status.TextWrapping = TextWrapping.Wrap;
+        _status.VerticalAlignment = VerticalAlignment.Center;
+        _status.Margin = new Thickness(2, 0, 100, 0);
+        _progress.Width = 90;
+        _progress.Height = 4;
+        _progress.Visibility = Visibility.Collapsed;
+        _progress.HorizontalAlignment = HorizontalAlignment.Right;
+        _progress.VerticalAlignment = VerticalAlignment.Center;
 
         _strip.MouseMove += StripMove;
         _strip.MouseLeftButtonUp += StripUp;
         _strip.LostMouseCapture += (_, _) => _dragging = -1;
+
+        ShowHint();
+    }
+
+    public ToolContent Build()
+    {
+        _root = new Grid();
+        Populate();
+        _theme = new ThemeWatcher(_root, Repaint);
+        _root.Loaded += (_, _) => _theme.Start();
+        _root.Unloaded += (_, _) =>
+        {
+            _theme?.Stop();
+            Cancel();
+        };
+        return new ToolContent(_root, Reset, ApplyAsync, _ready.Task, ActivateAsync);
+    }
+
+    /// <summary>Rebuilds the view with the current palette; the clip order and thumbnails are untouched.</summary>
+    private void Repaint() => Populate();
+
+    private void Populate()
+    {
+        if (_root is null)
+            return;
+
+        // The state-bearing controls move into a freshly themed layout instead of being re-created.
+        VideoToolCommon.Detach(_strip);
+        VideoToolCommon.Detach(_summary);
+        VideoToolCommon.Detach(_status);
+        VideoToolCommon.Detach(_progress);
+
+        _root.Children.Clear();
+        _root.RowDefinitions.Clear();
+        _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        PaintStaticSurfaces();
 
         var filmstrip = new ScrollViewer
         {
@@ -101,19 +151,26 @@ internal sealed class VideoJoinView
             Content = _strip,
             Margin = new Thickness(0, 2, 0, 8),
         };
-
-        var summary = BuildSummary();
         var status = BuildStatus();
+
         Grid.SetRow(filmstrip, 0);
-        Grid.SetRow(summary, 1);
+        Grid.SetRow(_summary, 1);
         Grid.SetRow(status, 2);
-        root.Children.Add(filmstrip);
-        root.Children.Add(summary);
-        root.Children.Add(status);
+        _root.Children.Add(filmstrip);
+        _root.Children.Add(_summary);
+        _root.Children.Add(status);
 
         RebuildStrip();
-        root.Unloaded += (_, _) => Cancel();
-        return new ToolContent(root, Reset, ApplyAsync, _ready.Task, ActivateAsync);
+        UpdateSummary();
+    }
+
+    /// <summary>Applies the current palette to the controls that outlive a rebuild (they hold old brushes).</summary>
+    private void PaintStaticSurfaces()
+    {
+        _summary.Foreground = Theme.Muted;
+        _status.Foreground = _statusIsError ? Theme.Error : Theme.Muted;
+        _progress.Foreground = Theme.Accent;
+        _progress.Background = Theme.Track;
     }
 
     /// <summary>Probes every clip in order, showing each card as soon as its facts are known.</summary>
@@ -155,32 +212,8 @@ internal sealed class VideoJoinView
         }
     }
 
-    private FrameworkElement BuildSummary()
-    {
-        _summary.FontSize = 11.5;
-        _summary.Foreground = Theme.Muted;
-        _summary.TextWrapping = TextWrapping.Wrap;
-        _summary.Margin = new Thickness(2, 0, 2, 4);
-        return _summary;
-    }
-
     private FrameworkElement BuildStatus()
     {
-        _status.FontSize = 11.5;
-        _status.Foreground = Theme.Muted;
-        _status.TextWrapping = TextWrapping.Wrap;
-        _status.VerticalAlignment = VerticalAlignment.Center;
-        _status.Margin = new Thickness(2, 0, 100, 0);
-        _status.Text = T("tool.videojoin.hint");
-
-        _progress.Width = 90;
-        _progress.Height = 4;
-        _progress.Visibility = Visibility.Collapsed;
-        _progress.HorizontalAlignment = HorizontalAlignment.Right;
-        _progress.VerticalAlignment = VerticalAlignment.Center;
-        _progress.Foreground = Theme.Accent;
-        _progress.Background = Theme.Track;
-
         var row = new Grid();
         row.Children.Add(_status);
         row.Children.Add(_progress);
@@ -385,8 +418,7 @@ internal sealed class VideoJoinView
         _clips = [.. VideoSplitJoin.RemoveAt(_clips, index)];
         RebuildStrip();
         UpdateSummary();
-        _status.Foreground = Theme.Muted;
-        _status.Text = T("tool.videojoin.hint");
+        ShowHint();
     }
 
     private async Task LoadThumbnailAsync(int index)
@@ -441,8 +473,16 @@ internal sealed class VideoJoinView
 
     // ---------------------------------------------------------------- status and apply
 
+    private void ShowHint()
+    {
+        _statusIsError = false;
+        _status.Foreground = Theme.Muted;
+        _status.Text = T("tool.videojoin.hint");
+    }
+
     private void ShowError(string message)
     {
+        _statusIsError = true;
         _status.Foreground = Theme.Error;
         _status.Text = message;
     }
@@ -452,6 +492,7 @@ internal sealed class VideoJoinView
         var value = Math.Clamp(fraction, 0, 1);
         _progress.Visibility = Visibility.Visible;
         _progress.Value = value * 100;
+        _statusIsError = false;
         _status.Foreground = Theme.Muted;
         _status.Text = T("tool.videojoin.working") + " "
             + Bidi.Value(Math.Round(value * 100).ToString(CultureInfo.InvariantCulture) + "%");
@@ -462,8 +503,7 @@ internal sealed class VideoJoinView
         if (_busy || _initial is not { } initial)
             return;
         _clips = [.. initial];
-        _status.Foreground = Theme.Muted;
-        _status.Text = T("tool.videojoin.hint");
+        ShowHint();
         _progress.Visibility = Visibility.Collapsed;
         RebuildStrip();
         UpdateSummary();
@@ -501,11 +541,8 @@ internal sealed class VideoJoinView
             _applyCts = null;
             cts.Dispose();
             _progress.Visibility = Visibility.Collapsed;
-            if (_status.Foreground != Theme.Error)
-            {
-                _status.Foreground = Theme.Muted;
-                _status.Text = T("tool.videojoin.hint");
-            }
+            if (!_statusIsError)
+                ShowHint();
         }
     }
 

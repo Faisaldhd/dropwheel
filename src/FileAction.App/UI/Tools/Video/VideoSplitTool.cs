@@ -36,6 +36,9 @@ internal sealed class VideoSplitTool : IToolWindowSpec
 
     public string TitleKey => "tool.videosplit.title";
 
+    /// <summary>Bottom-right button: the split verb, not the generic "Apply".</summary>
+    public string PrimaryLabelKey => "tool.videosplit.primary";
+
     public ToolSpecLayout Layout => LayoutSpec;
 
     public bool Applies(IReadOnlyList<FileItem> items) =>
@@ -66,65 +69,151 @@ internal sealed class VideoSplitView
 
     private readonly Grid _preview = new() { ClipToBounds = true };
     private readonly WpfImage _image = new() { Stretch = Stretch.Uniform, Visibility = Visibility.Collapsed };
-    private readonly Border _placeholder;
-    private readonly Border _track = new();
+    private readonly Border _placeholder = new() { CornerRadius = new CornerRadius(10) };
     private readonly Canvas _canvas = new();
     private readonly TextBlock _position = new();
     private readonly TextBlock _length = new();
     private readonly TextBox _partsBox = new();
-    private readonly Border _removeButton;
     private readonly TextBlock _countLabel = new();
     private readonly WrapPanel _chips = new();
     private readonly TextBlock _status = new();
     private readonly ProgressBar _progress = new();
 
+    private Grid? _root;
+    private ThemeWatcher? _theme;
+    private Border? _track;
+    private Border? _removeButton;
     private string? _ffmpeg;
+    private string? _problem;
     private double _duration;
     private int _selected = -1;
     private int _dragging = -1;
     private CancellationTokenSource? _frameCts;
     private CancellationTokenSource? _applyCts;
     private bool _busy;
+    private bool _statusIsError;
 
     public VideoSplitView(FileItem item)
     {
         _item = item;
-        _placeholder = new Border
+        _preview.Children.Add(_image);
+        _preview.Children.Add(_placeholder);
+        _canvas.SizeChanged += (_, _) => Paint();
+
+        _partsBox.Width = 46;
+        _partsBox.Text = VideoSplitJoin.MinParts.ToString(CultureInfo.InvariantCulture);
+        _partsBox.Padding = new Thickness(6, 4, 6, 4);
+        _partsBox.HorizontalContentAlignment = HorizontalAlignment.Center;
+        _partsBox.KeyDown += (_, e) =>
         {
-            Background = Theme.Card,
-            CornerRadius = new CornerRadius(10),
-            Child = new ProgressBar { IsIndeterminate = true, Width = 120, Height = 4 },
+            if (e.Key == Key.Enter)
+                MakeEqualParts();
         };
-        _removeButton = Controls.Button(T("tool.videosplit.removePoint"), RemoveSelected);
-        _removeButton.Opacity = 0.45;
+
+        _position.FontSize = 12;
+        _length.FontSize = 12;
+        _length.HorizontalAlignment = HorizontalAlignment.Right;
+        _countLabel.FontSize = 12;
+        _countLabel.VerticalAlignment = VerticalAlignment.Center;
+        _countLabel.Margin = new Thickness(0, 0, 12, 0);
+        _chips.Margin = new Thickness(0, 0, 0, 2);
+
+        _status.FontSize = 11.5;
+        _status.TextWrapping = TextWrapping.Wrap;
+        _status.VerticalAlignment = VerticalAlignment.Center;
+        _status.Margin = new Thickness(0, 0, 100, 0);
+        _progress.Width = 90;
+        _progress.Height = 4;
+        _progress.Visibility = Visibility.Collapsed;
+        _progress.HorizontalAlignment = HorizontalAlignment.Right;
+        _progress.VerticalAlignment = VerticalAlignment.Center;
+
+        ShowHint();
     }
 
     public ToolContent Build()
     {
-        var root = new Grid();
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        _root = new Grid();
+        Populate();
+        _theme = new ThemeWatcher(_root, Repaint);
+        _root.Loaded += (_, _) => _theme.Start();
+        _root.Unloaded += (_, _) =>
+        {
+            _theme?.Stop();
+            Cancel();
+        };
+        return new ToolContent(_root, Reset, ApplyAsync, _ready.Task, ActivateAsync);
+    }
+
+    /// <summary>Rebuilds the view with the current palette; the model (points, selection) is untouched.</summary>
+    private void Repaint()
+    {
+        Populate();
+        if (_duration > 0)
+        {
+            Paint();
+            RefreshParts();
+        }
+        UpdateLabels();
+    }
+
+    private void Populate()
+    {
+        if (_root is null)
+            return;
+
+        // The state-bearing controls move into a freshly themed layout instead of being re-created.
+        VideoToolCommon.Detach(_image);
+        VideoToolCommon.Detach(_placeholder);
+        VideoToolCommon.Detach(_canvas);
+        VideoToolCommon.Detach(_position);
+        VideoToolCommon.Detach(_length);
+        VideoToolCommon.Detach(_partsBox);
+        VideoToolCommon.Detach(_countLabel);
+        VideoToolCommon.Detach(_chips);
+        VideoToolCommon.Detach(_status);
+        VideoToolCommon.Detach(_progress);
+
+        _root.Children.Clear();
+        _root.RowDefinitions.Clear();
+        _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         for (var index = 0; index < 4; index++)
-            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        PaintStaticSurfaces();
 
         var preview = BuildPreview();
         var timeline = BuildTimeline();
         var controls = BuildControls();
         var chips = BuildChips();
         var status = BuildStatus();
-
         Grid.SetRow(preview, 0);
         Grid.SetRow(timeline, 1);
         Grid.SetRow(controls, 2);
         Grid.SetRow(chips, 3);
         Grid.SetRow(status, 4);
-        root.Children.Add(preview);
-        root.Children.Add(timeline);
-        root.Children.Add(controls);
-        root.Children.Add(chips);
-        root.Children.Add(status);
+        _root.Children.Add(preview);
+        _root.Children.Add(timeline);
+        _root.Children.Add(controls);
+        _root.Children.Add(chips);
+        _root.Children.Add(status);
+    }
 
-        root.Unloaded += (_, _) => Cancel();
-        return new ToolContent(root, Reset, ApplyAsync, _ready.Task, ActivateAsync);
+    /// <summary>Applies the current palette to the controls that outlive a rebuild (they hold old brushes).</summary>
+    private void PaintStaticSurfaces()
+    {
+        _placeholder.Background = Theme.Card;
+        _position.Foreground = Theme.Muted;
+        _length.Foreground = Theme.Muted;
+        _partsBox.Background = Theme.Card;
+        _partsBox.Foreground = Theme.Text;
+        _partsBox.BorderBrush = Theme.PanelBorder;
+        _partsBox.BorderThickness = new Thickness(1);
+        _countLabel.Foreground = Theme.Muted;
+        _status.Foreground = _statusIsError ? Theme.Error : Theme.Muted;
+        _progress.Foreground = Theme.Accent;
+        _progress.Background = Theme.Track;
+        RenderPlaceholder();
     }
 
     /// <summary>Reads the clip once, then shows its first frame; the window sizes itself from the video.</summary>
@@ -158,8 +247,6 @@ internal sealed class VideoSplitView
 
     private FrameworkElement BuildPreview()
     {
-        _preview.Children.Add(_image);
-        _preview.Children.Add(_placeholder);
         _preview.Margin = new Thickness(0, 2, 0, 8);
         return new Border
         {
@@ -172,58 +259,42 @@ internal sealed class VideoSplitView
 
     private FrameworkElement BuildTimeline()
     {
-        _track.Height = 38;
-        _track.CornerRadius = new CornerRadius(9);
-        _track.Background = Theme.Track;
-        _track.BorderBrush = Theme.PanelBorder;
-        _track.BorderThickness = new Thickness(1);
-        _track.ClipToBounds = true;
-        _track.Cursor = Cursors.Cross;
-        _track.Focusable = true;
-        _track.Child = _canvas;
-        _track.SizeChanged += (_, _) => Paint();
-        _track.MouseLeftButtonDown += TrackDown;
-        _track.MouseMove += TrackMove;
-        _track.MouseLeftButtonUp += TrackUp;
-        _track.LostMouseCapture += (_, _) => _dragging = -1;
-        _track.KeyDown += (_, e) =>
+        var track = new Border
+        {
+            Height = 38,
+            CornerRadius = new CornerRadius(9),
+            Background = Theme.Track,
+            BorderBrush = Theme.PanelBorder,
+            BorderThickness = new Thickness(1),
+            ClipToBounds = true,
+            Cursor = Cursors.Cross,
+            Focusable = true,
+            Child = _canvas,
+        };
+        track.SizeChanged += (_, _) => Paint();
+        track.MouseLeftButtonDown += TrackDown;
+        track.MouseMove += TrackMove;
+        track.MouseLeftButtonUp += TrackUp;
+        track.LostMouseCapture += (_, _) => _dragging = -1;
+        track.KeyDown += (_, e) =>
         {
             if (e.Key == Key.Delete)
                 RemoveSelected();
         };
-
-        _position.FontSize = 12;
-        _position.Foreground = Theme.Muted;
-        _length.FontSize = 12;
-        _length.Foreground = Theme.Muted;
-        _length.HorizontalAlignment = HorizontalAlignment.Right;
+        _track = track;
 
         var labels = new Grid { Margin = new Thickness(2, 4, 2, 0) };
         labels.Children.Add(_position);
         labels.Children.Add(_length);
 
         var block = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
-        block.Children.Add(_track);
+        block.Children.Add(track);
         block.Children.Add(labels);
         return block;
     }
 
     private FrameworkElement BuildControls()
     {
-        _partsBox.Width = 46;
-        _partsBox.Text = VideoSplitJoin.MinParts.ToString(CultureInfo.InvariantCulture);
-        _partsBox.Padding = new Thickness(6, 4, 6, 4);
-        _partsBox.Background = Theme.Card;
-        _partsBox.Foreground = Theme.Text;
-        _partsBox.BorderBrush = Theme.PanelBorder;
-        _partsBox.BorderThickness = new Thickness(1);
-        _partsBox.HorizontalContentAlignment = HorizontalAlignment.Center;
-        _partsBox.KeyDown += (_, e) =>
-        {
-            if (e.Key == Key.Enter)
-                MakeEqualParts();
-        };
-
         var make = Controls.Button(T("tool.videosplit.makeEqual"), MakeEqualParts);
         make.Margin = new Thickness(8, 0, 0, 0);
 
@@ -239,10 +310,9 @@ internal sealed class VideoSplitView
         start.Children.Add(_partsBox);
         start.Children.Add(make);
 
-        _countLabel.FontSize = 12;
-        _countLabel.Foreground = Theme.Muted;
-        _countLabel.VerticalAlignment = VerticalAlignment.Center;
-        _countLabel.Margin = new Thickness(0, 0, 12, 0);
+        var remove = Controls.Button(T("tool.videosplit.removePoint"), RemoveSelected);
+        remove.Opacity = _selected >= 0 ? 1 : 0.45;
+        _removeButton = remove;
 
         var end = new StackPanel
         {
@@ -251,7 +321,7 @@ internal sealed class VideoSplitView
             VerticalAlignment = VerticalAlignment.Center,
         };
         end.Children.Add(_countLabel);
-        end.Children.Add(_removeButton);
+        end.Children.Add(remove);
 
         var row = new Grid { Margin = new Thickness(0, 0, 0, 6) };
         row.Children.Add(start);
@@ -259,35 +329,16 @@ internal sealed class VideoSplitView
         return row;
     }
 
-    private FrameworkElement BuildChips()
+    private FrameworkElement BuildChips() => new ScrollViewer
     {
-        _chips.Margin = new Thickness(0, 0, 0, 2);
-        return new ScrollViewer
-        {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            MaxHeight = 46,
-            Content = _chips,
-        };
-    }
+        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        MaxHeight = 46,
+        Content = _chips,
+    };
 
     private FrameworkElement BuildStatus()
     {
-        _status.FontSize = 11.5;
-        _status.Foreground = Theme.Muted;
-        _status.TextWrapping = TextWrapping.Wrap;
-        _status.VerticalAlignment = VerticalAlignment.Center;
-        _status.Margin = new Thickness(0, 0, 100, 0);
-        _status.Text = T("tool.videosplit.hint");
-
-        _progress.Width = 90;
-        _progress.Height = 4;
-        _progress.Visibility = Visibility.Collapsed;
-        _progress.HorizontalAlignment = HorizontalAlignment.Right;
-        _progress.VerticalAlignment = VerticalAlignment.Center;
-        _progress.Foreground = Theme.Accent;
-        _progress.Background = Theme.Track;
-
         var row = new Grid { Margin = new Thickness(0, 2, 0, 0) };
         row.Children.Add(_status);
         row.Children.Add(_progress);
@@ -356,7 +407,8 @@ internal sealed class VideoSplitView
     {
         if (_busy || _duration <= 0 || e.ChangedButton != MouseButton.Left)
             return;
-        _track.Focus();
+        if (sender is Border track)
+            track.Focus();
         var seconds = TimeAt(e.GetPosition(_canvas));
         var near = Nearest(seconds);
         if (near >= 0)
@@ -379,7 +431,7 @@ internal sealed class VideoSplitView
         }
         _dragging = index;
         Select(index);
-        _track.CaptureMouse();
+        _track?.CaptureMouse();
     }
 
     private void TrackMove(object sender, MouseEventArgs e)
@@ -408,8 +460,8 @@ internal sealed class VideoSplitView
             return;
         var point = _points[_dragging];
         _dragging = -1;
-        if (_track.IsMouseCaptured)
-            _track.ReleaseMouseCapture();
+        if (sender is Border track && track.IsMouseCaptured)
+            track.ReleaseMouseCapture();
         Paint();
         UpdateLabels();
         RefreshParts();
@@ -454,9 +506,9 @@ internal sealed class VideoSplitView
         _points.RemoveAt(index);
         _selected = -1;
         _dragging = -1;
-        if (_track.IsMouseCaptured)
+        if (_track?.IsMouseCaptured == true)
             _track.ReleaseMouseCapture();
-        _removeButton.Opacity = 0.45;
+        UpdateRemoveButton();
         Paint();
         UpdateLabels();
         RefreshParts();
@@ -466,10 +518,16 @@ internal sealed class VideoSplitView
     private void Select(int index)
     {
         _selected = index >= 0 && index < _points.Count ? index : -1;
-        _removeButton.Opacity = _selected >= 0 ? 1 : 0.45;
+        UpdateRemoveButton();
         Paint();
         UpdateLabels();
         QueueFrame(_selected >= 0 ? _points[_selected] : 0);
+    }
+
+    private void UpdateRemoveButton()
+    {
+        if (_removeButton is not null)
+            _removeButton.Opacity = _selected >= 0 ? 1 : 0.45;
     }
 
     private void MakeEqualParts()
@@ -488,9 +546,8 @@ internal sealed class VideoSplitView
         _points.Clear();
         _points.AddRange(VideoSplitJoin.PointsForEqualParts(_duration, count));
         _selected = _points.Count > 0 ? 0 : -1;
-        _removeButton.Opacity = _selected >= 0 ? 1 : 0.45;
-        _status.Foreground = Theme.Muted;
-        _status.Text = T("tool.videosplit.hint");
+        UpdateRemoveButton();
+        ShowHint();
         Paint();
         UpdateLabels();
         RefreshParts();
@@ -601,22 +658,46 @@ internal sealed class VideoSplitView
 
     private void ShowProblem(string message)
     {
+        _problem = message;
         _placeholder.Visibility = Visibility.Visible;
-        _placeholder.Child = new TextBlock
-        {
-            Text = message,
-            Foreground = Theme.Error,
-            TextWrapping = TextWrapping.Wrap,
-            TextAlignment = TextAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(18),
-        };
+        RenderPlaceholder();
         ShowError(message);
+    }
+
+    /// <summary>The progress bar, or the reason the clip could not be read.</summary>
+    private void RenderPlaceholder()
+    {
+        _placeholder.Child = _problem is { } problem
+            ? new TextBlock
+            {
+                Text = problem,
+                Foreground = Theme.Error,
+                TextWrapping = TextWrapping.Wrap,
+                TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(18),
+            }
+            : new ProgressBar
+            {
+                IsIndeterminate = true,
+                Width = 120,
+                Height = 4,
+                Foreground = Theme.Accent,
+                Background = Theme.Track,
+            };
+    }
+
+    private void ShowHint()
+    {
+        _statusIsError = false;
+        _status.Foreground = Theme.Muted;
+        _status.Text = T("tool.videosplit.hint");
     }
 
     private void ShowError(string message)
     {
+        _statusIsError = true;
         _status.Foreground = Theme.Error;
         _status.Text = message;
     }
@@ -626,6 +707,7 @@ internal sealed class VideoSplitView
         var value = Math.Clamp(fraction, 0, 1);
         _progress.Visibility = Visibility.Visible;
         _progress.Value = value * 100;
+        _statusIsError = false;
         _status.Foreground = Theme.Muted;
         _status.Text = T("tool.videosplit.working") + " "
             + Bidi.Value(Math.Round(value * 100).ToString(CultureInfo.InvariantCulture) + "%");
@@ -639,9 +721,8 @@ internal sealed class VideoSplitView
         _selected = -1;
         _dragging = -1;
         _partsBox.Text = VideoSplitJoin.MinParts.ToString(CultureInfo.InvariantCulture);
-        _removeButton.Opacity = 0.45;
-        _status.Foreground = Theme.Muted;
-        _status.Text = T("tool.videosplit.hint");
+        UpdateRemoveButton();
+        ShowHint();
         _progress.Visibility = Visibility.Collapsed;
         UpdateLabels();
         Paint();
@@ -684,11 +765,8 @@ internal sealed class VideoSplitView
             _applyCts = null;
             cts.Dispose();
             _progress.Visibility = Visibility.Collapsed;
-            if (_duration > 0 && _status.Foreground != Theme.Error)
-            {
-                _status.Foreground = Theme.Muted;
-                _status.Text = T("tool.videosplit.hint");
-            }
+            if (_duration > 0 && !_statusIsError)
+                ShowHint();
         }
     }
 
