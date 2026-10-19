@@ -1,13 +1,47 @@
-# NOTES — update-apply (2.2.0)
+# NOTES — cross-agent requests
 
-Requests for files owned by other agents. Nothing outside `src/FileAction.App/Updates/**` and
-`scripts/test-update-apply.ps1` was edited.
+## Requests from update-core
+
+1. **Setup asset name is inconsistent (blocks the setup-install update path).**
+   `UpdateConfig.SetupAssetName` (shared, lead-owned) and the update-core brief name the installer
+   `DropWheel-<version>-Setup.exe`, but `installer/DropWheel.iss` sets
+   `OutputBaseFilename=DropWheel-Setup-{#AppVersion}`, and `.github/workflows/ci.yml`, `README*.md` and
+   `docs/prompts/UPDATE_PROMPT.md` use `DropWheel-Setup-<version>.exe`. The updater looks for the exact
+   `DropWheel-<version>-Setup.exe`, so an installed copy would never find the setup asset. Request to the
+   installer/CI owners: rename the installer output to `DropWheel-<version>-Setup.exe`; alternatively the
+   lead changes `UpdateConfig.SetupAssetName` and tells update-core. The portable name
+   (`DropWheel-<version>-portable-win-x64.zip`) already matches everywhere.
+
+2. **Release signing assets (signing agent).** For the selected asset, `UpdateService.DownloadAsync`
+   downloads `<asset name>.sig` and the release asset `SHA256SUMS.txt`. The `.sig` must be the base64
+   ECDSA P-256 signature over the file's SHA-256 with the `UpdateKey` private key; IEEE P1363 (r||s) and
+   DER are both accepted. `SHA256SUMS.txt` must contain `<sha256hex>  <asset name>` (sha256sum format).
+   CI currently creates no `.sig` assets, so every download is refused as
+   "Update could not be verified" until the signing + upload step lands (this is the intended fail-closed
+   behaviour).
+
+3. **GitHub asset `digest` must be populated.** Per the 2.2.0 spec the updater requires BOTH the GitHub
+   asset `digest` field (sha256) and the `SHA256SUMS.txt` entry. GitHub fills `digest` for assets uploaded
+   to a release; please confirm the v2.2.0 release payload carries it for the setup exe and the portable
+   zip before shipping, otherwise every update will be refused.
+
+4. **Tests note (tests agent).** `DownloadAsync` success cannot be exercised with the production
+   `UpdateKey` because its private half is a secret. Cover `UpdateVerifier` with a generated P-256 key pair
+   (optional `publicKeyBase64` argument) and cover the `DownloadAsync` failure paths (bad/missing
+   signature, digest or sums) plus cancellation; assert the exact message
+   `UpdateService.VerificationFailure` ("Update could not be verified").
+
+5. **Version shape (tests agent).** `UpdateInfo.Version` is normalised to the shortest exact form
+   (`2.3.0`, not `2.3.0.0`) unless the tag has a non-zero revision. Tags such as `v2.3.0` therefore compare
+   equal to `new Version(2, 3, 0)`; asset names still use `Version.ToString(3)` via `UpdateConfig`.
 
 ## Requests from update-apply
 
-### 1. `src/FileAction.App/App.cs` (lead) — wire the helper and `--updated`
+Nothing outside `src/FileAction.App/Updates/**` and `scripts/test-update-apply.ps1` was edited.
 
-The helper cannot work until these two call sites exist:
+### 1. `src/FileAction.App/App.cs` (update-ui / lead) — wire the helper and `--updated`
+
+Required for the helper to work at all:
 
 ```csharp
 // Program.Main, immediately after AppLog.Initialize() and BEFORE --self-test / the single-instance check:
@@ -29,29 +63,19 @@ else if (args.FirstOrDefault(a => a.StartsWith("--updated=", StringComparison.Or
 ```
 
 `using FileAction.App.Updates;` is needed in both `Program` and `App`. The helper relaunches with
-`--updated <version>` (space form); the `=` form is supported here too because `docs/auto-update-spec.md`
-writes `--updated=<x.y.z>`. Do not handle `--updated` in `TryRun`: it must keep returning false for normal
-startup.
+`--updated <version>` (space form); the `=` form is supported too because `docs/auto-update-spec.md`
+writes `--updated=<x.y.z>`. Do not handle `--updated` in `TryRun`: it must keep returning false for
+normal startup.
 
-### 2. `src/FileAction.Core/Strings/en.json` + `ar.json` (strings agent) — three keys
+### 2. Strings — done on main
 
-The announcement uses exactly the shared keys from `AGENT_RULES.md`; they are not in the tables yet, so
-`LocaleUsageTests.Every_key_used_in_source_exists_in_both_tables` will stay red until they land:
+`update.updated.title`, `update.updated.body` and `update.updated.whatsNew` are in both tables on main
+(`7cc3e30`). Merging main removes the `LocaleUsageTests` failure the first branch CI run showed
+(`update.updated.title` / `.whatsNew` missing). No further string work is needed from update-apply.
 
-| key | English | Arabic suggestion |
-|---|---|---|
-| `update.updated.title` | `DropWheel updated` | `تم تحديث DropWheel` |
-| `update.updated.body` | `DropWheel was updated to {0}.` | `تم تحديث DropWheel إلى الإصدار ⁦{0}⁩.` |
-| `update.updated.whatsNew` | `What's new` | `ما الجديد` |
+### 3. `.github/workflows/ci.yml` (lead; routed to release-clean)
 
-The Arabic body wraps `{0}` in U+2066…U+2069 as the rules require. `AnnounceUpdated` also uses the
-existing `action.close` key for its second button.
-
-### 3. `.github/workflows/ci.yml` (lead) — one step
-
-The script is CI-only. Add it to the `build-test` job after **Build** (the Release build output is enough;
-the script publishes a framework-dependent folder itself if `bin\Release\net10.0-windows\DropWheel.exe` is
-missing):
+The script is CI-only and needs `windows-latest`. Exact step for the job that has a Release build:
 
 ```yaml
       - name: Apply-update helper (portable)
@@ -59,8 +83,9 @@ missing):
         run: '& ./scripts/test-update-apply.ps1'
 ```
 
-It needs `windows-latest`; it starts the built `DropWheel.exe` in `--apply-update` mode (a windowless
-process) and checks the success, corrupt-zip and rollback cases. Never run it on the owner's PC.
+It starts the built `DropWheel.exe` in `--apply-update` mode (a windowless process) and checks the
+success, corrupt-zip and rollback cases. If the Release build output is missing, the script publishes a
+framework-dependent folder itself with `dotnet publish`. Never run it on the owner's PC.
 
 ### 4. Note on the helper copy (for review, not a request)
 
@@ -74,5 +99,5 @@ helper.
 
 - Replaced the `UpdateApplier` stub; added `PortableUpdater`, `SetupUpdater` and `UpdatedWindow` under
   `src/FileAction.App/Updates/`.
-- Added `scripts/test-update-apply.ps1` (three CI cases).
+- Added `scripts/test-update-apply.ps1` (success, corrupt-zip and true-rollback cases).
 - No changes to `App.cs`, `TrayIcon.cs`, `SettingsWindow.cs`, `UpdateBanner.cs`, `ci.yml` or the string tables.
