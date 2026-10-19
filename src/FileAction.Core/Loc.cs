@@ -84,7 +84,15 @@ public static class Loc
     /// build that failed to load the embedded tables (which would otherwise show keys like
     /// <c>settings.title</c> instead of text).
     /// </summary>
-    public static int KeyCount => (Current == Language.Arabic ? ArabicTable : EnglishTable).Value.Count;
+    public static int KeyCount => KeyCountFor(Current);
+
+    /// <summary>Number of strings in one table, regardless of the active UI language.</summary>
+    public static int KeyCountFor(Language language) =>
+        (language == Language.Arabic ? ArabicTable : EnglishTable).Value.Count;
+
+    /// <summary>True when either embedded table failed to load (0 keys).</summary>
+    public static bool HasEmptyTable =>
+        KeyCountFor(Language.English) == 0 || KeyCountFor(Language.Arabic) == 0;
 
     /// <summary>
     /// True when <paramref name="value"/> is itself a string-table key. The self-test uses this to fail when

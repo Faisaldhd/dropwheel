@@ -317,9 +317,17 @@ jobs:
           $report = Get-Content release/diagnose.txt -Raw
           Get-Content release/diagnose.txt | Select-Object -First 40
           if ($process.ExitCode -ne 0) { throw "--diagnose failed with $($process.ExitCode)" }
+          $localeMatch = [regex]::Match($report, 'localization: English=(\d+) keys, Arabic=(\d+) keys')
+          if (-not $localeMatch.Success) { throw "diagnose did not report both Loc table counts" }
+          $englishKeys = [int] $localeMatch.Groups[1].Value
+          $arabicKeys = [int] $localeMatch.Groups[2].Value
+          if ($englishKeys -eq 0 -or $arabicKeys -eq 0) {
+            throw "diagnose reports an empty Loc table (English=$englishKeys, Arabic=$arabicKeys)"
+          }
+          if ($report -match 'localization:.*ERROR') { throw "diagnose reports a localization error" }
           $keyMatch = [regex]::Match($report, 'strings:\s+(\d+) keys')
-          if (-not $keyMatch.Success) { throw "diagnose did not report the Loc key count" }
-          if ([int] $keyMatch.Groups[1].Value -eq 0) { throw "diagnose reports 0 Loc keys" }
+          if (-not $keyMatch.Success) { throw "diagnose did not report the active Loc key count" }
+          if ([int] $keyMatch.Groups[1].Value -eq 0) { throw "diagnose reports 0 active Loc keys" }
           if ($report -match 'settings\.title="settings\.title"') { throw "diagnose reports a raw settings.title" }
 
       - name: Upload diagnose

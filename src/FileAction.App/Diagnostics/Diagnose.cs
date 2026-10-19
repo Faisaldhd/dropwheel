@@ -56,7 +56,16 @@ internal static class Diagnose
         text.AppendLine($"integrity:  {Integrity.Describe()}{(Integrity.IsLow ? "  <-- PROBLEM: low integrity cannot write to %APPDATA%/%TEMP% or receive input" : "")}");
         text.AppendLine($"culture:    {CultureInfo.CurrentUICulture.Name} (system {CultureInfo.InstalledUICulture.Name})");
         text.AppendLine($"language:   Loc.Current={Loc.Current}, Loc.Preferred={Loc.Preferred}");
-        text.AppendLine($"strings:    {Loc.KeyCount} keys, settings.title=\"{Loc.T("settings.title")}\"");
+        var settingsTitle = Loc.T("settings.title");
+        var englishKeys = Loc.KeyCountFor(FileAction.Core.Language.English);
+        var arabicKeys = Loc.KeyCountFor(FileAction.Core.Language.Arabic);
+        text.AppendLine($"strings:    {Loc.KeyCount} keys, settings.title=\"{settingsTitle}\"");
+        text.AppendLine($"localization: English={englishKeys} keys, Arabic={arabicKeys} keys" +
+            (englishKeys == 0 || arabicKeys == 0
+                ? "  <-- ERROR: empty string table; the UI will show raw keys"
+                : ""));
+        if (Loc.IsKey(settingsTitle))
+            text.AppendLine("localization: ERROR — settings.title resolved to its raw key");
         text.AppendLine();
 
         text.AppendLine("Folders (first writable one holds the log)");

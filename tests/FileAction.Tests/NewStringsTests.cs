@@ -170,6 +170,9 @@ public class NewStringsTests
     public void Loc_loads_the_embedded_tables_and_never_shows_the_key()
     {
         Assert.True(Loc.KeyCount >= 300, $"Loc loaded only {Loc.KeyCount} keys; the embedded tables are broken.");
+        Assert.True(Loc.KeyCountFor(Language.English) >= 300, "The English Loc table is empty.");
+        Assert.True(Loc.KeyCountFor(Language.Arabic) >= 300, "The Arabic Loc table is empty.");
+        Assert.False(Loc.HasEmptyTable, "At least one Loc table has 0 keys.");
         Assert.False(
             Loc.T("settings.title").Contains("settings.title", StringComparison.Ordinal),
             "Loc.T(\"settings.title\") returned the key instead of a translated title.");

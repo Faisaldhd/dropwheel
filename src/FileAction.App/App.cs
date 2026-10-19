@@ -108,7 +108,14 @@ internal sealed class App : Application
         AppLog.Info($"settings loaded from {Path.Combine(AppSettings.Folder, "settings.json")}");
         LanguageManager.Apply(_settings.Language);
         AppLog.Info($"language: {LanguageManager.Current} (preference {LanguageManager.Preference}), rtl={LanguageManager.IsRtl}");
-        AppLog.Info($"localization: {Loc.KeyCount} keys, settings.title=\"{Loc.T("settings.title")}\"");
+        var englishKeys = Loc.KeyCountFor(FileAction.Core.Language.English);
+        var arabicKeys = Loc.KeyCountFor(FileAction.Core.Language.Arabic);
+        AppLog.Info($"localization: English={englishKeys} keys, Arabic={arabicKeys} keys, current={Loc.Current}, " +
+                    $"settings.title=\"{Loc.T("settings.title")}\"");
+        if (englishKeys == 0)
+            AppLog.Error("localization: the English string table loaded 0 keys; every UI string will be a raw key.");
+        if (arabicKeys == 0)
+            AppLog.Error("localization: the Arabic string table loaded 0 keys; every UI string will be a raw key.");
         Theme.Apply(_settings.Theme);
         _theme = _settings.Theme;
 
