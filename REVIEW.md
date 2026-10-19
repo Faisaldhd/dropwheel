@@ -74,6 +74,9 @@ Closed and verified:
 - Optional, ask the owner first in STATUS.md: prepare a short summary of generic fixes and the Arabic translation that could be offered upstream to Metamorfolog/file_action as a goodwill contribution. Do NOT open PRs upstream without the owner's approval.
 
 ### R-22 details (workspace tidy-up; owner: "it feels scattered")
+**Two copies exist.** Your active workspace is `C:\Users\…\Downloads\DropWheel_1` (your new session cloned the repo there). `Desktop\DropWheel_1` is an OLDER copy: Claude had been writing REVIEW.md there, which is why you only got R-14 to R-22 through chat. From now on the Downloads copy is the ONLY one. Claude writes REVIEW.md into `Downloads\DropWheel_1\DropWheel\`.
+- Copy `Desktop\DropWheel_1\TestData` and `Desktop\DropWheel_1\tools` (dotnet-sdk.zip, Inno, 7zr) into `Downloads\DropWheel_1\_local\` if you need them; nothing else on the Desktop copy is needed (everything is on GitHub). Then tell the owner in STATUS.md: "Desktop\DropWheel_1 can be deleted."
+- When the R-19/R-12/R-2 worktrees (`wt-*`) are merged, remove them with `git worktree remove` so the workspace root stays clean.
 Target layout. Move with `git mv` inside the repo and plain moves outside it, then delete the junk:
 
 ```

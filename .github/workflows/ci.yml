@@ -53,12 +53,17 @@ jobs:
           dotnet build tests/FileAction.Tests/FileAction.Tests.csproj -c Release --no-restore
 
       - name: Install FFmpeg and Pandoc (integration tests)
+        # Best effort: the community Chocolatey feed regularly answers 503. The integration tests skip the
+        # samples whose tool is missing, so a feed outage must not turn the build red.
+        continue-on-error: true
         shell: pwsh
         run: |
           choco install ffmpeg pandoc --no-progress -y
           $env:PATH = "$env:PATH;$env:ProgramData\chocolatey\bin"
-          ffmpeg -version | Select-Object -First 1
-          pandoc --version | Select-Object -First 1
+          if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { ffmpeg -version | Select-Object -First 1 }
+          else { Write-Warning "ffmpeg is not available; its samples will be skipped" }
+          if (Get-Command pandoc -ErrorAction SilentlyContinue) { pandoc --version | Select-Object -First 1 }
+          else { Write-Warning "pandoc is not available; its samples will be skipped" }
 
       - name: Test
         shell: pwsh
