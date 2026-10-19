@@ -8,11 +8,18 @@ NOW: 2.2.1 RELEASED (P0 hotfix) — v2.2.1 tagged at c539fbb — release run 392
 
 ### Root cause (confirmed, not guessed)
 
-- The trimmed self-contained publish could not read its embedded string tables. `Loc.Load` used
-  `JsonSerializer.Deserialize<Dictionary<string, string>>`; trimming removed the reflection metadata it needs,
-  the exception was caught, and every lookup fell back to its key. The first self-contained `--self-test`
-  proved it: `image.compress -> smoke (catalog.image.compress.suffix).jpg`, `pack.zip -> fileType.archive.zip`,
-  and every Settings label a key. The framework-dependent screenshot job never exercised this path.
+- `FileAction.App.csproj` enables `PublishTrimmed` and `TrimMode=partial` whenever `SelfContained=true`; the
+  installer and portable zip both ship that publish. Trimming disables reflection-based `System.Text.Json`.
+  `Loc.Load` used `JsonSerializer.Deserialize<Dictionary<string, string>>`, so it threw, the exception was
+  caught, and every lookup fell back to its key. The first self-contained `--self-test` proved it:
+  `image.compress -> smoke (catalog.image.compress.suffix).jpg`, `pack.zip -> fileType.archive.zip`, and every
+  Settings label a key.
+- CI did not catch it because `--self-test` and the screenshot job published **framework-dependent**, never
+  the trimmed self-contained build the installer ships. The self-contained `--diagnose` also ran, but it did
+  not assert that strings had loaded.
+- Audit of every other JSON path: `AppSettings` and `LinuxSettings` already use source-generated
+  `JsonSerializerContext`s (trim-safe), and the GitHub/tool parsers use `JsonDocument`. `Loc` was the only
+  reflection-based reader, so this was the sole JSON casualty of trimming.
 - The Settings window therefore received very long key strings (one Segmented label wrapped letter by letter)
   and could end as an empty dark window when its build path failed. The title was set before the failure, so
   the user saw exactly `settings.title` on a black window.

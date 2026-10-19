@@ -203,8 +203,8 @@ public static class Loc
             if (stream is null)
                 throw new InvalidOperationException($"Embedded string table '{name}' was not found.");
 
-            // JsonDocument is trim-safe. The previous JsonSerializer.Deserialize<Dictionary<string,string>>
-            // call depends on reflection, which a trimmed self-contained publish can disable: every lookup
+            // JsonDocument is trim-safe. The previous reflection-based dictionary deserialization
+            // depends on metadata that a trimmed self-contained publish can remove: every lookup
             // then fell back to the key (the black 2.2.0 Settings window was titled "settings.title").
             using var document = JsonDocument.Parse(stream);
             if (document.RootElement.ValueKind != JsonValueKind.Object)

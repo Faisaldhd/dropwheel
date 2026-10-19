@@ -61,6 +61,18 @@ jobs:
           dotnet build tests/FileAction.Tests/FileAction.Tests.csproj -c Release --no-restore
           if ($LASTEXITCODE -ne 0) { throw "build Tests failed" }
 
+      - name: Guard against reflection-based JSON
+        shell: pwsh
+        run: |
+          # The shipped self-contained build is trimmed; generic System.Text.Json calls need reflection
+          # metadata that trimming can remove. Use a source-generated JsonSerializerContext or JsonDocument.
+          $hits = Get-ChildItem src -Recurse -Filter *.cs |
+            Select-String -Pattern 'JsonSerializer\.(Deserialize|Serialize)<'
+          if ($hits) {
+            $hits | ForEach-Object { Write-Host "$($_.Path):$($_.LineNumber): $($_.Line.Trim())" }
+            throw "Reflection-based JsonSerializer call in trimmed code; use a JsonSerializerContext or JsonDocument."
+          }
+
       - name: Self-contained UI self-test (trimmed publish)
         shell: pwsh
         timeout-minutes: 15
