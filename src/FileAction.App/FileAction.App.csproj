@@ -51,8 +51,8 @@
   </PropertyGroup>
   <!-- Trimming is what keeps the self-contained setup inside the 70 MB budget, but WPF does not officially
        support it. Every reflection-based JSON reader must be replaced by source generation or JsonDocument:
-       2.2.0 shipped Loc's reflection reader and the trimmed build showed raw keys. CI now runs --self-test
-       on this exact publish and asserts that both string tables loaded. -->
+       2.2.0 shipped Loc's reflection reader and the trimmed build showed raw keys. CI now runs the
+       self-test on this exact publish and asserts that both string tables loaded. -->
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' and '$(SelfContained)' == 'true'">
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>partial</TrimMode>
