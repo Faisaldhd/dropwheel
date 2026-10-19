@@ -15,8 +15,6 @@ internal sealed class WaveformStrip : WaveformView
     private const double HandleRadius = 7;
     private const double HitSlop = 14;
 
-    private static readonly Brush Dim = Freeze(new SolidColorBrush(Color.FromArgb(0x70, 0, 0, 0)));
-
     private TrimRange _selection;
     private int _drag;
 
@@ -49,8 +47,8 @@ internal sealed class WaveformStrip : WaveformView
         var endX = TimeToX(_selection.End);
 
         // Shade everything outside the kept part and outline it in the handle colour.
-        dc.DrawRectangle(Dim, null, new Rect(0, 0, Math.Max(0, startX), height));
-        dc.DrawRectangle(Dim, null, new Rect(Math.Min(width, endX), 0, Math.Max(0, width - endX), height));
+        dc.DrawRectangle(AudioTheme.Dim, null, new Rect(0, 0, Math.Max(0, startX), height));
+        dc.DrawRectangle(AudioTheme.Dim, null, new Rect(Math.Min(width, endX), 0, Math.Max(0, width - endX), height));
 
         var handleBrush = AudioTheme.EndHandle;
         var outline = new Pen(handleBrush, 2);
@@ -136,12 +134,5 @@ internal sealed class WaveformStrip : WaveformView
         _selection = next;
         InvalidateVisual();
         SelectionChanged?.Invoke(next);
-    }
-
-    private static T Freeze<T>(T freezable)
-        where T : Freezable
-    {
-        freezable.Freeze();
-        return freezable;
     }
 }

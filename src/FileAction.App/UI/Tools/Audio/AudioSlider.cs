@@ -20,6 +20,7 @@ internal sealed class AudioSlider : Grid
     private readonly double _step;
     private readonly string _format;
     private readonly Grid _surface;
+    private readonly Border _track;
     private readonly Border _fill;
     private readonly Ellipse _thumb;
     private readonly TextBlock _valueText;
@@ -38,7 +39,7 @@ internal sealed class AudioSlider : Grid
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var track = new Border
+        _track = new Border
         {
             Height = 4,
             CornerRadius = new CornerRadius(2),
@@ -57,7 +58,7 @@ internal sealed class AudioSlider : Grid
         {
             Width = ThumbSize,
             Height = ThumbSize,
-            Fill = Brushes.White,
+            Fill = Theme.TextOnAccent,
             Stroke = Theme.PanelBorder,
             StrokeThickness = 1,
             HorizontalAlignment = HorizontalAlignment.Left,
@@ -71,7 +72,7 @@ internal sealed class AudioSlider : Grid
             Cursor = Cursors.Hand,
             FlowDirection = FlowDirection.LeftToRight,
         };
-        _surface.Children.Add(track);
+        _surface.Children.Add(_track);
         _surface.Children.Add(_fill);
         _surface.Children.Add(_thumb);
         _surface.SizeChanged += (_, _) => Paint();
@@ -114,6 +115,17 @@ internal sealed class AudioSlider : Grid
             return;
         _value = snapped;
         Paint();
+    }
+
+    /// <summary>Re-reads the shared palette after Windows switched light/dark.</summary>
+    public void RefreshTheme()
+    {
+        _track.Background = Theme.Track;
+        _fill.Background = Theme.AccentGradient;
+        _thumb.Fill = Theme.TextOnAccent;
+        _thumb.Stroke = Theme.PanelBorder;
+        _valueText.Foreground = Theme.Text;
+        InvalidateVisual();
     }
 
     private void SetFrom(double x)

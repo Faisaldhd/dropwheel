@@ -29,7 +29,7 @@ internal static class AudioRunner
         CancellationToken ct)
     {
         var log = new StringBuilder();
-        await ProcessRunner.RunAsync(
+        await RunProcessAsync(
             ffmpeg,
             AudioLoudness.MeasureArguments(path, target),
             ct,
@@ -51,7 +51,7 @@ internal static class AudioRunner
         try
         {
             var pcm = Path.Combine(directory, "waveform.pcm");
-            await ProcessRunner.RunAsync(ffmpeg, AudioTrim.WaveformArguments(path, pcm), ct).ConfigureAwait(false);
+            await RunProcessAsync(ffmpeg, AudioTrim.WaveformArguments(path, pcm), ct).ConfigureAwait(false);
 
             var length = new FileInfo(pcm).Length;
             var duration = AudioTrim.PcmDuration(length);
@@ -87,7 +87,7 @@ internal static class AudioRunner
         CancellationToken ct)
     {
         var log = new StringBuilder();
-        await ProcessRunner.RunAsync(
+        await RunProcessAsync(
             ffmpeg,
             AudioTrim.DetectSilenceArguments(path),
             ct,
@@ -114,7 +114,7 @@ internal static class AudioRunner
             outputDirectory,
             $"{item.BaseName} {T("tool.audionormalize.suffix")}",
             format,
-            tmp => ProcessRunner.RunAsync(
+            tmp => RunProcessAsync(
                 ffmpeg,
                 AudioLoudness.ApplyArguments(item.Path, tmp, target, measurement, encoder),
                 ct));
@@ -134,7 +134,7 @@ internal static class AudioRunner
             outputDirectory,
             $"{item.BaseName} {T("tool.audiotrim.suffix")}",
             format,
-            tmp => ProcessRunner.RunAsync(ffmpeg, AudioTrim.TrimArguments(item.Path, tmp, range, encoder), ct));
+            tmp => RunProcessAsync(ffmpeg, AudioTrim.TrimArguments(item.Path, tmp, range, encoder), ct));
     }
 
     /// <summary>
@@ -166,5 +166,27 @@ internal static class AudioRunner
             || text.Contains("does not contain any stream", StringComparison.OrdinalIgnoreCase)
             ? T(noAudioKey)
             : text;
+    }
+
+    /// <summary>
+    /// Runs one FFmpeg command. On cancellation the process tree is already killed by
+    /// <see cref="ProcessRunner"/>; the short pause lets Windows release the output file before
+    /// <see cref="OutputPaths.ProduceAsync"/> deletes its temporary file, so a cancelled run leaves nothing.
+    /// </summary>
+    private static async Task RunProcessAsync(
+        string ffmpeg,
+        IEnumerable<string> arguments,
+        CancellationToken ct,
+        Action<string>? onStdErr = null)
+    {
+        try
+        {
+            await ProcessRunner.RunAsync(ffmpeg, arguments, ct, onStdErr).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            await Task.Delay(400, CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
     }
 }

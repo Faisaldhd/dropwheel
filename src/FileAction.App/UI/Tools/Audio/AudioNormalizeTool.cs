@@ -133,7 +133,12 @@ internal sealed class AudioNormalizeView
         _root = root;
 
         _status.Text = T("tool.audionormalize.analyzing");
-        root.Unloaded += (_, _) => Cancel();
+        root.Loaded += (_, _) => AudioTheme.Watch(root);
+        root.Unloaded += (_, _) =>
+        {
+            AudioTheme.Unwatch(root);
+            Cancel();
+        };
         _ready.TrySetResult(null);
         _ = LoadWaveformAsync();
         StartAnalysis();

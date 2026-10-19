@@ -10,6 +10,7 @@ internal sealed class AudioCheckBox : Border
 {
     private readonly Border _box;
     private readonly TextBlock _check;
+    private readonly TextBlock _label;
     private bool _checked;
 
     public AudioCheckBox(string text, bool isChecked)
@@ -38,7 +39,7 @@ internal sealed class AudioCheckBox : Border
             VerticalAlignment = VerticalAlignment.Center,
             Child = _check,
         };
-        var label = new TextBlock
+        _label = new TextBlock
         {
             Text = text,
             FontSize = 12.5,
@@ -49,7 +50,7 @@ internal sealed class AudioCheckBox : Border
         };
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         row.Children.Add(_box);
-        row.Children.Add(label);
+        row.Children.Add(_label);
         Child = row;
 
         MouseLeftButtonUp += (_, e) =>
@@ -82,6 +83,14 @@ internal sealed class AudioCheckBox : Border
     public void SetChecked(bool value)
     {
         _checked = value;
+        Paint();
+    }
+
+    /// <summary>Re-reads the shared palette after Windows switched light/dark.</summary>
+    public void RefreshTheme()
+    {
+        _label.Foreground = Theme.Text;
+        _check.Foreground = Theme.TextOnAccent;
         Paint();
     }
 

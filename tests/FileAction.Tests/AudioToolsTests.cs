@@ -606,4 +606,48 @@ public class AudioToolsTests
             .Select(match => match.Groups[1].Value)
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal));
+
+    /// <summary>
+    /// The audio tools may only paint with <see cref="Theme"/> brushes; the two content colours (the orange
+    /// trim handles and the waveform dimming) are allowed once, in AudioTheme.cs.
+    /// </summary>
+    [Fact]
+    public void Audio_tool_sources_have_no_hard_coded_colours_outside_AudioTheme()
+    {
+        var folder = Path.Combine(RepoRoot(), "src", "FileAction.App", "UI", "Tools", "Audio");
+        Assert.True(Directory.Exists(folder), folder);
+        var files = Directory.GetFiles(folder, "*.cs");
+        Assert.NotEmpty(files);
+
+        var forbidden = new Regex(@"Color\.From(Argb|Rgb|ScRgb)|new SolidColorBrush|Brushes\.(?!Transparent)");
+        var offenders = new List<string>();
+        foreach (var file in files)
+        {
+            if (string.Equals(Path.GetFileName(file), "AudioTheme.cs", StringComparison.Ordinal))
+                continue;
+
+            var lineNumber = 0;
+            foreach (var line in File.ReadLines(file))
+            {
+                lineNumber++;
+                if (forbidden.IsMatch(line))
+                    offenders.Add($"{Path.GetFileName(file)}:{lineNumber}: {line.Trim()}");
+            }
+        }
+
+        Assert.True(
+            offenders.Count == 0,
+            "Hard-coded colours outside AudioTheme:"
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, offenders));
+    }
+
+    private static string RepoRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "FileAction.sln")))
+            directory = directory.Parent;
+        return directory?.FullName
+            ?? throw new DirectoryNotFoundException("FileAction.sln not found above the test output folder.");
+    }
 }

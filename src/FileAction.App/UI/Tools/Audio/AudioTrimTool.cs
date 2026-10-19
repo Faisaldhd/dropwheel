@@ -157,7 +157,12 @@ internal sealed class AudioTrimView
         root.Children.Add(bottom);
 
         _status.Text = T("tool.audiotrim.analyzing");
-        root.Unloaded += (_, _) => Cancel();
+        root.Loaded += (_, _) => AudioTheme.Watch(root);
+        root.Unloaded += (_, _) =>
+        {
+            AudioTheme.Unwatch(root);
+            Cancel();
+        };
         _ready.TrySetResult(null);
         _ = AnalyzeAsync();
         return new ToolContent(root, Reset, ApplyAsync, _ready.Task, () => Task.CompletedTask);
