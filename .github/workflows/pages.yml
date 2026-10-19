@@ -1,0 +1,38 @@
+name: Pages
+
+# The download site is a static folder (docs/site). A branch source can only publish "/" or "/docs",
+# so GitHub Actions uploads exactly docs/site and deploys it to https://faisaldhd.github.io/dropwheel/.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy download page
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Upload docs/site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
