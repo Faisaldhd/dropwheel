@@ -13,7 +13,7 @@ internal static class ShellIntegration
     private const string ValueName = "DropWheel";
     private static readonly string[] MenuRoots = [@"Software\Classes\*\shell\DropWheel", @"Software\Classes\Directory\shell\DropWheel"];
 
-    private static string Exe => Environment.ProcessPath ?? throw new InvalidOperationException(T("Neznámá cesta k aplikaci.", "Unknown application path."));
+    private static string Exe => Environment.ProcessPath ?? throw new InvalidOperationException(T("error.shell.unknownAppPath"));
 
     public static bool IsAutostartEnabled
     {

@@ -58,7 +58,7 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
 
         _window ??= new JobsWindow();
         using var cts = new CancellationTokenSource();
-        var title = op.Wheel == WheelKind.Convert && op.Label.ToUpperInvariant() == op.Label ? T($"Převod na {op.Label}", $"Convert to {op.Label}") : op.Label;
+        var title = op.Wheel == WheelKind.Convert && op.Label.ToUpperInvariant() == op.Label ? T("job.title.convertTo", op.Label) : op.Label;
         var detail = items.Count == 1 ? Bidi.Value(items[0].Name) : Items(items.Count);
         var card = _window.Add(title, detail, iconPath: items[0].Path, cancel: () =>
         {
@@ -119,8 +119,7 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
             var size = string.Join(" + ", missing.Select(t => Bidi.Value(ToolInstaller.DownloadSize(t))));
             var owner = ForegroundHelper.Host();
             var answer = Dialogs.Show(owner,
-                T($"Pro tento převod je potřeba {names} (stažení {size}). Stáhnout teď? Stačí jednou.",
-                  $"This conversion needs {names} ({size} download). Download it now? It's a one-time step."),
+                T("job.download.prompt", names, size),
                 "DropWheel", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
             owner.Close();
             if (answer != System.Windows.MessageBoxResult.Yes)
@@ -133,7 +132,7 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
             using var cts = new CancellationTokenSource();
             var toolName = Bidi.Value(ToolLocator.DisplayName(tool));
             var toolSize = Bidi.Value(ToolInstaller.DownloadSize(tool));
-            var card = _window.Add(T($"Stahuji {toolName}", $"Downloading {toolName}"), toolSize, () =>
+            var card = _window.Add(T("job.download.downloading", toolName), toolSize, () =>
             {
                 try
                 {
@@ -147,7 +146,7 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
             {
                 await ToolInstaller.InstallAsync(tool, new Progress<double>(card.Report), cts.Token);
                 tools.Refresh();
-                card.Complete([], null, T("Připraveno, už se nebude stahovat znovu.", "Ready; it won't be downloaded again."));
+                card.Complete([], null, T("job.download.ready"));
             }
             catch (OperationCanceledException)
             {
@@ -180,9 +179,9 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
     private static string Friendly(Exception ex) => ex switch
     {
         ConversionException => ex.Message,
-        UnauthorizedAccessException => T("Do cílové složky nelze zapisovat. Zkuste v nastavení zvolit jinou výstupní složku.", "Cannot write to the target folder. Choose another output folder in Settings."),
-        System.IO.IOException => T($"Chyba souboru: {ex.Message}", $"File error: {ex.Message}"),
-        ImageMagick.MagickException => T($"Obrázek se nepodařilo zpracovat: {ex.Message}", $"Could not process the image: {ex.Message}"),
+        UnauthorizedAccessException => T("error.output.notWritable"),
+        System.IO.IOException => T("error.file", ex.Message),
+        ImageMagick.MagickException => T("error.image.process", ex.Message),
         _ => $"{ex.GetType().Name}: {ex.Message}",
     };
 }

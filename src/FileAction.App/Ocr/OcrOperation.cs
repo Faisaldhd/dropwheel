@@ -26,7 +26,7 @@ internal sealed class OcrOperation : Operation
     private static bool? _available;
 
     public OcrOperation()
-        : base("tools.ocr", WheelKind.Tools, T("Text z obrÃ¡zku", "Extract text"), Glyphs.Text, "OCR")
+        : base("tools.ocr", WheelKind.Tools, T("action.ocr.label"), Glyphs.Text, "OCR")
     {
     }
 
@@ -58,9 +58,7 @@ internal sealed class OcrOperation : Operation
     {
         var engine = OcrEngine.TryCreateFromUserProfileLanguages()
             ?? OcrEngine.AvailableRecognizerLanguages.Select(OcrEngine.TryCreateFromLanguage).FirstOrDefault(e => e is not null)
-            ?? throw new ConversionException(T(
-                "Windows nemÃ¡ nainstalovanÃ© rozpoznÃ¡vÃ¡nÃ­ textu. PÅ™idejte jazyk v NastavenÃ­ â†’ ÄŒas a jazyk â†’ Jazyk a oblast.",
-                "Windows has no text recognition installed. Add a language in Settings â†’ Time & language â†’ Language & region."));
+            ?? throw new ConversionException(T("error.ocr.noLanguage"));
 
         var outputs = new List<string>();
         var all = new StringBuilder();
@@ -85,9 +83,9 @@ internal sealed class OcrOperation : Operation
                     ctx.Progress.Report((i + (p + 1.0) / pages.Count) / items.Count);
                 }
                 if (text.Length == 0)
-                    throw new ConversionException(T("V souboru se nenaÅ¡el Å¾Ã¡dnÃ½ text.", "No text was found in the file."));
+                    throw new ConversionException(T("error.ocr.noText"));
 
-                outputs.Add(await OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), $"{item.BaseName} ({T("text", "text")})", "txt",
+                outputs.Add(await OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), $"{item.BaseName} ({T("ocr.outputSuffix")})", "txt",
                     tmp => File.WriteAllTextAsync(tmp, text.ToString(), new UTF8Encoding(false), ctx.CancellationToken)));
                 if (all.Length > 0)
                     all.Append("\n\n");
@@ -100,7 +98,7 @@ internal sealed class OcrOperation : Operation
         }
 
         CopyToClipboard?.Invoke(all.ToString());
-        return new OperationResult(outputs, Note: T("Text je i ve schrÃ¡nce.", "The text is also on the clipboard."));
+        return new OperationResult(outputs, Note: T("ocr.copied"));
     }
 
     private static IReadOnlyList<string> PagesOf(FileItem item, string temp, OperationContext ctx)

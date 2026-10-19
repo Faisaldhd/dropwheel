@@ -25,7 +25,7 @@ internal static class ExplorerSelection
                 return Clipboard.GetFileDropList().Cast<string>().Where(p => File.Exists(p) || Directory.Exists(p)).ToList();
             if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } image)
             {
-                var name = Core.Loc.T("Snímek obrazovky", "Screenshot") + $" {DateTime.Now:yyyy-MM-dd HHmmss}";
+                var name = Core.Loc.T("app.screenshot.defaultName") + $" {DateTime.Now:yyyy-MM-dd HHmmss}";
                 var target = Core.OutputPaths.Unique(KnownFolders.Incoming, name, "png");
                 Wheel.DropContent.SavePng(image, target);
                 return [target];

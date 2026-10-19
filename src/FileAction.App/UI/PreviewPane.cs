@@ -209,7 +209,7 @@ internal sealed class PreviewPane : UserControl
         if (_ffmpeg is null)
         {
             _strip.Visibility = Visibility.Collapsed;
-            _caption.Text = T("Náhled potřebuje FFmpeg", "Preview needs FFmpeg");
+            _caption.Text = T("preview.needsFfmpeg");
             Visibility = Visibility.Visible;
             return;
         }
@@ -238,12 +238,12 @@ internal sealed class PreviewPane : UserControl
             {
                 var seconds = duration.Value;
                 var formatted = Bidi.Value(FormatDuration(seconds));
-                caption = T($"Délka {formatted}", $"Duration {formatted}");
+                caption = T("preview.duration", formatted);
                 times = [seconds * 0.25, seconds * 0.5, seconds * 0.75, seconds * 0.95];
             }
             else
             {
-                caption = T("Délka neznámá", "Duration unknown");
+                caption = T("preview.durationUnknown");
                 times = [2, 4, 6, 8]; // a guess; frames past the end simply do not appear
             }
             await Ui(() => _caption.Text = caption);

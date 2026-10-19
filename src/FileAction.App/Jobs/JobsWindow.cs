@@ -24,7 +24,7 @@ internal sealed class JobsWindow : Window
     public JobsWindow()
     {
         UiSetup.Configure(this);
-        Title = T("DropWheel – průběh", "DropWheel – progress");
+        Title = T("jobs.title");
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -72,7 +72,7 @@ internal sealed class JobsWindow : Window
     private void ApplyLanguage()
     {
         FlowDirection = LanguageManager.FlowDirection;
-        Title = T("DropWheel – průběh", "DropWheel – progress");
+        Title = T("jobs.title");
         foreach (var card in _cards.Children.OfType<JobCard>().ToList())
             card.ApplyLanguage();
         PlaceInCorner();
@@ -147,7 +147,7 @@ internal sealed class JobCard : Border
         StartPulse();
         _status = new TextBlock { Foreground = Theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
         _buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
-        _cancelButton = UI.Controls.Button(T("Zrušit", "Cancel"), () => _cancel());
+        _cancelButton = UI.Controls.Button(T("action.cancel"), () => _cancel());
         _buttons.Children.Add(_cancelButton);
 
         var close = new TextBlock
@@ -159,7 +159,7 @@ internal sealed class JobCard : Border
             Padding = new Thickness(6),
             Cursor = Cursors.Hand,
             VerticalAlignment = VerticalAlignment.Top,
-            ToolTip = UiSetup.Tip(T("Zavřít", "Close")),
+            ToolTip = UiSetup.Tip(T("action.close")),
         };
         close.MouseLeftButtonUp += (_, _) =>
         {
@@ -205,7 +205,7 @@ internal sealed class JobCard : Border
     public void ApplyLanguage()
     {
         FlowDirection = LanguageManager.FlowDirection;
-        UI.Controls.SetText(_cancelButton, T("Zrušit", "Cancel"));
+        UI.Controls.SetText(_cancelButton, T("action.cancel"));
     }
 
     private void StartPulse()
@@ -242,9 +242,9 @@ internal sealed class JobCard : Border
         _status.Foreground = warning is null ? Theme.Muted : Theme.Error;
         _status.Text = warning ?? outputs.Count switch
         {
-            0 => note ?? T("Hotovo", "Done"),
-            1 => T("Hotovo: ", "Done: ") + Bidi.Value(System.IO.Path.GetFileName(outputs[0])),
-            _ => T($"Hotovo: {Bidi.Number(outputs.Count)} výstupů", $"Done: {Bidi.Number(outputs.Count)} outputs"),
+            0 => note ?? T("job.done"),
+            1 => T("job.donePrefix") + Bidi.Value(System.IO.Path.GetFileName(outputs[0])),
+            _ => T("job.doneCount.other", Bidi.Number(outputs.Count)),
         };
         if (warning is null && note is not null && outputs.Count > 0)
             _status.Text += Environment.NewLine + note;
@@ -253,8 +253,8 @@ internal sealed class JobCard : Border
         {
             var first = outputs[0];
             if (File.Exists(first) && outputs.Count == 1)
-                AddButton(UI.Controls.Button(T("Otevřít", "Open"), () => Shell(first), primary: true));
-            AddButton(UI.Controls.Button(T("Zobrazit ve složce", "Show in folder"), () => Reveal(first), glyph: Glyphs.Folder));
+                AddButton(UI.Controls.Button(T("action.open"), () => Shell(first), primary: true));
+            AddButton(UI.Controls.Button(T("action.showInFolder"), () => Reveal(first), glyph: Glyphs.Folder));
         }
         if (warning is null)
             CloseLater(TimeSpan.FromSeconds(8));
@@ -269,7 +269,7 @@ internal sealed class JobCard : Border
         _status.Foreground = Theme.Error;
         _status.Text = message;
         _buttons.Children.Clear();
-        AddButton(UI.Controls.Button(T("Kopírovat chybu", "Copy error"), () =>
+        AddButton(UI.Controls.Button(T("action.copyError"), () =>
         {
             try
             {

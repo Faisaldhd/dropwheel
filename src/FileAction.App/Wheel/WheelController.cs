@@ -136,9 +136,8 @@ internal sealed class WheelController
         var paths = ExplorerSelection.Get(Win32.GetForegroundWindow());
         if (paths.Count == 0)
         {
-            Notifications.Show(T("Nic není vybráno", "Nothing selected"),
-                T("Vyberte soubory v Průzkumníku, zkopírujte je (Ctrl+C) nebo pořiďte snímek obrazovky (Win+Shift+S) a stiskněte zkratku znovu.",
-                  "Select files in File Explorer, copy them (Ctrl+C) or take a screenshot (Win+Shift+S), then press the shortcut again."));
+            Notifications.Show(T("error.selection.none.title"),
+                T("error.selection.none.detail"));
             return;
         }
         OpenFor(paths, ExplorerSelection.CursorOrCenter());
@@ -150,8 +149,8 @@ internal sealed class WheelController
         var paths = ExplorerSelection.FromClipboard();
         if (paths.Count == 0)
         {
-            Notifications.Show(T("Schránka je prázdná", "The clipboard is empty"),
-                T("Zkopírujte soubory nebo obrázek, třeba snímek obrazovky (Win+Shift+S).", "Copy files or an image, e.g. a screenshot (Win+Shift+S)."));
+            Notifications.Show(T("error.clipboard.empty.title"),
+                T("error.clipboard.empty.detail"));
             return;
         }
         OpenFor(paths, ExplorerSelection.CursorOrCenter());

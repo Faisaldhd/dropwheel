@@ -182,7 +182,7 @@ internal sealed record DropContent(IReadOnlyList<FileItem> Items, Func<Task>? Pr
         var hasPng = data.GetDataPresent("PNG");
         if (!hasPng && !data.GetDataPresent(DataFormats.Bitmap))
             return null;
-        var name = T("Obrázek", "Image") + $" {DateTime.Now:yyyy-MM-dd HHmmss}.png";
+        var name = Loc.T("fileType.image") + $" {DateTime.Now:yyyy-MM-dd HHmmss}.png";
         if (!materialize)
             return new FileItem(Path.Combine(Path.GetTempPath(), name));
         var target = Target(name);
@@ -260,8 +260,6 @@ internal sealed record DropContent(IReadOnlyList<FileItem> Items, Func<Task>? Pr
         File.Copy(path, target);
         return target;
     }
-
-    private static string T(string cs, string en) => Loc.T(cs, en);
 
     private static string Target(string name) =>
         OutputPaths.Unique(KnownFolders.Incoming, Path.GetFileNameWithoutExtension(name), Path.GetExtension(name).TrimStart('.'));

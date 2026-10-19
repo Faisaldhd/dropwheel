@@ -30,7 +30,7 @@ internal sealed class ShelfWindow : Window
     {
         Theme.Refresh();
         UiSetup.Configure(this);
-        Title = T("Plovoucí panel", "Floating shelf");
+        Title = T("shelf.title");
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -44,7 +44,7 @@ internal sealed class ShelfWindow : Window
         FontFamily = Theme.UiFont;
 
         _header = new TextBlock { Foreground = Theme.Text, FontFamily = Theme.DisplayFont, FontWeight = FontWeights.SemiBold, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
-        _close = IconButton("\uE711", T("Zavřít", "Close"));
+        _close = IconButton("\uE711", T("action.close"));
         _close.Click += (_, _) => Close();
         var header = new DockPanel { Margin = new Thickness(14, 10, 8, 8), Background = Brushes.Transparent, Cursor = Cursors.SizeAll };
         DockPanel.SetDock(_close, Dock.Right);
@@ -90,7 +90,7 @@ internal sealed class ShelfWindow : Window
 
         _hint = new TextBlock
         {
-            Text = T("Táhněte položky ven, nebo sem přidejte další.", "Drag items out, or drop more here."),
+            Text = T("shelf.emptyHint"),
             Foreground = Theme.Muted,
             FontSize = 11,
             TextWrapping = TextWrapping.Wrap,
@@ -152,10 +152,10 @@ internal sealed class ShelfWindow : Window
     private void Relocalize()
     {
         FlowDirection = LanguageManager.FlowDirection;
-        Title = T("Plovoucí panel", "Floating shelf");
+        Title = T("shelf.title");
         UpdateHeader();
-        _hint.Text = T("Táhněte položky ven, nebo sem přidejte další.", "Drag items out, or drop more here.");
-        _close.ToolTip = UiSetup.Tip(T("Zavřít", "Close"));
+        _hint.Text = T("shelf.emptyHint");
+        _close.ToolTip = UiSetup.Tip(T("action.close"));
         // Rebuild the rows so the file-name converter runs again with the new isolate setting.
         _list.ItemTemplate = BuildTemplate();
         _list.ItemsSource = Array.Empty<string>();
@@ -181,7 +181,7 @@ internal sealed class ShelfWindow : Window
     private void UpdateHeader()
     {
         var n = _paths.Count;
-        _header.Text = n == 0 ? T("Prázdný panel", "Empty shelf") : Items(n);
+        _header.Text = n == 0 ? T("shelf.empty") : Items(n);
     }
 
     private void OnListMouseMove(object sender, MouseEventArgs e)

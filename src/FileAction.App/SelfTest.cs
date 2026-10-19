@@ -75,7 +75,6 @@ internal static class SelfTest
         var rtl = language == UiLanguage.Arabic;
         // Arabic text arrives with the string tables; until then the Arabic variant shows the same
         // English labels with a real RightToLeft layout, which is exactly what this preview checks.
-        string N(string cs, string en) => en;
         var settings = new AppSettings { Language = language };
         var tools = new ToolLocator();
         var core = WheelController.BuildOperations();
@@ -85,14 +84,14 @@ internal static class SelfTest
 
         var samples = new (string Name, WheelMode Mode, WheelKind Wheel, string[] Files, int Highlight)[]
         {
-            ("wheel-image-convert", WheelMode.Drag, WheelKind.Convert, [N(@"C:\Fotky\dovolená.jpg", @"C:\Photos\vacation.jpg")], 1),
-            ("wheel-image-tools", WheelMode.Click, WheelKind.Tools, [N(@"C:\Fotky\dovolená.jpg", @"C:\Photos\vacation.jpg")], 0),
-            ("wheel-video-convert", WheelMode.Drag, WheelKind.Convert, [N(@"C:\Videa\klip.mov", @"C:\Videos\clip.mov")], 0),
-            ("wheel-video-tools", WheelMode.Drag, WheelKind.Tools, [N(@"C:\Videa\klip.mov", @"C:\Videos\clip.mov")], 3),
-            ("wheel-pdf-convert", WheelMode.Drag, WheelKind.Convert, [N(@"C:\Dokumenty\smlouva.pdf", @"C:\Documents\contract.pdf")], 2),
+            ("wheel-image-convert", WheelMode.Drag, WheelKind.Convert, [@"C:\Photos\vacation.jpg"], 1),
+            ("wheel-image-tools", WheelMode.Click, WheelKind.Tools, [@"C:\Photos\vacation.jpg"], 0),
+            ("wheel-video-convert", WheelMode.Drag, WheelKind.Convert, [@"C:\Videos\clip.mov"], 0),
+            ("wheel-video-tools", WheelMode.Drag, WheelKind.Tools, [@"C:\Videos\clip.mov"], 3),
+            ("wheel-pdf-convert", WheelMode.Drag, WheelKind.Convert, [@"C:\Documents\contract.pdf"], 2),
             ("wheel-pdf-tools", WheelMode.Click, WheelKind.Tools, [@"C:\a.pdf", @"C:\b.pdf"], 0),
-            ("wheel-sheet-convert", WheelMode.Drag, WheelKind.Convert, [N(@"C:\Data\tabulka.xlsx", @"C:\Data\sales.xlsx")], -1),
-            ("wheel-actions", WheelMode.Drag, WheelKind.Actions, [N(@"C:\Fotky\dovolená.jpg", @"C:\Photos\vacation.jpg")], 4),
+            ("wheel-sheet-convert", WheelMode.Drag, WheelKind.Convert, [@"C:\Data\sales.xlsx"], -1),
+            ("wheel-actions", WheelMode.Drag, WheelKind.Actions, [@"C:\Photos\vacation.jpg"], 4),
             ("wheel-waiting-for-drop", WheelMode.Drag, WheelKind.Convert, [], -1),
         };
         foreach (var s in samples)
@@ -113,7 +112,7 @@ internal static class SelfTest
         log.Add($"ok {Path.GetFileName(outDir)}/settings");
 
         var shelf = ShelfWindow.CreateForPreview(
-            new[] { N(@"C:\Fotky\dovolená.jpg", @"C:\Photos\vacation.jpg"), @"C:\Documents\contract.pdf" });
+            new[] { @"C:\Photos\vacation.jpg", @"C:\Documents\contract.pdf" });
         Check(shelf.FlowDirection == (rtl ? System.Windows.FlowDirection.RightToLeft : System.Windows.FlowDirection.LeftToRight),
             "shelf flow direction");
         SaveWindow(shelf, Path.Combine(outDir, "shelf.png"), 290, desktop: true);
@@ -121,10 +120,10 @@ internal static class SelfTest
         log.Add($"ok {Path.GetFileName(outDir)}/shelf");
 
         var jobs = new JobsWindow();
-        var running = jobs.Add(N("Převod na MP4", "Convert to MP4"), N("klip.mov", "clip.mov"), () => { }, @"C:\x.mov");
+        var running = jobs.Add("Convert to MP4", "clip.mov", () => { }, @"C:\x.mov");
         running.Report(0.42);
-        jobs.Add(N("Komprimovat", "Compress"), N("dovolená.jpg", "vacation.jpg"), () => { }, @"C:\x.jpg").Complete([N(@"C:\Fotky\dovolená (komprimováno).jpg", @"C:\Photos\vacation (compressed).jpg")], null);
-        jobs.Add(N("Převod na DOCX", "Convert to DOCX"), N("smlouva.pdf", "contract.pdf"), () => { }, @"C:\x.pdf").Fail(N("Chybí nástroj Pandoc. Nainstalujte ho příkazem: ", "Pandoc is missing. Install it with: ") + "winget install JohnMacFarlane.Pandoc");
+        jobs.Add("Compress", "vacation.jpg", () => { }, @"C:\x.jpg").Complete([@"C:\Photos\vacation (compressed).jpg"], null);
+        jobs.Add("Convert to DOCX", "contract.pdf", () => { }, @"C:\x.pdf").Fail("Pandoc is missing. Install it with: " + "winget install JohnMacFarlane.Pandoc");
         SaveWindow(jobs, Path.Combine(outDir, "jobs.png"), 380, desktop: true);
         jobs.Close();
         log.Add($"ok {Path.GetFileName(outDir)}/jobs");
@@ -138,7 +137,7 @@ internal static class SelfTest
         log.Add($"ok {Path.GetFileName(outDir)}/wheel-editor");
 
         // Customised wheel and the "repeat last" view.
-        var photo = new List<FileItem> { new(N(@"C:\Fotky\dovolená.jpg", @"C:\Photos\vacation.jpg")) };
+        var photo = new List<FileItem> { new(@"C:\Photos\vacation.jpg") };
         IReadOnlyList<Operation> Arranged(WheelKind wheel, IReadOnlyList<FileItem> items) =>
             WheelLayout.Arrange(Source(wheel, items), settings.HiddenOperations, settings.FavoriteOperations);
         var custom = new WheelWindow(WheelMode.Drag, WheelKind.Convert, photo, settings, Arranged, (_, _, _) => { });
@@ -153,7 +152,7 @@ internal static class SelfTest
         log.Add($"ok {Path.GetFileName(outDir)}/wheel-repeat");
 
         var trim = core.Single(o => o.Id == "video.trim");
-        var dialog = new ParameterDialog(trim, [new FileItem(N(@"C:\Videa\klip.mov", @"C:\Videos\clip.mov"))]);
+        var dialog = new ParameterDialog(trim, [new FileItem(@"C:\Videos\clip.mov")]);
         Check(dialog.FlowDirection == (rtl ? System.Windows.FlowDirection.RightToLeft : System.Windows.FlowDirection.LeftToRight),
             "parameter dialog flow direction");
         SaveWindow(dialog, Path.Combine(outDir, "trim-dialog.png"), 360);
