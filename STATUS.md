@@ -34,9 +34,12 @@ NOW: 2.2.1 RELEASED (P0 hotfix) — v2.2.1 tagged at babf42b — release run 392
 - `SettingsWindow.Build` catches any failure, logs it and shows a readable error card instead of a black
   window; the header image is non-fatal.
 - `--diagnose` and the startup log report the loaded key count and the resolved Settings title.
-- CI now publishes the **exact untrimmed self-contained output the installer ships** and runs `--self-test`
-  on it with the real update service, asserting 300+ keys in English and Arabic. The static guard against
-  generic reflection-based `JsonSerializer` calls remains.
+- CI now runs **both `--self-test` and `--diagnose` on `release/selfcontained`** — the exact folder ISCC
+  packages and the portable zip copies. The self-test walks every Settings tab and every preview window and
+  fails if a rendered string is itself a string-table key; it also asserts 300+ keys in English and Arabic.
+  `--diagnose` must report a positive key count and a translated `settings.title`. The self-test profile is
+  removed before the installer smoke test. The static guard against generic reflection-based `JsonSerializer`
+  calls remains.
 - Version 2.2.1 in the csproj, installer and download page; upgrades in place with the same AppId and keeps
   settings.
 
@@ -44,10 +47,11 @@ NOW: 2.2.1 RELEASED (P0 hotfix) — v2.2.1 tagged at babf42b — release run 392
 
 | Check | Result |
 |---|---|
-| Code commit | `babf42b` (`merge(2.2.1)` — untrimmed) |
-| Main CI | [run 39266130795](https://github.com/Faisaldhd/dropwheel/actions/runs/39266130795) — build/test, self-contained UI, screenshots and package/installer smoke green |
+| Code commit | `babf42b` (`merge(2.2.1)` — untrimmed); exact-publish CI gate at `19864b1` |
+| Main CI | [run 39272822730](https://github.com/Faisaldhd/dropwheel/actions/runs/39272822730) — build/test, self-contained UI, exact-publish self-test/diagnose, package, zip, installer smoke and screenshots green |
+| Exact-publish gate | `shipped-self-test` artifact: `localization: 346 keys` in English, English-light, Arabic and Arabic-light; no raw-key failure. `diagnose` artifact: `strings: 346 keys, settings.title="DropWheel – settings"` |
 | Self-contained UI | **346 keys English, 346 Arabic**, all settings/wheel windows rendered with the real update service; `self-contained-self-test` artifact |
-| Shipped diagnose | `strings: 346 keys, settings.title="DropWheel – settings"` from the 2.2.1 untrimmed `--diagnose` artifact |
+| Shipped diagnose | `strings: 346 keys, settings.title="DropWheel – settings"` from the exact `release/selfcontained` `--diagnose` artifact (run 39272822730) |
 | Release | [v2.2.1](https://github.com/Faisaldhd/dropwheel/releases/tag/v2.2.1) — [run 39266161349](https://github.com/Faisaldhd/dropwheel/actions/runs/39266161349) green; **Latest** |
 | Setup | `DropWheel-2.2.1-Setup.exe` — 62,941,219 B (**60.03 MB**), product/file version **2.2.1** |
 | Setup SHA-256 | `307625314638e45792843b6b3709aee02a4d807671553ecced91bf7285b28067` (matches both setup names in `SHA256SUMS.txt`) |
