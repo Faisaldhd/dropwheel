@@ -520,6 +520,9 @@ internal sealed class AudioTrimView
                 throw new ConversionException(T("tool.audiotrim.error.range", Bidi.Value(MinimumTimeText)));
 
             StopPreview();
+            // Release the preview's handle before FFmpeg reads the same source (some codecs lock it).
+            if (_player.Source is not null)
+                _player.Close();
             _status.Text = T("tool.audiotrim.applying");
             var ffmpeg = AudioRunner.RequireFfmpeg(_tools);
             return await AudioRunner.TrimAsync(
