@@ -467,10 +467,20 @@ internal static class SelfTest
     /// <summary>Runs an async preparation to completion while the self-test keeps the UI thread alive.</summary>
     private static void Pump(Task task)
     {
-        var frame = new DispatcherFrame();
-        task.ContinueWith(_ => frame.Continue = false, TaskScheduler.FromCurrentSynchronizationContext());
-        Dispatcher.PushFrame(frame);
-        task.GetAwaiter().GetResult();
+        var previous = SynchronizationContext.Current;
+        if (previous is not DispatcherSynchronizationContext)
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        try
+        {
+            var frame = new DispatcherFrame();
+            task.ContinueWith(_ => frame.Continue = false, TaskScheduler.FromCurrentSynchronizationContext());
+            Dispatcher.PushFrame(frame);
+            task.GetAwaiter().GetResult();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
     }
 
     private static void SaveWindow(Window window, string file, double width, bool desktop = false)
