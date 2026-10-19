@@ -235,13 +235,15 @@ jobs:
           retention-days: 14
 
       - name: Diagnose report
+        continue-on-error: true
         shell: pwsh
         run: |
           # R-18: the report is what the owner sends back when the app misbehaves on a locked-down PC.
           # DropWheel is a GUI subsystem exe: "& exe" does not wait and leaves $LASTEXITCODE stale, so use
           # Start-Process -Wait and verify the report file instead of the shell's exit code.
           $process = Start-Process -FilePath release/DropWheel/DropWheel.exe `
-            -ArgumentList '--diagnose', (Join-Path $PWD 'release/diagnose.txt') -Wait -PassThru
+            -ArgumentList '--diagnose', (Join-Path $PWD 'release/diagnose.txt') -PassThru
+          if (-not $process.WaitForExit(90000)) { Write-Warning 'diagnose did not exit in 90 s'; try { $process.Kill($true) } catch { } }
           Write-Host "diagnose exit code: $($process.ExitCode)"
           if (-not (Test-Path release/diagnose.txt)) { throw "--diagnose wrote no report" }
           Get-Content release/diagnose.txt | Select-Object -First 40
