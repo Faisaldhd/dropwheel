@@ -2,8 +2,12 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
-    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <!-- Plain net10.0-windows on purpose: the app reaches the two WinRT features it needs (OCR and the
+         share sheet) through raw COM interop in Native\WinRt*.cs. Referencing a Windows SDK version here
+         would drag in Microsoft.Windows.SDK.NET.dll (23.7 MB) for those two calls only.
+         SupportedOSPlatformVersion must stay unset: with this TFM the target platform version is 7.0 and
+         the SDK rejects a higher floor (NETSDK1135). Windows 10 1809+ is enforced by the installer. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -18,7 +22,7 @@
     <StartupObject>FileAction.App.Program</StartupObject>
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <Version>2.0.0</Version>
-    <SatelliteResourceLanguages>cs;en</SatelliteResourceLanguages>
+    <SatelliteResourceLanguages>en;ar</SatelliteResourceLanguages>
     <!--
       Smaller download: trim only libraries marked as trim-safe (the .NET runtime, the Windows SDK projection…);
       WPF and our own code are kept whole. The UI self-test in CI runs conversions in the trimmed build.
@@ -26,7 +30,7 @@
     <!-- Explorer selection and Outlook drops use classic COM, which trimming turns off by default. -->
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <Product>DropWheel</Product>
-    <Description>Převod souborů přetažením na kruhové menu</Description>
+    <Description>Click-free file conversion on a radial wheel</Description>
     <!-- ThemeMode (Fluent) is still marked experimental. -->
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
   </PropertyGroup>
