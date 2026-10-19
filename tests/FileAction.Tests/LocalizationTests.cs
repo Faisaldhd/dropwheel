@@ -24,6 +24,8 @@ public class LocalizationTests
         "settings.language.system",
         "language.english",
         "language.arabic",
+        // R-15: a format name is the same in both languages.
+        "app.editor.group.pdf",
         "catalog.pdf.toPptx.subtitle",
         "catalog.pdf.toMd.subtitle",
         "catalog.pdf.toWord.subtitle",
