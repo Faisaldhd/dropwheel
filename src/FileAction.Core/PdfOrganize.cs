@@ -24,7 +24,24 @@ public static class PdfOrganize
 
     /// <summary>PDF pages only rotate in quarter turns.</summary>
     public static bool IsQuarterTurn(int degrees) => NormalizeRotation(degrees) % 90 == 0;
+
+    /// <summary>The width a page box occupies on screen once its /Rotate is applied.</summary>
+    public static double VisualWidth(PdfPageBox box, int rotation) =>
+        NormalizeRotation(rotation) % 180 == 90 ? box.Height : box.Width;
+
+    /// <summary>
+    /// The factor that makes this page as wide as <paramref name="targetWidth"/> when displayed. The height
+    /// follows the same factor, which is why pages scaled this way can still end up with different heights.
+    /// </summary>
+    public static double ScaleToWidth(PdfPageBox box, int rotation, double targetWidth)
+    {
+        var width = VisualWidth(box, rotation);
+        return width > 0 && targetWidth > 0 ? targetWidth / width : 1;
+    }
 }
+
+/// <summary>A page box in PDF points before /Rotate is applied (the MediaBox or the effective CropBox).</summary>
+public readonly record struct PdfPageBox(double Width, double Height);
 
 /// <summary>What one dropped file contributes to a merge.</summary>
 public enum PdfPlanKind
@@ -87,8 +104,9 @@ public sealed record PdfPlanValidation(IReadOnlyList<PdfPlanProblem> Problems)
 }
 
 /// <summary>
-/// The ordered files of a merge, seeded from the selection order. Reordering is drag-and-drop in the
-/// window; this type only owns the order and the validation. Reset restores the selection order.
+/// The ordered files of a merge. The list starts in the order the app received the files (Explorer's
+/// selection order when the shell provides it) and the window reorders it by drag or the up/down buttons.
+/// Reset restores that initial order. This type only owns the order and the validation.
 /// </summary>
 public sealed class PdfMergePlan
 {
@@ -110,6 +128,12 @@ public sealed class PdfMergePlan
 
     public PdfMergeSource this[int index] => _sources[index];
 
+    /// <summary>False for the first row: its up arrow is disabled.</summary>
+    public bool CanMoveUp(int index) => index > 0 && index < _sources.Count;
+
+    /// <summary>False for the last row: its down arrow is disabled.</summary>
+    public bool CanMoveDown(int index) => index >= 0 && index < _sources.Count - 1;
+
     /// <summary>Moves the file at <paramref name="from"/> so it ends up at <paramref name="to"/>.</summary>
     public bool Move(int from, int to)
     {
@@ -120,6 +144,12 @@ public sealed class PdfMergePlan
         _sources.Insert(to, source);
         return true;
     }
+
+    /// <summary>The up-arrow action; false on the first row.</summary>
+    public bool MoveUp(int index) => CanMoveUp(index) && Move(index, index - 1);
+
+    /// <summary>The down-arrow action; false on the last row.</summary>
+    public bool MoveDown(int index) => CanMoveDown(index) && Move(index, index + 1);
 
     /// <summary>Removes one file; the other files keep their order.</summary>
     public bool RemoveAt(int index)

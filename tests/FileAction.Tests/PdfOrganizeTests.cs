@@ -1,4 +1,6 @@
-﻿using FileAction.Core;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using FileAction.Core;
 using Xunit;
 
 namespace FileAction.Tests;
@@ -299,5 +301,183 @@ public class PdfOrganizeTests
         Assert.Equal(270, PdfOrganize.NormalizeRotation(-90));
         Assert.True(PdfOrganize.IsQuarterTurn(-90));
         Assert.False(PdfOrganize.IsQuarterTurn(45));
+    }
+
+    // ---------------------------------------------------------------- up/down arrows
+
+    [Fact]
+    public void Merge_arrows_are_disabled_at_the_first_and_last_row()
+    {
+        var plan = new PdfMergePlan([Pdf("a.pdf"), Pdf("b.pdf"), Pdf("c.pdf")]);
+
+        Assert.False(plan.CanMoveUp(0));
+        Assert.True(plan.CanMoveUp(1));
+        Assert.True(plan.CanMoveUp(2));
+
+        Assert.True(plan.CanMoveDown(0));
+        Assert.True(plan.CanMoveDown(1));
+        Assert.False(plan.CanMoveDown(2));
+
+        Assert.False(plan.CanMoveUp(-1));
+        Assert.False(plan.CanMoveDown(3));
+    }
+
+    [Fact]
+    public void Merge_a_single_file_has_both_arrows_disabled()
+    {
+        var plan = new PdfMergePlan([Pdf("only.pdf")]);
+
+        Assert.False(plan.CanMoveUp(0));
+        Assert.False(plan.CanMoveDown(0));
+        Assert.False(plan.MoveUp(0));
+        Assert.False(plan.MoveDown(0));
+    }
+
+    [Fact]
+    public void Merge_up_and_down_move_one_position()
+    {
+        var plan = new PdfMergePlan([Pdf("a.pdf"), Pdf("b.pdf"), Pdf("c.pdf")]);
+
+        Assert.True(plan.MoveUp(2));
+        Assert.Equal(new[] { "a.pdf", "c.pdf", "b.pdf" }, Names(plan));
+
+        Assert.True(plan.MoveDown(0));
+        Assert.Equal(new[] { "c.pdf", "a.pdf", "b.pdf" }, Names(plan));
+
+        Assert.False(plan.MoveUp(0));
+        Assert.False(plan.MoveDown(2));
+        Assert.Equal(new[] { "c.pdf", "a.pdf", "b.pdf" }, Names(plan));
+    }
+
+    // ---------------------------------------------------------------- same width
+
+    [Theory]
+    [InlineData(600, 800, 0, 600)]
+    [InlineData(600, 800, 90, 800)]
+    [InlineData(600, 800, 180, 600)]
+    [InlineData(600, 800, 270, 800)]
+    [InlineData(842, 595, 0, 842)]
+    [InlineData(842, 595, 90, 595)]
+    public void VisualWidth_follows_the_page_rotation(double width, double height, int rotation, double expected)
+    {
+        Assert.Equal(expected, PdfOrganize.VisualWidth(new PdfPageBox(width, height), rotation), 3);
+    }
+
+    [Fact]
+    public void ScaleToWidth_scales_both_dimensions_by_the_same_factor()
+    {
+        var portrait = new PdfPageBox(600, 800);
+
+        Assert.Equal(0.5, PdfOrganize.ScaleToWidth(portrait, 0, 300), 3);
+        Assert.Equal(400, portrait.Height * 0.5, 3);
+
+        var landscape = new PdfPageBox(800, 600);
+        Assert.Equal(0.5, PdfOrganize.ScaleToWidth(landscape, 0, 400), 3);
+        Assert.Equal(300, landscape.Height * 0.5, 3);
+    }
+
+    [Theory]
+    [InlineData(0, 800)]
+    [InlineData(600, 0)]
+    [InlineData(-10, 800)]
+    public void ScaleToWidth_leaves_a_page_without_a_width_alone(double width, double height)
+    {
+        Assert.Equal(1, PdfOrganize.ScaleToWidth(new PdfPageBox(width, height), 0, 300), 3);
+    }
+
+    // ---------------------------------------------------------------- strings
+
+    /// <summary>Every key the two PDF tools read, in one list so en and ar are checked together.</summary>
+    private static readonly string[] PdfToolKeys =
+    [
+        "tool.pdfmerge.label",
+        "tool.pdfmerge.title",
+        "tool.pdfmerge.subtitle",
+        "tool.pdfmerge.suffix",
+        "tool.pdfmerge.hint",
+        "tool.pdfmerge.remove",
+        "tool.pdfmerge.thumbFailed",
+        "tool.pdfmerge.error.plan",
+        "tool.pdfmerge.error.pdf",
+        "tool.pdfmerge.error.image",
+        "tool.pdfmerge.order",
+        "tool.pdfmerge.moveUp",
+        "tool.pdfmerge.moveDown",
+        "tool.pdfmerge.merge",
+        "tool.pdforganize.label",
+        "tool.pdforganize.title",
+        "tool.pdforganize.subtitle",
+        "tool.pdforganize.suffix",
+        "tool.pdforganize.hint",
+        "tool.pdforganize.rotate",
+        "tool.pdforganize.duplicate",
+        "tool.pdforganize.delete",
+        "tool.pdforganize.thumbFailed",
+        "tool.pdforganize.error.open",
+        "tool.pdforganize.error.plan",
+        "tool.pdforganize.pages",
+        "tool.pdforganize.resetOrder",
+        "tool.pdforganize.sameWidth",
+        "tool.pdforganize.sameWidthNote",
+        "tool.pdforganize.save",
+    ];
+
+    private static readonly Regex Placeholder = new(@"\{(\d+)\}", RegexOptions.Compiled);
+
+    [Fact]
+    public void Every_pdf_tool_key_exists_in_english_and_arabic_with_the_same_placeholders()
+    {
+        var (english, arabic) = LoadStringTables();
+
+        foreach (var key in PdfToolKeys)
+        {
+            Assert.True(english.ContainsKey(key), $"en.json is missing '{key}'.");
+            Assert.True(arabic.ContainsKey(key), $"ar.json is missing '{key}'.");
+            Assert.Equal(Placeholders(english[key]), Placeholders(arabic[key]));
+        }
+    }
+
+    [Fact]
+    public void The_pdf_tool_key_groups_contain_exactly_the_expected_keys()
+    {
+        var (english, _) = LoadStringTables();
+
+        var actual = english.Keys
+            .Where(key => key.StartsWith("tool.pdfmerge.", StringComparison.Ordinal)
+                || key.StartsWith("tool.pdforganize.", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(PdfToolKeys.Order(StringComparer.Ordinal).ToArray(), actual);
+    }
+
+    private static string[] Placeholders(string value) =>
+        Placeholder.Matches(value)
+            .Select(match => match.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+    private static (Dictionary<string, string> English, Dictionary<string, string> Arabic) LoadStringTables()
+    {
+        var strings = Path.Combine(RepoRoot(), "src", "FileAction.Core", "Strings");
+        return (Load(Path.Combine(strings, "en.json")), Load(Path.Combine(strings, "ar.json")));
+    }
+
+    private static Dictionary<string, string> Load(string path)
+    {
+        Assert.True(File.Exists(path), $"Missing string table: {path}");
+        var table = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path));
+        Assert.NotNull(table);
+        return table!;
+    }
+
+    private static string RepoRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "FileAction.sln")))
+            directory = directory.Parent;
+        return directory?.FullName
+            ?? throw new DirectoryNotFoundException("FileAction.sln not found above the test output folder.");
     }
 }

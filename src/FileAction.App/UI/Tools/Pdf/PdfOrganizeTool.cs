@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -9,9 +11,13 @@ using FileAction.Core;
 using FileAction.Core.Backends;
 using PdfDocument = PdfSharp.Pdf.PdfDocument;
 using PdfDocumentOpenMode = PdfSharp.Pdf.IO.PdfDocumentOpenMode;
+using PdfPage = PdfSharp.Pdf.PdfPage;
 using PdfReader = PdfSharp.Pdf.IO.PdfReader;
 using PdfReaderException = PdfSharp.Pdf.IO.PdfReaderException;
+using PdfRectangle = PdfSharp.Pdf.PdfRectangle;
 using WpfImage = System.Windows.Controls.Image;
+using XRect = PdfSharp.Drawing.XRect;
+using XUnit = PdfSharp.Drawing.XUnit;
 using static FileAction.Core.Loc;
 
 namespace FileAction.App.UI.Tools.Pdf;
@@ -79,14 +85,15 @@ internal sealed class PdfOrganizeView
     };
     private readonly TextBlock _summary = new()
     {
-        FontSize = 12,
-        Foreground = Theme.Muted,
+        FontSize = 13,
+        Foreground = Theme.Text,
         VerticalAlignment = VerticalAlignment.Center,
     };
 
     private PdfPagePlan? _plan;
     private Point _dragStart;
     private int _dragFrom = -1;
+    private bool _sameWidth;
 
     public PdfOrganizeView(FileItem item, DropTargets? targets)
     {
@@ -99,12 +106,12 @@ internal sealed class PdfOrganizeView
     public ToolContent Build()
     {
         var head = new DockPanel { LastChildFill = true, Margin = new Thickness(0, 0, 0, 10) };
-        var hint = Controls.Text(T("tool.pdforganize.hint"), 12, brush: Theme.Muted);
-        hint.TextWrapping = TextWrapping.Wrap;
-        hint.VerticalAlignment = VerticalAlignment.Center;
-        DockPanel.SetDock(_summary, Dock.Right);
+        _summary.ToolTip = T("tool.pdforganize.hint");
+        var resetOrder = Controls.Button(T("tool.pdforganize.resetOrder"), Reset);
+        resetOrder.VerticalAlignment = VerticalAlignment.Center;
+        DockPanel.SetDock(resetOrder, Dock.Right);
+        head.Children.Add(resetOrder);
         head.Children.Add(_summary);
-        head.Children.Add(hint);
 
         _grid.AllowDrop = true;
         _grid.Background = Brushes.Transparent;
@@ -136,16 +143,38 @@ internal sealed class PdfOrganizeView
             Content = content,
         };
 
+        var sameWidth = new CheckBox
+        {
+            Content = T("tool.pdforganize.sameWidth"),
+            Foreground = Theme.Text,
+            FontSize = 12,
+            IsChecked = false,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        sameWidth.Checked += (_, _) => _sameWidth = true;
+        sameWidth.Unchecked += (_, _) => _sameWidth = false;
+        var note = Controls.Text(T("tool.pdforganize.sameWidthNote"), 11, brush: Theme.Muted);
+        note.Margin = new Thickness(0, 2, 0, 0);
+        var footer = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+        footer.Children.Add(sameWidth);
+        footer.Children.Add(note);
+
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(head, 0);
         Grid.SetRow(scroll, 1);
+        Grid.SetRow(footer, 2);
         root.Children.Add(head);
         root.Children.Add(scroll);
+        root.Children.Add(footer);
 
         ShowStatus(T("tool.pdforganize.hint"));
-        return new ToolContent(root, Reset, ApplyAsync, Task.FromResult<MediaSize?>(null), ActivateAsync);
+        return new ToolContent(root, Reset, ApplyAsync, Task.FromResult<MediaSize?>(null), ActivateAsync)
+        {
+            ApplyLabel = T("tool.pdforganize.save"),
+        };
     }
 
     /// <summary>Reads the page count, then renders the page thumbnails one at a time.</summary>
@@ -215,7 +244,7 @@ internal sealed class PdfOrganizeView
         for (var position = 0; position < _plan.Count; position++)
             _grid.Children.Add(BuildCell(_plan.Pages[position], position));
 
-        _summary.Text = Loc.Items(_plan.Count);
+        _summary.Text = T("tool.pdforganize.pages", _plan.Count);
         _summary.Visibility = Visibility.Visible;
         HideStatus();
         foreach (var index in _thumbnails.Keys)
@@ -399,20 +428,22 @@ internal sealed class PdfOrganizeView
             throw new ConversionException(T("tool.pdforganize.error.plan"));
 
         var pages = _plan.Pages.ToList();
+        var sameWidth = _sameWidth;
         var directory = PdfToolOutput.DirectoryFor(_item, _targets);
         return await OutputPaths.ProduceAsync(directory, $"{_item.BaseName} {T("tool.pdforganize.suffix")}", "pdf",
-            temporary => Task.Run(() => PdfPageWriter.Write(_item.Path, pages, temporary)));
+            temporary => Task.Run(() => PdfPageWriter.Write(_item.Path, pages, temporary, sameWidth)));
     }
 }
 
 /// <summary>
 /// Writes an ordered page list from one PDF: the source is opened read-only once and every entry imports
 /// its page again, so a duplicated page becomes an independent page in the result. The source file is
-/// never modified.
+/// never modified. With <c>sameWidth</c> every page's content and boxes are scaled by one factor so the
+/// visual width matches the narrowest page; the heights keep that same factor and can still differ.
 /// </summary>
 internal static class PdfPageWriter
 {
-    public static void Write(string sourcePath, IReadOnlyList<PdfPageRef> pages, string output)
+    public static void Write(string sourcePath, IReadOnlyList<PdfPageRef> pages, string output, bool sameWidth)
     {
         PdfDocument source;
         try
@@ -434,7 +465,77 @@ internal static class PdfPageWriter
                 if (rotation != 0)
                     added.Rotate = rotation;
             }
+
+            if (sameWidth)
+                ScaleToNarrowest(result);
+
             result.Save(output);
         }
     }
+
+    /// <summary>Scales every page so its displayed width matches the narrowest page in the document.</summary>
+    private static void ScaleToNarrowest(PdfDocument document)
+    {
+        var boxes = new List<PdfPageBox>(document.PageCount);
+        var rotations = new List<int>(document.PageCount);
+        for (var index = 0; index < document.PageCount; index++)
+        {
+            boxes.Add(BoxOf(document.Pages[index]));
+            rotations.Add(document.Pages[index].Rotate);
+        }
+
+        var widths = boxes.Select((box, index) => PdfOrganize.VisualWidth(box, rotations[index])).ToList();
+        var target = widths.Where(width => width > 0).DefaultIfEmpty(0).Min();
+        if (target <= 0)
+            return;
+
+        for (var index = 0; index < document.PageCount; index++)
+        {
+            var scale = PdfOrganize.ScaleToWidth(boxes[index], rotations[index], target);
+            if (scale <= 0 || Math.Abs(scale - 1) < 0.0001)
+                continue;
+            ScalePage(document.Pages[index], scale);
+        }
+    }
+
+    /// <summary>The box a viewer shows: the crop box, or the media box when no crop box is set.</summary>
+    private static PdfPageBox BoxOf(PdfPage page)
+    {
+        var crop = page.EffectiveCropBoxReadOnly;
+        if (crop.Width > 0 && crop.Height > 0)
+            return new PdfPageBox(crop.Width, crop.Height);
+        return new PdfPageBox(page.Width.Point, page.Height.Point);
+    }
+
+    /// <summary>
+    /// Wraps the existing content in <c>q … cm … Q</c> so it draws at <paramref name="scale"/> of its old
+    /// size, then moves every page box by the same factor so viewers and printers agree.
+    /// </summary>
+    private static void ScalePage(PdfPage page, double scale)
+    {
+        var factor = scale.ToString("0.######", CultureInfo.InvariantCulture);
+        var prefix = page.Contents.PrependContent();
+        prefix.CreateStream(Encoding.ASCII.GetBytes($"q {factor} 0 0 {factor} 0 0 cm\n"));
+        var suffix = page.Contents.AppendContent();
+        suffix.CreateStream(Encoding.ASCII.GetBytes("\nQ\n"));
+
+        if (page.HasMediaBox)
+            page.MediaBox = Scaled(page.MediaBox, scale);
+        if (page.HasCropBox)
+            page.CropBox = Scaled(page.CropBox, scale);
+        if (!page.HasMediaBox && !page.HasCropBox)
+        {
+            page.Width = XUnit.FromPoint(page.Width.Point * scale);
+            page.Height = XUnit.FromPoint(page.Height.Point * scale);
+        }
+        if (page.HasTrimBox)
+            page.TrimBox = Scaled(page.TrimBox, scale);
+        if (page.HasArtBox)
+            page.ArtBox = Scaled(page.ArtBox, scale);
+        if (page.HasBleedBox)
+            page.BleedBox = Scaled(page.BleedBox, scale);
+    }
+
+    private static PdfRectangle Scaled(PdfRectangle box, double scale) =>
+        new(new XRect(box.X1 * scale, box.Y1 * scale, box.Width * scale, box.Height * scale));
 }

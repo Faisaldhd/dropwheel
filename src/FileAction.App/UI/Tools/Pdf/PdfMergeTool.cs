@@ -20,8 +20,14 @@ namespace FileAction.App.UI.Tools.Pdf;
 
 /// <summary>
 /// "Merge to PDF" on the Tools wheel: every dropped PDF contributes all of its pages and every dropped
-/// image contributes exactly one page. The rows are the order the pages will have; drag a row to move it
-/// and remove the ones that should not be included.
+/// image contributes exactly one page. The rows are the order the pages will have; drag a row or use its
+/// up/down arrows to move it and remove the ones that should not be included.
+/// <para>
+/// The initial order is the order the app received the files — Explorer's selection order when the shell
+/// provides it, which a drag or a context-menu selection normally does. Paths collected without a
+/// selection (for example from the clipboard) can instead arrive alphabetically; the up/down arrows and
+/// drag exist so the final order is always explicit.
+/// </para>
 /// </summary>
 internal sealed class PdfMergeTool : IToolWindowSpec
 {
@@ -90,12 +96,18 @@ internal sealed class PdfMergeView
     public ToolContent Build()
     {
         var head = new DockPanel { LastChildFill = true, Margin = new Thickness(0, 0, 0, 10) };
-        var hint = Controls.Text(T("tool.pdfmerge.hint"), 12, brush: Theme.Muted);
-        hint.TextWrapping = TextWrapping.Wrap;
-        hint.VerticalAlignment = VerticalAlignment.Center;
+        var title = new TextBlock
+        {
+            Text = T("tool.pdfmerge.order"),
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Theme.Text,
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = T("tool.pdfmerge.hint"),
+        };
         DockPanel.SetDock(_summary, Dock.Right);
         head.Children.Add(_summary);
-        head.Children.Add(hint);
+        head.Children.Add(title);
 
         var scroll = new ScrollViewer
         {
@@ -132,7 +144,10 @@ internal sealed class PdfMergeView
         root.Children.Add(scroll);
 
         Rebuild();
-        return new ToolContent(root, Reset, ApplyAsync, Task.FromResult<MediaSize?>(null), ActivateAsync);
+        return new ToolContent(root, Reset, ApplyAsync, Task.FromResult<MediaSize?>(null), ActivateAsync)
+        {
+            ApplyLabel = T("tool.pdfmerge.merge"),
+        };
     }
 
     /// <summary>Fills in the row thumbnails one by one; the window is usable while they load.</summary>
@@ -211,25 +226,40 @@ internal sealed class PdfMergeView
             },
         };
 
-        var (thumbnail, image, fallback) = PdfToolChrome.Thumbnail(50, 66);
+        var (thumbnail, image, fallback) = PdfToolChrome.Thumbnail(44, 58);
 
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 8, 0) };
-        text.Children.Add(new TextBlock
+        // The small type icon says PDF or image at a glance; the tile above is the page preview.
+        var icon = new TextBlock
+        {
+            Text = source.IsImage ? Glyphs.Photo : Glyphs.Document,
+            FontFamily = Theme.Icons,
+            FontSize = 14,
+            Foreground = Theme.Muted,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(10, 0, 8, 0),
+        };
+
+        var name = new TextBlock
         {
             Text = source.FileName,
             FontSize = 13,
             Foreground = Theme.Text,
             TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
-        });
-        text.Children.Add(new TextBlock
-        {
-            Text = Formats.Display(Formats.KeyOf(source.Path)),
-            FontSize = 11,
-            Foreground = Theme.Muted,
-            Margin = new Thickness(0, 2, 0, 0),
-        });
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0),
+        };
 
+        var up = PdfToolChrome.IconButton("\uE70E", T("tool.pdfmerge.moveUp"), () =>
+        {
+            _plan.MoveUp(index);
+            Rebuild();
+        }, enabled: _plan.CanMoveUp(index));
+        var down = PdfToolChrome.IconButton("\uE70D", T("tool.pdfmerge.moveDown"), () =>
+        {
+            _plan.MoveDown(index);
+            Rebuild();
+        }, enabled: _plan.CanMoveDown(index));
         var remove = PdfToolChrome.IconButton("\uE711", T("tool.pdfmerge.remove"), () =>
         {
             _plan.RemoveAt(index);
@@ -239,16 +269,27 @@ internal sealed class PdfMergeView
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(number, 0);
         Grid.SetColumn(thumbnail, 1);
-        Grid.SetColumn(text, 2);
-        Grid.SetColumn(remove, 3);
+        Grid.SetColumn(icon, 2);
+        Grid.SetColumn(name, 3);
+        Grid.SetColumn(up, 4);
+        Grid.SetColumn(down, 5);
+        Grid.SetColumn(remove, 6);
+        up.VerticalAlignment = VerticalAlignment.Center;
+        down.VerticalAlignment = VerticalAlignment.Center;
         remove.VerticalAlignment = VerticalAlignment.Center;
         grid.Children.Add(number);
         grid.Children.Add(thumbnail);
-        grid.Children.Add(text);
+        grid.Children.Add(icon);
+        grid.Children.Add(name);
+        grid.Children.Add(up);
+        grid.Children.Add(down);
         grid.Children.Add(remove);
 
         var row = new Border

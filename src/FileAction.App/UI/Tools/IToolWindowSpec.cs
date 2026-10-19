@@ -40,4 +40,11 @@ internal sealed record ToolContent(
     Action Reset,
     Func<Task<string?>> Apply,
     Task<MediaSize?> Ready,
-    Func<Task> Activate);
+    Func<Task> Activate)
+{
+    /// <summary>
+    /// Text for the primary bottom-right button. Null keeps the generic "Apply"; tools with a more
+    /// specific action (e.g. "Merge PDFs") set their own label here.
+    /// </summary>
+    public string? ApplyLabel { get; init; }
+}
