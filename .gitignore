@@ -21,3 +21,6 @@ obj/
 tools/
 tools/dotnet-sdk/
 scripts/_*
+
+# The floating-tool source folder is not the downloaded helper-tools folder.
+!src/FileAction.App/UI/Tools/

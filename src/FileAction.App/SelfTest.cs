@@ -5,13 +5,17 @@ using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
+using System.Windows.Threading;
 using FileAction.App.Actions;
 using FileAction.App.Jobs;
 using FileAction.App.UI;
+using FileAction.App.UI.Tools;
+using FileAction.App.UI.Tools.Image;
 using FileAction.App.Wheel;
 using FileAction.Core;
 using FileAction.Core.Operations;
 using FileAction.Core.Updates;
+using ImageMagick;
 
 namespace FileAction.App;
 
@@ -67,7 +71,7 @@ internal static class SelfTest
 
             log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
             // Saved after every step, so a hard crash (which skips the catch below) still shows where it stopped.
-            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestOcr(outDir, log) })
+            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestOcr(outDir, log), () => TestToolWindows(outDir, log) })
             {
                 File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
                 step();
@@ -422,6 +426,77 @@ internal static class SelfTest
         if (bad.Count > 0)
             throw new InvalidOperationException(
                 $"raw localization key rendered in {where}: {string.Join(", ", bad.Distinct(StringComparer.Ordinal))}");
+    }
+
+    /// <summary>Builds every registered floating tool offscreen, so --self-test covers their layout and strings.</summary>
+    private static void TestToolWindows(string outDir, List<string> log)
+    {
+        var directory = Path.Combine(outDir, "tools");
+        Directory.CreateDirectory(directory);
+        if (ToolRegistry.All.Count == 0)
+            throw new InvalidOperationException("no tool windows registered");
+
+        var sample = Path.Combine(directory, "crop-sample.png");
+        using (var image = new MagickImage(MagickColors.RebeccaPurple, 640, 420))
+            image.Write(sample);
+
+        var item = new FileItem(sample);
+        if (!CropTool.Instance.Applies([item]))
+            throw new InvalidOperationException("the crop tool does not accept a png");
+
+        var window = new ToolWindow(CropTool.Instance, [item], null);
+        Pump(() => window.PrepareAsync(animate: false));
+        SaveWindow(window, Path.Combine(directory, "crop.png"), window.Width, desktop: true);
+
+        // The adaptive sizer must keep every media shape inside the work area.
+        foreach (var (width, height, name) in new (double, double, string)[]
+                 {
+                     (300, 500, "portrait"), (500, 300, "landscape"), (500, 500, "square"),
+                     (5000, 300, "wide"), (300, 5000, "tall"), (32, 32, "tiny"), (12000, 9000, "huge"),
+                 })
+        {
+            var size = ToolWindowSizer.Compute(ToolSizes.Crop, width, height, 1920, 1080, 1.0);
+            if (size.Width > 1920 * 0.95 + 0.01 || size.Height > 1080 * 0.90 + 0.01)
+                throw new InvalidOperationException($"tool sizer does not fit {name}: {size.Width}x{size.Height}");
+        }
+
+        log.Add($"ok tools/crop ({ToolRegistry.All.Count} registered)");
+        log.Add("ok tools/sizer (7 shapes fit the work area)");
+    }
+
+    /// <summary>Runs an async preparation to completion while the self-test keeps the UI thread alive.</summary>
+    /// <param name="start">Starts the work. It must be called after the dispatcher context is installed,
+    /// otherwise its awaits resume on the thread pool and touch WPF objects off the UI thread.</param>
+    private static void Pump(Func<Task> start)
+    {
+        var previous = SynchronizationContext.Current;
+        if (previous is not DispatcherSynchronizationContext)
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        try
+        {
+            var frame = new DispatcherFrame();
+            var guard = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+            var task = start();
+            guard.Tick += (_, _) =>
+            {
+                guard.Stop();
+                frame.Continue = false;
+            };
+            guard.Start();
+            task.ContinueWith(_ =>
+            {
+                guard.Stop();
+                frame.Continue = false;
+            }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.FromCurrentSynchronizationContext());
+            Dispatcher.PushFrame(frame);
+            if (!task.IsCompleted)
+                throw new TimeoutException("the tool window preview did not finish within 30 s");
+            task.GetAwaiter().GetResult();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
     }
 
     private static void SaveWindow(Window window, string file, double width, bool desktop = false)
