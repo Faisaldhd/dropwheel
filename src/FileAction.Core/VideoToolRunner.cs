@@ -36,7 +36,7 @@ public static class VideoToolRunner
                     VideoEdit.BuildTrimArgs(withOutput with { Mode = VideoTrimMode.ReEncode }),
                     cancellationToken).ConfigureAwait(false);
             }
-        });
+        }, cancellationToken);
     }
 
     /// <summary>Crops with even pixel values and keeps the audio; retries with encoded audio if the container refuses a copy.</summary>
@@ -66,7 +66,7 @@ public static class VideoToolRunner
                     VideoEdit.BuildCropArgs(withOutput with { CopyAudio = false }),
                     cancellationToken).ConfigureAwait(false);
             }
-        });
+        }, cancellationToken);
     }
 
     /// <summary>Changes the speed with a setpts/atempo pair; a silent clip simply has no audio filter.</summary>
@@ -85,7 +85,7 @@ public static class VideoToolRunner
             ProcessRunner.RunAsync(
                 ffmpeg,
                 VideoEdit.BuildSpeedArgs(request with { OutputPath = temporary }),
-                cancellationToken));
+                cancellationToken), cancellationToken);
     }
 
     /// <summary>
@@ -96,7 +96,8 @@ public static class VideoToolRunner
         string directory,
         string baseName,
         string extension,
-        Func<string, Task> produce)
+        Func<string, Task> produce,
+        CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(directory);
         var temporary = Path.Combine(directory, $".{baseName}.{Guid.NewGuid():N}.part.{extension}");
@@ -112,29 +113,37 @@ public static class VideoToolRunner
         }
         finally
         {
-            await DeleteWhenFreeAsync(temporary).ConfigureAwait(false);
+            await DeleteWhenFreeAsync(temporary, cancellationToken.IsCancellationRequested).ConfigureAwait(false);
         }
     }
 
-    private static async Task DeleteWhenFreeAsync(string path)
+    private static async Task DeleteWhenFreeAsync(string path, bool waitForLateFile)
     {
-        for (var attempt = 0; attempt < 20; attempt++)
+        // Process.Kill is asynchronous. After a cancellation the dying FFmpeg can still be closing its
+        // file (or create it a moment after the kill), so keep watching for a second; on every other
+        // path the file is either finished or was never created.
+        var attempts = waitForLateFile ? 20 : 1;
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
             try
             {
-                if (!File.Exists(path))
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
                     return;
-                File.Delete(path);
-                return;
+                }
+                if (!waitForLateFile)
+                    return;
             }
             catch (IOException)
             {
-                await Task.Delay(50).ConfigureAwait(false);
             }
             catch (UnauthorizedAccessException)
             {
-                await Task.Delay(50).ConfigureAwait(false);
             }
+
+            if (attempt + 1 < attempts)
+                await Task.Delay(50).ConfigureAwait(false);
         }
     }
 }
