@@ -4,11 +4,13 @@
 
 **Click-free file conversion for Windows.** Grab a file, tap a key while dragging, and drop it on a format in a radial wheel. Everything runs locally; your files never leave your PC.
 
-Downloads are built by GitHub Actions (`.github/workflows/ci.yml`): every push builds the app, runs the test suite, and produces the installer, the portable zip and a `--diagnose` report as artifacts. Nothing is built or run on the owner's machine.
+Downloads are built and tested by GitHub Actions (`.github/workflows/ci.yml`): every push builds the app, runs the test suite, and produces the installer, the portable zips and a `--diagnose` report as artifacts. Nothing is built or run on the owner's machine.
 
 DropWheel is based on [FileAction](https://github.com/Metamorfolog/file_action) by Metamorfolog (MIT). It is an independent Windows take on the idea and is not affiliated with Tangerine.
 
 ## How it works
+
+The drag-and-tap gesture is **off on a fresh install** (company-safe default). Turn it on in **Settings → Company mode**, or open the wheel from the tray menu. The Explorer menu is opt-in in the same place.
 
 1. Grab a file: in File Explorer, on the desktop, an image or link in your browser, an e-mail attachment, a file inside a ZIP folder…
 2. While dragging, **tap** a key:
@@ -28,7 +30,7 @@ The wheel stays open until you drop, so you can release the key and tap another 
 **Your own wheel:** in **Settings → Customize wheels** you can star favourite slices (they always come first, in the same place) and hide the ones you never use.
 
 **No mouse:** select files in File Explorer, or copy a file or a screenshot (**Win + Shift + S**), and press **Ctrl + Alt + Space**. Arrows pick a slice, Enter runs it, Tab switches wheels, Esc closes, 1–9 run a slice directly.
-You can also open the wheel with **right-click → DropWheel…** (on Windows 11 under “Show more options”).
+You can also open the wheel with **right-click → DropWheel…** once the Explorer menu is enabled in **Settings → Company mode** (on Windows 11 under “Show more options”).
 
 Progress shows up in the corner of the screen, where you can open the result, show it in its folder or cancel.
 
@@ -62,37 +64,34 @@ With several files selected, each one is converted separately; tools like “mer
 
 DropWheel handles images, PDFs, spreadsheets, subtitles and archives on its own. Some formats need extra programs:
 
-- **FFmpeg** (audio and video, 34 MB) and **Pandoc** (documents, 35 MB) are downloaded the first time you need them: the wheel shows their slices dimmed with “get FFmpeg”, and dropping a file there asks once, downloads the tool (checked against its published SHA-256) and runs the conversion. If you already have them installed (e.g. `winget install Gyan.FFmpeg`), DropWheel uses those,
+- **FFmpeg** (audio and video, 34 MB) and **Pandoc** (documents, 35 MB). With downloads enabled in **Settings → Company mode**, the wheel shows their slices dimmed with “get FFmpeg”; dropping a file there asks once, downloads the tool (checked against the checksum published by its authors when one is available) and runs the conversion. With downloads off (the default), install them yourself (for example `winget install Gyan.FFmpeg` and `winget install JohnMacFarlane.Pandoc`) and DropWheel finds them on PATH,
 - **LibreOffice** (DOC, PPTX, ODS, documents and spreadsheets to PDF) has to be installed separately: `winget install TheDocumentFoundation.LibreOffice`.
 
-**Settings → Helper programs** shows what is missing and can download or install it for you. Keeping the tools out of the installer keeps it under 50 MB.
+**Settings → Helper programs** shows what is missing and can download or install it for you when downloads are enabled. Keeping the tools out of the package keeps DropWheel small.
 
 ## Install
 
-DropWheel is published on the [Releases](https://github.com/Faisaldhd/dropwheel/releases) page as a portable zip.
-Nothing is installed, nothing is added to startup or to the Explorer menu, and no administrator rights are needed.
+DropWheel is published on the [Releases](https://github.com/Faisaldhd/dropwheel/releases) page as a portable, self-contained zip for Windows x64. Nothing is installed, nothing is added to startup or to the Explorer menu unless you opt in, and no administrator rights are needed.
 
 1. Download `DropWheel-<version>-portable-win-x64.zip` and `SHA256SUMS.txt` from the latest release.
-2. Check the hash before running anything (PowerShell):
+2. Compare the SHA-256 of the zip with the line for that file in `SHA256SUMS.txt` (PowerShell):
 
    ```powershell
-   Get-FileHash .\DropWheel-<version>-portable-win-x64.zip -Algorithm SHA256
+   Get-FileHash ".\DropWheel-<version>-portable-win-x64.zip" -Algorithm SHA256
    ```
 
-   The value must match the line for that file in `SHA256SUMS.txt`.
-3. Unzip it anywhere (for example `%LOCALAPPDATA%\Programs\DropWheel`) and run `DropWheel.exe`.
+   The value must match that line exactly.
+3. Unzip it anywhere you can write (for example `%LOCALAPPDATA%\Programs\DropWheel`) and run `DropWheel.exe`.
 
-The zip is self-contained, so no .NET install is required. It is unsigned for now, so Windows SmartScreen may
-ask once ("More info" then "Run anyway"); `SECURITY.md` lists exactly what the app does on a machine.
+The zip is self-contained: it includes the .NET runtime, so no .NET install is required. It is unsigned for now, so Windows SmartScreen may ask once (“More info”, then “Run anyway”); [SECURITY.md](SECURITY.md) lists exactly what the app writes and which endpoints it can contact.
 
-Settings and the log stay next to `DropWheel.exe` (the zip contains a `portable.txt` marker).
+Settings and the log stay next to `DropWheel.exe` (the zip contains a `portable.txt` marker). If that folder is read-only, the log falls back to `%LOCALAPPDATA%` or `%TEMP%`; the app itself can be removed by deleting its folder.
 
-**Company-safe by default:** keyboard/mouse monitoring is **off** (no global hooks at all until you turn it on in
-Settings then Company mode), and DropWheel never downloads helper tools on its own - install FFmpeg or Pandoc with
-winget and it finds them. Autostart and the Explorer context menu are opt-in in the same place.
+**Company-safe by default:** global keyboard/mouse monitoring is **off** and helper-tool downloads are **off**. Nothing is written to `HKLM`. Turn gestures on in **Settings → Company mode**, and downloads in the same place. `--no-hooks` disables the hooks, and the policy keys `HKLM\SOFTWARE\Policies\DropWheel\DisableHooks=1` / `DisableDownloads=1` let IT force either feature off.
 
 English and Arabic, light and dark, following Windows. Requirements: Windows 10 (1809+) or Windows 11, x64.
-## Build from source
+
+## Build from source (for developers)
 
 ```powershell
 # .NET 10 SDK
@@ -102,30 +101,35 @@ dotnet publish src/FileAction.App -c Release -r win-x64 --self-contained -o publ
 publish\DropWheel.exe
 ```
 
-`DropWheel.exe --self-test <folder>` builds every window offscreen and saves PNG previews in both languages (used by CI).
+`DropWheel.exe --self-test <folder>` builds every window offscreen and saves PNG previews in English and Arabic, light and dark (used by CI).
 
 ## Project layout
 
 ```
-src/FileAction.Core     conversions and tools (cross-platform library, also tested on Linux)
-  Backends/             ImageMagick, FFmpeg, Pandoc, LibreOffice, PDF, spreadsheets, subtitles, archives
-  Operations/Catalog.cs every slice on the Convert and Tools wheels
-  Loc.cs                English / Czech strings
-src/FileAction.Linux    the Linux app (Avalonia): drop zone, wheel, CLI, file manager integration
-src/FileAction.App      the Windows app (WPF)
-  Input/GlobalInput.cs  global mouse and keyboard hooks (the “drag + tap” gesture)
-  Wheel/                the radial menu and when it opens
-  Actions/              the Actions wheel, floating shelf, sharing
-  Jobs/                 background jobs and progress cards
-  Shell/                tray icon, hotkey, context menu, single instance
-tests/FileAction.Tests  unit tests plus integration tests that run every operation on sample files
-installer/              Inno Setup
-packaging/              Linux tarball and the AUR PKGBUILD template
+src/FileAction.Core      conversions and tools (shared library)
+  Backends/              ImageMagick, FFmpeg, Pandoc, LibreOffice, PDF, spreadsheets, subtitles, archives
+  Operations/Catalog.cs  every slice on the Convert and Tools wheels
+  Loc.cs                 English / Arabic strings
+src/FileAction.App       the Windows app (WPF)
+  Input/GlobalInput.cs   global mouse and keyboard hooks (the “drag + tap” gesture)
+  Wheel/                 the radial menu and when it opens
+  Actions/               the Actions wheel, floating shelf, sharing
+  Jobs/                  background jobs and progress cards
+  Shell/                 tray icon, hotkey, context menu, single instance, IT policy
+tests/FileAction.Tests   unit tests plus integration tests that run every operation on sample files
+installer/               Inno Setup script for the installer
+scripts/                 fetch-tools.ps1, screenshots.cmd, verify-authenticode.ps1
+docs/                    glossary-ar.md, ar-strings-review.md, signing.md
+  prompts/               FIX_PROMPT.md, THEME_PROMPT.md, UPDATE_PROMPT.md
+branding/                app and tray icons
+licenses/                third-party licence texts
+SECURITY.md              what the app writes, its endpoints and the IT policy keys
+STATUS.md · REVIEW.md · COLLAB.md   team notes, review backlog and collaboration rules
 ```
 
 ## License
 
-[MIT](LICENSE). DropWheel uses other open-source components under their own licenses; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+Free and open source under the [MIT licence](LICENSE). DropWheel uses other open-source components under their own licenses; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Differences from Tangerine
 
