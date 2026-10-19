@@ -1,167 +1,96 @@
-# NOTES - signing (branch `2.2.0-signing`)
+# NOTES — cross-agent requests
 
-Status: done. Scripts and documentation written; the real update key was **not** generated,
-rotated or copied anywhere.
+## Requests from update-core
 
-## Files
+1. **Setup asset name is inconsistent (blocks the setup-install update path).**
+   `UpdateConfig.SetupAssetName` (shared, lead-owned) and the update-core brief name the installer
+   `DropWheel-<version>-Setup.exe`, but `installer/DropWheel.iss` sets
+   `OutputBaseFilename=DropWheel-Setup-{#AppVersion}`, and `.github/workflows/ci.yml`, `README*.md` and
+   `docs/prompts/UPDATE_PROMPT.md` use `DropWheel-Setup-<version>.exe`. The updater looks for the exact
+   `DropWheel-<version>-Setup.exe`, so an installed copy would never find the setup asset. Request to the
+   installer/CI owners: rename the installer output to `DropWheel-<version>-Setup.exe`; alternatively the
+   lead changes `UpdateConfig.SetupAssetName` and tells update-core. The portable name
+   (`DropWheel-<version>-portable-win-x64.zip`) already matches everywhere.
 
-| File | What it is |
-| --- | --- |
-| `scripts/make-update-key.ps1` | One-time **rotation** helper: generates P-256 in memory, pipes base64 PKCS#8 to `gh secret set UPDATE_SIGNING_KEY` over stdin, prints only public material, clears memory, refuses without `-Rotate`. |
-| `scripts/sign-release.ps1` | Signs assets to `<asset>.sig` (P1363 `r||s`, 64 bytes, base64 ASCII), verifies each `.sig` against the app key, throws before/after a mismatch. `-SelfTest` exercises the same code path with an ephemeral in-memory key. |
-| `scripts/verify-signature.ps1` | Verifies `<file> <sig>`; exit 1 with a clear message on any failure; `-PublicKey` for tests. |
-| `docs/signing-updates.md` | Key history, secret location, exact `.sig`/`SHA256SUMS.txt` formats, CI signing, app verification snippet, rotation runbook, troubleshooting. |
+2. **Release signing assets (signing agent).** For the selected asset, `UpdateService.DownloadAsync`
+   downloads `<asset name>.sig` and the release asset `SHA256SUMS.txt`. The `.sig` must be the base64
+   ECDSA P-256 signature over the file's SHA-256 with the `UpdateKey` private key; IEEE P1363 (r||s) and
+   DER are both accepted. `SHA256SUMS.txt` must contain `<sha256hex>  <asset name>` (sha256sum format).
+   CI currently creates no `.sig` assets, so every download is refused as
+   "Update could not be verified" until the signing + upload step lands (this is the intended fail-closed
+   behaviour).
 
-Not changed: `ci.yml`, `Core/**`, `installer/**`, `UPDATE_SIGNING_KEY`, `UpdateKey.cs`.
+3. **GitHub asset `digest` must be populated.** Per the 2.2.0 spec the updater requires BOTH the GitHub
+   asset `digest` field (sha256) and the `SHA256SUMS.txt` entry. GitHub fills `digest` for assets uploaded
+   to a release; please confirm the v2.2.0 release payload carries it for the setup exe and the portable
+   zip before shipping, otherwise every update will be refused.
 
-## Key fingerprint
+4. **Tests note (tests agent).** `DownloadAsync` success cannot be exercised with the production
+   `UpdateKey` because its private half is a secret. Cover `UpdateVerifier` with a generated P-256 key pair
+   (optional `publicKeyBase64` argument) and cover the `DownloadAsync` failure paths (bad/missing
+   signature, digest or sums) plus cancellation; assert the exact message
+   `UpdateService.VerificationFailure` ("Update could not be verified").
 
-- Public key in `UpdateKey.cs` (unchanged):
-  `MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEUCQv0in24CEgz0uiGoER/25EFZY5w/x0wvpl9TyRyG8VxFTqv3mKuGBxMwoknk9FBHrj2P9c56kCUU2POE5Glw==`
-- 91-byte SPKI DER, curve `prime256v1` (P-256).
-- **Fingerprint = SHA-256 of the SPKI DER bytes:**
-  `9d6b35c5376d6decceced299829643456c52fee8c0662dd101d62d422f0bce02`
+5. **Version shape (tests agent).** `UpdateInfo.Version` is normalised to the shortest exact form
+   (`2.3.0`, not `2.3.0.0`) unless the tag has a non-zero revision. Tags such as `v2.3.0` therefore compare
+   equal to `new Version(2, 3, 0)`; asset names still use `Version.ToString(3)` via `UpdateConfig`.
 
-## Signature format (for update-core and release-clean)
+## Requests from update-ui
 
-- `.sig` is ASCII base64 of **ECDSA P-256 / SHA-256 over the complete file bytes**, encoded as
-  **IEEE P1363 fixed-field concatenation `r || s` (32+32 = exactly 64 bytes)**, so the file is
-  always **88 base64 characters**, one line, no newline.
-- This is what `ECDsa.SignData(..., SHA256)` and `ECDsa.VerifyHash(hash, signature)` use **by
-  default** in .NET, and what `UpdateVerifier.VerifyHash` expects. It is **not** an ASN.1/DER
-  signature (DER is 70-72 bytes; `verify-signature.ps1` rejects that length with a clear message).
-- The scripts both check the 64-byte length, so if a future runtime changed the default they
-  would fail loudly instead of shipping an unverifiable `.sig`.
+### 1. `src/FileAction.App/UI/SettingsWindow.cs` (owner: settings-tabs) — pass the saving callback
 
-## Self-check evidence (no real secret used)
-
-Local constraint: only Windows PowerShell 5.1 is installed (no `pwsh`), and the rules forbid
-running `.ps1` files locally, so the scripts were **not executed here**. What was verified:
-
-1. **Syntax/AST:** all three scripts parsed with
-   `[System.Management.Automation.Language.Parser]::ParseFile` - 0 errors each,
-   `#Requires -Version 7.0`, expected parameter blocks and functions.
-2. **Same algorithm, inline (PS 5.1 CNG + Node/OpenSSL), no key on disk:**
-   - ephemeral P-256 key generated in memory; PKCS#8 exported/imported, SPKI exported/imported;
-   - signature was **64 bytes -> 88 base64 chars**, one line;
-   - good signature accepted; tampered file rejected; wrong ephemeral key rejected; the
-     **embedded app key** rejected (wrong-key case);
-   - OpenSSL/Node (`dsaEncoding: 'ieee-p1363'`) verified the .NET signature and rejected a
-     tampered file; .NET verified an OpenSSL P1363 signature and rejected tampering;
-   - embedded key imported in Node as `ec` / `prime256v1`, fingerprint matched
-     `9d6b35c5...bce02`.
-3. **.NET 10 runtime check (`dotnet fsi`, SDK 10.0.402; no app build, no project):**
-   - embedded SPKI imported (91 bytes, `KeySize=256`), fingerprint
-     `9d6b35c5376d6decceced299829643456c52fee8c0662dd101d62d422f0bce02`;
-   - ephemeral `ECDsa.Create(nistP256)`: SPKI 91 bytes, PKCS#8 138 bytes;
-     `ImportPkcs8PrivateKey` read all 138 bytes;
-   - `SignData(stream, SHA256)` produced **64 bytes / 88 base64 chars**;
-   - `VerifyHash` accepted the good signature and rejected a tampered hash and the wrong
-     (embedded) key;
-   - confirms the .NET 10 default is IEEE P1363 and that the app's `VerifyHash` path matches the
-     scripts. A 70-byte DER-like signature is 96 base64 chars, which the scripts reject.
-4. **Not covered locally:** actual execution of the `.ps1` files on pwsh 7 (no `pwsh` here; the
-   rules forbid running `.ps1` locally). The underlying .NET 10 APIs above are verified, and the
-   scripts are syntax-clean; the remaining risk is only PowerShell's method binding/execution.
-   The test to run first in CI/on a pwsh 7 machine is:
-   `pwsh ./scripts/sign-release.ps1 -SelfTest` (no secret needed; uses the same import, sign,
-   write, read and verify functions, and asserts tamper/wrong-key failures).
-
-## Requests from signing
-
-### release-clean (owner of `.github/workflows/ci.yml`) - P0 for the first signed release
-
-Neither step below is in `ci.yml` yet; release-clean is adding the signing step and the
-no-secret self-test to the workflow.
-
-1. **Add the signing step to the release job.** The release job currently has no
-   `actions/checkout`, so it needs one before the script can read `scripts/` and `UpdateKey.cs`:
-
-   ```yaml
-         - uses: actions/checkout@v4
-
-         - name: Sign release assets
-           shell: pwsh
-           env:
-             UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
-           run: |
-             if (-not $env:UPDATE_SIGNING_KEY) { throw "UPDATE_SIGNING_KEY is not available to this job" }
-             $assets = @(Get-ChildItem dist -Recurse -File | Where-Object {
-               $_.Name -like 'DropWheel-*-Setup.exe' -or
-               $_.Name -like 'DropWheel-*-portable-win-x64.zip'
-             } | Select-Object -ExpandProperty FullName)
-             if ($assets.Count -ne 2) { throw "expected 2 release assets, found $($assets.Count)" }
-             ./scripts/sign-release.ps1 -Path $assets
-             $sigs = @(Get-ChildItem dist -Recurse -File -Filter '*.sig')
-             if ($sigs.Count -ne 2) { throw "expected 2 .sig files, found $($sigs.Count)" }
-   ```
-
-   The release step must then upload the two `.sig` files as well: extend the filter in
-   "Create release" with `-like '*.sig'` and change the expected count from 3 to 5. Only the
-   release job gets the secret; fork PRs never receive it.
-
-2. **Add the no-secret self-test to `build-test`** (cheap, runs on every push, exercises the real
-   pwsh 7 code path):
-
-   ```yaml
-         - name: Signing script self-test
-           shell: pwsh
-           run: ./scripts/sign-release.ps1 -SelfTest
-   ```
-
-3. **Asset naming mismatch (P1, blocks the updater).** `UpdateConfig.SetupAssetName` (and the
-   2.2.0 signing task) use `DropWheel-<version>-Setup.exe`, but `installer/DropWheel.iss` emits
-   `DropWheel-Setup-<version>.exe` (and `release.cmd` prints that name). The app will not find
-   the setup in the release until one side changes. Preferred fix (matches `UpdateConfig` and
-   `docs/signing-updates.md`): change `OutputBaseFilename` in `installer/DropWheel.iss` to
-   `DropWheel-{#AppVersion}-Setup` and update the ci.yml filters/artifact names. If the rename is
-   done in the release job instead, **regenerate `SHA256SUMS.txt` after the rename**, otherwise
-   the sums file names the old file and the app's digest check fails.
-
-4. `scripts/sign-release.ps1` defaults to `release/DropWheel-<version>-Setup.exe` and
-   `release/DropWheel-<version>-portable-win-x64.zip`; it accepts explicit `-Path` (the CI
-   snippet passes `dist` paths), so naming only affects the default invocation.
-
-### update-core - rotation safety (P2, not needed for 2.2.0 but needed before any rotation)
-
-`UpdateKey` is a single constant. Because the private key exists only in the secret, rotating it
-destroys the old key, and every installed copy (which embeds the old public key) permanently
-loses automatic updates. `docs/signing-updates.md` documents this honestly. For a staged
-rotation, `UpdateVerifier` would need to trust a list of public keys (old + new), so a transition
-build signed with the old key can carry the new key. Suggested shape:
+When the Updates tab embeds the banner, pass the window's saving action:
 
 ```csharp
-public static IReadOnlyList<string> TrustedPublicKeyBase64 { get; } = new[] { Current, Next };
+UpdateBanner.Create(SettingsWindow.Updates, _settings, Save)
 ```
 
-and `VerifySignature` accepts a signature that matches any listed key during the transition.
-This is a design decision for the lead/update-core, not something the signing agent can change.
-Otherwise: no rotation without accepting manual reinstall for existing users.
+`Save` writes `settings.json` and calls the app's `OnSettingsChanged`, which starts/stops the 24 h timer.
+Passing `_changed` directly would only update memory until the next save/exit.
 
-### update-core - verifier confirmation
+### 2. `src/FileAction.App/SelfTest.cs` (not owned by update-ui) — optional banner screenshots
 
-`UpdateVerifier.VerifySignature` already matches these scripts: PKCS#8/SPKI import, SHA-256 over
-the file bytes, `VerifyHash(hash, signature)` with the **P1363 64-byte** default. No change is
-needed for the format; a unit test that signs with an ephemeral P-256 key and feeds a 64-byte
-`r||s` signature would pin the format (tampered/wrong-key/missing cases are already in the spec).
+The self-test renders `settings.png` with `SettingsWindow.Updates == null`, so it covers only the disabled
+"updates are not available" banner. To capture the violet states, set `SettingsWindow.Updates` to a fake
+`IUpdateService` whose `Available` is an `UpdateInfo` for e.g. `9.9.9` (release page
+`https://github.com/Faisaldhd/dropwheel/releases/tag/v9.9.9`) before constructing `SettingsWindow`, render
+`updates-available.png`, then restore `SettingsWindow.Updates = null`. A `Checking`/`Downloading` capture needs
+the fake to raise `StateChanged`/report progress; do not do network work in the self-test.
 
-## Exact CI step snippet (copy/paste)
+## Requests from update-apply
 
-See the YAML in "release-clean - P0" above. It is the canonical step: `actions/checkout@v4`,
-then `scripts/sign-release.ps1 -Path $assets` with `UPDATE_SIGNING_KEY` mapped only on that job,
-then a `.sig` count assertion. If `checkout` truly cannot be added, inline the exact functions
-from `scripts/sign-release.ps1` rather than re-deriving the format; the invariants are
-P-256, SHA-256 over the file bytes, IEEE P1363 `r||s` exactly 64 bytes, ASCII base64 (88 chars),
-and a post-write verification against the app's public key.
+### 1. `.github/workflows/ci.yml` (lead; routed to release-clean) — one step
 
-## Notes / limitations
+The portable helper has an end-to-end CI script that is not invoked yet. It needs `windows-latest` and a
+Release build of `DropWheel.exe`:
 
-- `make-update-key.ps1` is destructive by design and refuses without `-Rotate`; it never writes
-  the private key to disk or stdout. PowerShell strings cannot be provably zeroed, so it avoids
-  ever creating a base64 *string* for the private key (uses `char[]` + `byte[]`, both cleared).
-- `sign-release.ps1` and `verify-signature.ps1` prefer the live `PublicKeyBase64` constant from
-  `src/FileAction.Core/Updates/UpdateKey.cs` when the repo is present; the built-in snapshot is
-  only for a standalone copy. After a real rotation, update the snapshot constants and
-  `docs/signing-updates.md` too.
-- `docs/signing.md` (SignPath/Authenticode) is a different topic and was left untouched.
-- No `ci.yml`, `Core/**` or `installer/**` changes were made from this branch.
+```yaml
+      - name: Apply-update helper (portable)
+        shell: pwsh
+        run: '& ./scripts/test-update-apply.ps1'
+```
+
+The script starts the built exe in `--apply-update` mode (a windowless process) and checks the success,
+corrupt-zip and rollback cases. If `bin\Release\net10.0-windows\DropWheel.exe` is missing it publishes a
+framework-dependent folder itself. Never run it on the owner's PC.
+
+### 2. App wiring and string keys — already handled
+
+`UpdateApplier.TryRun` is called before the single-instance check and `--updated` calls
+`AnnounceUpdated` on main. `update.updated.title/body/whatsNew` are in both string tables on main.
+
+### 3. Note on the helper copy (for review, not a request)
+
+The portable build is a **folder** (apphost + DLLs), not a single-file exe, so a lone `DropWheel.exe`
+copy in `%TEMP%` cannot start. `PortableUpdater` therefore copies the running exe (as required) **and**
+the app's runtime files, while excluding user data (`settings.json`, `portable.txt`, `log.txt`),
+`licenses\` and `tools\`. That is what frees the install folder's exe lock without shipping a broken
+helper.
+
+## What update-apply did
+
+- Replaced the `UpdateApplier` stub; added `PortableUpdater`, `SetupUpdater` and `UpdatedWindow` under
+  `src/FileAction.App/Updates/`.
+- Added `scripts/test-update-apply.ps1` (success, corrupt-zip and true-rollback cases).
+- No changes to `App.cs`, `TrayIcon.cs`, `SettingsWindow.cs`, `UpdateBanner.cs`, `ci.yml` or the string tables.
+

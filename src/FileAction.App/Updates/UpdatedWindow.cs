@@ -21,6 +21,7 @@ internal static class UpdatedWindow
     {
         var title = T("update.updated.title");
         var body = T("update.updated.body", Bidi.Value(DisplayVersion(version)));
+        Theme.Refresh();
 
         var window = new Window
         {
@@ -47,8 +48,9 @@ internal static class UpdatedWindow
             HorizontalAlignment = HorizontalAlignment.Right,
         };
         var whatsNew = Controls.Button(T("update.updated.whatsNew"), () => OpenReleasePage(version), primary: true);
-        whatsNew.Margin = new Thickness(0, 0, 8, 0);
         buttons.Children.Add(whatsNew);
+        // An explicit spacer keeps the gap between the buttons in both LTR and RTL layouts.
+        buttons.Children.Add(new Border { Width = 8 });
         buttons.Children.Add(Controls.Button(T("action.close"), window.Close));
         content.Children.Add(buttons);
 
