@@ -83,7 +83,7 @@
   "tool.pdforganize.thumbFailed": "المعاينة غير متاحة",
   "tool.pdforganize.error.open": "تعذّرت قراءة {0} كملف PDF.",
   "tool.pdforganize.error.plan": "لا توجد صفحات يمكن كتابتها.",
-  "tool.pdforganize.pages": "{0} صفحة",
+  "tool.pdforganize.pages": "عدد الصفحات: {0}",
   "tool.pdforganize.resetOrder": "إعادة ترتيب الصفحات",
   "tool.pdforganize.sameWidth": "جعل جميع الصفحات بالعرض نفسه",
   "tool.pdforganize.sameWidthNote": "تُقاس الصفحات نسبيًا لتطابق أضيق صفحة؛ وقد تختلف ارتفاعاتها.",
