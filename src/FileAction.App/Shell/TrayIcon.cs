@@ -47,7 +47,7 @@ internal sealed class TrayIcon : IDisposable
     private readonly Action _openSettings;
     private readonly Win32.NOTIFYICONDATA _data;
     private readonly IntPtr _icon;
-    private readonly List<(MenuItem Item, string Czech, string English)> _labels = [];
+    private readonly List<(MenuItem Item, string Key)> _labels = [];
     private MenuItem? _update;
     private Version? _updateVersion;
     private Action? _balloonClick;
@@ -57,18 +57,18 @@ internal sealed class TrayIcon : IDisposable
     public TrayIcon(Action openSettings, Action openClipboard, Action openShelf, Action showHelp, Action<bool> setPaused, bool paused, Action exit)
     {
         _openSettings = openSettings;
-        _pause = new MenuItem { Header = T("Pozastavit gesta", "Pause gestures"), IsCheckable = true, IsChecked = paused };
+        _pause = new MenuItem { Header = T("tray.pause"), IsCheckable = true, IsChecked = paused };
         _pause.Checked += (_, _) => OnPause(setPaused, true);
         _pause.Unchecked += (_, _) => OnPause(setPaused, false);
 
         _menu = CreateMenu();
-        AddItem("Kolo pro schránku", "Wheel for the clipboard", openClipboard);
-        AddItem("Nastavení…", "Settings…", openSettings);
-        AddItem("Prázdný plovoucí panel", "Empty floating shelf", openShelf);
-        AddItem("Jak to funguje", "How it works", showHelp);
+        AddItem("tray.clipboardWheel", openClipboard);
+        AddItem("tray.settings", openSettings);
+        AddItem("tray.emptyShelf", openShelf);
+        AddItem("tray.help", showHelp);
         _menu.Items.Add(_pause);
         _menu.Items.Add(MenuSeparator());
-        AddItem("Ukončit", "Exit", exit);
+        AddItem("tray.exit", exit);
 
         _icon = CreateAppIcon();
         // A hidden top-level popup rather than a message-only window: Explorer's "TaskbarCreated"
@@ -119,20 +119,20 @@ internal sealed class TrayIcon : IDisposable
         if (_disposed)
             return;
         _menu.FlowDirection = LanguageManager.FlowDirection;
-        _pause.Header = T("Pozastavit gesta", "Pause gestures");
-        foreach (var (item, czech, english) in _labels)
-            item.Header = T(czech, english);
+        _pause.Header = T("tray.pause");
+        foreach (var (item, key) in _labels)
+            item.Header = T(key);
         if (_update is not null)
         {
             var version = Bidi.Value(_updateVersion?.ToString() ?? "");
-            _update.Header = T($"Aktualizovat na verzi {version}", $"Update to version {version}");
+            _update.Header = T("update.menu", version);
         }
     }
 
-    private void AddItem(string czech, string english, Action click)
+    private void AddItem(string key, Action click)
     {
-        var item = Item(T(czech, english), click);
-        _labels.Add((item, czech, english));
+        var item = Item(T(key), click);
+        _labels.Add((item, key));
         _menu.Items.Add(item);
     }
 
@@ -141,7 +141,7 @@ internal sealed class TrayIcon : IDisposable
     {
         _updateVersion = version;
         var shown = Bidi.Value(version.ToString());
-        var text = T($"Aktualizovat na verzi {shown}", $"Update to version {shown}");
+        var text = T("update.menu", shown);
         if (_update is null)
         {
             _update = new MenuItem { Header = text, FontWeight = FontWeights.Bold };
@@ -149,8 +149,8 @@ internal sealed class TrayIcon : IDisposable
             _menu.Items.Insert(0, _update);
             _menu.Items.Insert(1, MenuSeparator());
         }
-        Show(T("Je k dispozici nová verze", "A new version is available"),
-            T($"DropWheel {shown} – klikněte sem pro instalaci.", $"DropWheel {shown} – click here to install."), false);
+        Show(T("update.available.title"),
+            T("update.available.body", shown), false);
         _balloonClick = install;
     }
 

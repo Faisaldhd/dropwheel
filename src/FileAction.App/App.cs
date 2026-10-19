@@ -132,16 +132,12 @@ internal sealed class App : Application
         AppLog.Info("tray icon created");
         if (hooksFailed)
         {
-            _tray.Show("DropWheel", T(
-                "DropWheel nemůže na tomto PC sledovat myš a klávesnici (může to blokovat bezpečnostní software). Použijte Ctrl+Alt+Mezerník nebo klepněte pravým tlačítkem na DropWheel.",
-                "DropWheel can't watch the mouse and keyboard on this PC (security software may block it). Use Ctrl+Alt+Space or right-click DropWheel."), true);
+            _tray.Show("DropWheel", T("app.tray.hooksUnavailable"), true);
         }
         else if (!hooksAllowed)
         {
             // Company-safe default: explain how to use the app without any keyboard/mouse monitoring.
-            _tray.Show("DropWheel", T(
-                "Sledování gest je vypnuté (firemní výchozí nastavení). Kolo otevřete z nabídky DropWheel nebo přetažením souboru. Zapnete ho v Nastavení → Firemní režim.",
-                "Gesture monitoring is off (company-safe default). Open the wheel from the DropWheel menu or by dropping a file. Enable it in Settings → Company mode."), false);
+            _tray.Show("DropWheel", T("app.tray.gesturesOff"), false);
         }
         SettingsWindow.Operations = () => _controller.AllOperations;
         _hotkey = new HotkeyListener(_controller.OnHotkey);
@@ -158,7 +154,7 @@ internal sealed class App : Application
         }
         else if (!_args.Contains("--background"))
         {
-            _tray.Show(T("DropWheel běží", "DropWheel is running"), T("Chyťte soubor, během tažení ťukněte na Shift a pusťte ho na formát.", "Grab a file, tap Shift while dragging and drop it on a format."), false);
+            _tray.Show(T("app.running.title"), T("app.running.hint"), false);
         }
         HandleArgs(_args);
     }
@@ -202,7 +198,7 @@ internal sealed class App : Application
             try
             {
                 _input.Start();
-                _tray?.Show("DropWheel", T("Sledování gest je zapnuté.", "Gesture monitoring is on."), false);
+                _tray?.Show("DropWheel", T("app.tray.gesturesOn"), false);
             }
             catch (InvalidOperationException ex)
             {
@@ -246,16 +242,14 @@ internal sealed class App : Application
             _settings.Save();
             SettingsWindow.RefreshIfOpen();
             var now = Bidi.Value(AppSettings.HotkeyName(preset));
-            Notifications.Show(T("Zkratka změněna", "Shortcut changed"),
-                T($"{taken} už používá jiná aplikace, DropWheel teď používá {now}. Změnit ji můžete v nastavení.",
-                  $"{taken} is used by another app, so DropWheel now uses {now}. You can change it in Settings."));
+            Notifications.Show(T("app.hotkey.changed.title"),
+                T("app.hotkey.changed.body", taken, now));
             return;
         }
 
         _activeHotkey = HotkeyPreset.None;
-        Notifications.Show(T("Zkratka je obsazená", "Shortcut is taken"),
-            T("Všechny nabízené zkratky už používají jiné aplikace. Kolo otevřete tažením nebo z nabídky u hodin.",
-              "All offered shortcuts are used by other apps. Open the wheel by dragging or from the tray menu."), error: true);
+        Notifications.Show(T("app.hotkey.taken.title"),
+            T("app.hotkey.taken.body"), error: true);
     }
 
     private void SetPaused(bool paused)
@@ -270,49 +264,15 @@ internal sealed class App : Application
         var tools = Bidi.Value(AppSettings.KeyName(_settings.ToolsKey));
         var actions = Bidi.Value(AppSettings.KeyName(_settings.ActionsKey));
         var hotkey = Bidi.Value(AppSettings.HotkeyName(_settings.Hotkey));
-        var text = T(
-            $"""
-            1. Chyťte soubor myší (v Průzkumníku, na ploše, obrázek v prohlížeči, přílohu v Outlooku…).
-            2. Během tažení ťukněte na klávesu:
-                 {convert} – převést na jiný formát
-                 {tools} – nástroje (komprimovat, zmenšit, oříznout, spojit…)
-                 {actions} – akce (kopírovat, přesunout, cesta, terminál, plovoucí panel, sdílet)
-            3. Pusťte soubor na výseč kola. Do středu = zrušit.
-
-            Kolo zůstane otevřené, dokud soubor nepustíte; klávesu můžete pustit a další klávesou přepnout kolo.
-            Ťuknutí na stejnou klávesu znovu ukáže „zopakovat poslední akci“.
-
-            Bez myši: vyberte soubory v Průzkumníku (nebo zkopírujte soubor či snímek obrazovky) a stiskněte {hotkey}.
-            Šipky vyberou výseč, Enter potvrdí, Tab přepne kolo, Esc zavře.
-            Také přes pravé tlačítko → „DropWheel…“.
-
-            Výsledek se uloží vedle původního souboru, originál zůstane beze změny.
-            """,
-            $"""
-            1. Grab a file with the mouse (in File Explorer, on the desktop, an image in your browser, an Outlook attachment…).
-            2. While dragging, tap a key:
-                 {convert} – convert to another format
-                 {tools} – tools (compress, shrink, trim, merge…)
-                 {actions} – actions (copy, move, path, terminal, floating shelf, share)
-            3. Drop the file on a slice of the wheel. Drop it in the middle to cancel.
-
-            The wheel stays open until you drop; you can release the key and tap another one to switch wheels.
-            Tap the same key again to "repeat the last action".
-
-            Without the mouse: select files in File Explorer (or copy a file or a screenshot) and press {hotkey}.
-            Arrows pick a slice, Enter runs it, Tab switches wheels, Esc closes.
-            Also via right-click → “DropWheel…”.
-
-            The result is saved next to the original file; the original stays untouched.
-            """);
-        Dialogs.Show(text + "\n\nDropWheel is based on FileAction by Metamorfolog (MIT).", T("Jak DropWheel funguje", "How DropWheel works"), MessageBoxButton.OK, MessageBoxImage.Information);
+        var text = T("help.body", convert, tools, actions, hotkey);
+        Dialogs.Show(text + "\n\nDropWheel is based on FileAction by Metamorfolog (MIT).", T("help.title"), MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         Log(e.Exception);
         e.Handled = true;
-        Notifications.Show(T("DropWheel – chyba", "DropWheel – error"), Bidi.Value(e.Exception.Message), error: true);
+        Notifications.Show(T("app.error.title"), Bidi.Value(e.Exception.Message), error: true);
     }
 
     public static void Log(Exception ex)

@@ -397,7 +397,7 @@ internal sealed class WheelWindow : Window
                 }
                 catch (Exception ex)
                 {
-                    Shell.Notifications.Show(T("Stažení se nepovedlo", "Download failed"), ex.Message, error: true);
+                    Shell.Notifications.Show(T("error.download.failed"), ex.Message, error: true);
                     return;
                 }
                 Dispatch(op, content.Items);
@@ -841,10 +841,10 @@ internal sealed class WheelWindow : Window
         if (_repeat)
         {
             var last = _ops.Count > 0 ? _ops[0] : null;
-            _title.Text = _highlight >= 0 && last is not null ? last.Label : T("Zopakovat", "Repeat");
+            _title.Text = _highlight >= 0 && last is not null ? last.Label : T("wheel.repeat");
             _detail.Text = last is null
-                ? T("Poslední akce se sem nehodí", "Last action doesn't fit")
-                : _highlight >= 0 ? T("poslední akce", "last action") : last.Label;
+                ? T("wheel.repeat.noFit")
+                : _highlight >= 0 ? T("wheel.repeat.suffix") : last.Label;
             return;
         }
         if (_highlight >= 0 && _highlight < _ops.Count)
@@ -856,9 +856,9 @@ internal sealed class WheelWindow : Window
         }
         _title.Text = AppSettings.WheelName(_wheel);
         if (_items.Count == 0)
-            _detail.Text = T("Přetáhněte sem soubor", "Drag a file here");
+            _detail.Text = T("wheel.dropHere");
         else if (_ops.Count == 0)
-            _detail.Text = T("Pro tento výběr nic není", "Nothing for this selection");
+            _detail.Text = T("wheel.nothingForSelection");
         else
             _detail.Text = DescribeItems();
     }

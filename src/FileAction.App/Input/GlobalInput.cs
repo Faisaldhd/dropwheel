@@ -99,7 +99,7 @@ internal sealed class GlobalInput : IDisposable
         _thread.Start();
         ready.Wait();
         if (_keyboardHook == IntPtr.Zero || _mouseHook == IntPtr.Zero)
-            throw new InvalidOperationException(T("Nepodařilo se zaregistrovat globální sledování klávesnice a myši.", "Could not install the global keyboard and mouse hooks."));
+            throw new InvalidOperationException(T("error.globalInput.failed"));
     }
 
     public void Dispose()
