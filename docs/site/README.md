@@ -21,10 +21,10 @@ fonts, CSS, JS, CDNs or analytics — every asset is served from this folder.
 
 ## Publishing
 
-The page must be served from this folder (`docs/site`). GitHub’s “Deploy from a branch”
-source only accepts `/` or `/docs`, so enable **Settings → Pages → Source: GitHub Actions**
-and deploy with `actions/upload-pages-artifact` pointing at `docs/site`. The requested
-workflow change is recorded in `NOTES.md` in this worktree (CI files are not owned here).
+The page is served from this folder (`docs/site`). GitHub’s “Deploy from a branch” source
+only accepts `/` or `/docs`, so deployments use GitHub Actions:
+`actions/upload-pages-artifact` with `path: docs/site`, then `actions/deploy-pages`.
+Enable **Settings → Pages → Source: GitHub Actions** for `https://faisaldhd.github.io/dropwheel/`.
 
 ## Updating the version
 
@@ -38,14 +38,14 @@ workflow change is recorded in `NOTES.md` in this worktree (CI files are not own
 
 > NOTE: GitHub release downloads redirect to `release-assets.githubusercontent.com`, which does
 > not send `Access-Control-Allow-Origin`. The `fetch` is therefore expected to fall back to the
-> `SHA256SUMS.txt` link on GitHub Pages. That is the specified safe behaviour; see `NOTES.md` if
-> an inline hash is required.
+> `SHA256SUMS.txt` link on GitHub Pages. That is the intended safe behaviour: the hash is never
+> guessed.
 
 ## Updating the screenshots
 
 Replace the three PNGs in `assets/` and keep the `width`/`height` attributes in `index.html`
 in sync with the new pixel sizes. Update the English **and** Arabic alt text/captions.
 
-> NOTE: the current screenshots were copied from `docs/screenshots/en/` as required, but they
-> still show the older orange FileAction UI (including the Czech language option). Replace them
-> once the 2.2.0 violet screenshots exist.
+> NOTE: the current screenshots were copied from `docs/screenshots/en/`, but they still show the
+> older orange FileAction UI (including the Czech language option). Replace them once the 2.2.0
+> violet screenshots exist.
