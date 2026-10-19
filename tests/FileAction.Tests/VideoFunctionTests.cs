@@ -207,14 +207,25 @@ public sealed class VideoFunctionTests : IClassFixture<VideoFunctionTests.Sample
         var longClip = _samples.LongClip;
         var outputDirectory = _samples.NewOutputDirectory("cancel");
         var request = new VideoTrimRequest(
-            longClip, string.Empty, TimeSpan.Zero, TimeSpan.FromSeconds(30),
+            longClip, string.Empty, TimeSpan.Zero, TimeSpan.FromSeconds(10),
             "mp4", VideoTrimMode.ReEncode, HasAudio: false);
 
         using var cancellation = new CancellationTokenSource();
         var work = VideoToolRunner.TrimAsync(
             _samples.Ffmpeg, request, outputDirectory, "long Trimmed", cancellation.Token);
 
-        await Task.Delay(300);
+        // Cancel as soon as FFmpeg has opened its temporary output: a fixed delay is flaky because a
+        // small testsrc clip can encode faster than the delay on a fast runner.
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!work.IsCompleted && DateTime.UtcNow < deadline)
+        {
+            if (Directory.Exists(outputDirectory)
+                && Directory.EnumerateFiles(outputDirectory).Any(file => file.Contains(".part.", StringComparison.Ordinal)))
+            {
+                break;
+            }
+            await Task.Delay(10);
+        }
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => work);
@@ -403,7 +414,7 @@ public sealed class VideoFunctionTests : IClassFixture<VideoFunctionTests.Sample
 
         public string Ffprobe { get; }
 
-        /// <summary>A 30 s 640x480 clip generated once for the cancellation test.</summary>
+        /// <summary>A 10 s 1280x720 clip generated once for the cancellation test.</summary>
         public string LongClip
         {
             get
@@ -411,7 +422,7 @@ public sealed class VideoFunctionTests : IClassFixture<VideoFunctionTests.Sample
                 if (!File.Exists(_longClipPath))
                 {
                     FfmpegRun(
-                        "-f", "lavfi", "-i", "testsrc=size=640x480:rate=30:duration=30",
+                        "-f", "lavfi", "-i", "testsrc=size=1280x720:rate=30:duration=10",
                         "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
                         _longClipPath);
                 }
