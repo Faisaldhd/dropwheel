@@ -51,6 +51,7 @@ internal sealed class WheelWindow : Window
     private readonly TextBlock _iconGlyph = new() { FontSize = 24, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 6) };
     private readonly TextBlock _title = HubText(16, FontWeights.SemiBold);
     private readonly TextBlock _detail = HubText(11.5, FontWeights.Normal);
+    private readonly TextBlock _destination = HubText(10.5, FontWeights.Normal);
     private readonly StackPanel _tabs = new() { Orientation = Orientation.Horizontal };
     private readonly Border _tabTrack = new() { CornerRadius = new CornerRadius(10), Padding = new Thickness(2), HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
     private readonly StackPanel _hubContent = new() { Width = InnerRadius * 1.75 };
@@ -113,6 +114,7 @@ internal sealed class WheelWindow : Window
         _hubContent.Children.Add(_iconGlyph);
         _hubContent.Children.Add(_title);
         _hubContent.Children.Add(_detail);
+        _hubContent.Children.Add(_destination);
         _hubContent.Children.Add(_tabTrack);
 
         SourceInitialized += (_, _) =>
@@ -834,6 +836,18 @@ internal sealed class WheelWindow : Window
             move.X = distance * Math.Sin(angle);
             move.Y = -distance * Math.Cos(angle);
         }
+    }
+
+    /// <summary>
+    /// Says where the result will go before the drop: the destination folder, "next to the file", or a
+    /// warning when the folder refuses a write. The full path is the tooltip.
+    /// </summary>
+    public void SetDestination(string? text, string? path, bool warning)
+    {
+        _destination.Text = text ?? string.Empty;
+        _destination.ToolTip = string.IsNullOrWhiteSpace(path) ? null : path;
+        _destination.Foreground = warning ? Theme.Error : Theme.Muted;
+        _destination.Visibility = string.IsNullOrWhiteSpace(text) ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void UpdateHubText()

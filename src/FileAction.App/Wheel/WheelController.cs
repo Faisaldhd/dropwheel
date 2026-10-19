@@ -24,6 +24,8 @@ internal sealed class WheelController
     private readonly DispatcherTimer _argsTimer;
     private readonly DropFolderMemory _dragMemory = new();
     private readonly DispatcherTimer _dragTimer;
+    private string? _dragOriginFolder;
+    private string? _wheelSourceFolder;
     private WheelWindow? _wheel;
 
     public WheelController(AppSettings settings, ToolLocator tools, JobRunner jobs, GlobalInput input)
@@ -56,6 +58,9 @@ internal sealed class WheelController
         input.LeftButtonUp += () => _dragTimer.Stop();
         input.MouseDown += point =>
         {
+            // Where the drag starts is the source folder, which the label needs to tell "here" from
+            // "next to the file". The file itself is only known after it lands on the wheel.
+            _dragOriginFolder = ShellFolders.FolderAt(point);
             _dragMemory.BeginDrag();
             _dragTimer.Start();
             if (_wheel is { IsFinished: false, Mode: WheelMode.Click } wheel && !wheel.Contains(point))
@@ -130,7 +135,26 @@ internal sealed class WheelController
     {
         if (!_input.IsDragging)
             return;
-        _dragMemory.Observe(ShellFolders.FolderAt(_input.Cursor), Directory.Exists, OutputTarget.CanWrite);
+        var folder = ShellFolders.FolderAt(_input.Cursor);
+        _dragMemory.Observe(folder, Directory.Exists, OutputTarget.CanWrite);
+        UpdateDestination(folder);
+    }
+
+    /// <summary>Keeps the wheel's "save to" label in step with the folder the cursor is over.</summary>
+    private void UpdateDestination(string? cursorFolder)
+    {
+        if (_wheel is not { IsFinished: false } wheel)
+            return;
+
+        var label = DropTargetLabels.Choose(
+            _wheelSourceFolder, cursorFolder, _dragMemory.Remembered, Directory.Exists, OutputTarget.CanWrite);
+        var text = label.Kind switch
+        {
+            DropTargetLabelKind.Folder => T("wheel.saveTo", UI.Bidi.Value(label.FolderName ?? string.Empty)),
+            DropTargetLabelKind.Blocked => T("wheel.saveBlocked"),
+            _ => T("wheel.saveNextTo"),
+        };
+        wheel.SetDestination(text, label.Folder, label.Kind == DropTargetLabelKind.Blocked);
     }
 
     private void OnModifierTapped(ModifierKey key)
@@ -202,6 +226,11 @@ internal sealed class WheelController
         // drag was running. In drag mode the file itself is only known after it lands on the wheel, so
         // both candidates are validated against the real item when the operation starts (JobRunner).
         var targets = new DropTargets(ShellFolders.FolderAt(at), _dragMemory.Remembered);
+        // "Next to the file" is the folder that owns the item; in drag mode the source folder is the one
+        // the drag started from (the item itself only arrives with the drop).
+        _wheelSourceFolder = items is { Count: > 0 }
+            ? OutputTarget.SourceFolder(items[0].Path)
+            : _dragOriginFolder;
         var window = new WheelWindow(mode, wheel, items, _settings, Operations,
             (op, list, dropTargets) => _jobs.StartInto(op, list, null, dropTargets), targets)
         {
@@ -218,6 +247,7 @@ internal sealed class WheelController
                 _wheel = null;
         };
         _wheel = window;
+        UpdateDestination(targets.UnderCursor);
         window.ShowAt(at);
     }
 }
