@@ -1,12 +1,13 @@
 @echo off
-rem Builds the final DropWheel app into ..\release\DropWheel (framework-dependent), zips it and builds
+rem Builds the final DropWheel app into release\DropWheel (framework-dependent), zips it and builds
 rem the installer from installer\DropWheel.iss. The installer copies from ..\release\DropWheel and adds
 rem the .NET 10 Desktop Runtime when the target PC does not have it.
 setlocal
 set "ROOT=%~dp0"
-set "SDK=%ROOT%tools\dotnet-sdk"
-set "OUT=%ROOT%..\release\DropWheel"
-set "ZIP=%ROOT%..\release\DropWheel-win-x64.zip"
+rem Local SDK lives outside the repo, in DropWheel_1\_local\sdk (never committed).
+set "SDK=%ROOT%..\_local\sdk\dotnet-sdk"
+set "OUT=%ROOT%release\DropWheel"
+set "ZIP=%ROOT%release\DropWheel-win-x64.zip"
 rem Keep the real profile folder: it is where a per-user Inno Setup lives.
 set "REAL_LOCALAPPDATA=%LOCALAPPDATA%"
 

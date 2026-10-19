@@ -25,7 +25,7 @@ PrivilegesRequired=lowest
 ; DropWheel targets Windows 10 1809+ (SupportedOSPlatformVersion in FileAction.App.csproj), and so
 ; does the .NET 10 Desktop Runtime. Refuse to install on older Windows instead of failing to start.
 MinVersion=10.0.17763
-OutputDir=..\..\release
+OutputDir=..\release
 OutputBaseFilename=DropWheel-Setup-{#AppVersion}
 SetupIconFile=..\src\FileAction.App\Assets\DropWheel.ico
 UninstallDisplayIcon={app}\DropWheel.exe
@@ -54,7 +54,7 @@ DotNetFailed=The Microsoft .NET 10 Desktop Runtime could not be installed. %1
 DotNetManual=Setup will open the Microsoft download page in your browser. Install the .NET 10 Desktop Runtime there, then run the DropWheel setup again: DropWheel cannot start without it.
 
 [Files]
-Source: "..\..\release\DropWheel\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\release\DropWheel\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\licenses\*"; DestDir: "{app}\licenses"; Flags: recursesubdirs createallsubdirs ignoreversion

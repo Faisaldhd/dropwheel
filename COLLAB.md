@@ -26,7 +26,14 @@
 1. Review after each push or when Faisal asks: read `STATUS.md` and the latest commits, verify the release with REA, then write `REVIEW.md`.
 2. Only touch: `REVIEW.md`, `*_PROMPT.md`, `branding\`. Never source files.
 
+## Folders (owner decision)
+| Folder | What it is | Who touches it |
+|---|---|---|
+| `Downloads\DropWheel_1\` | **The ONLY workspace.** All work happens here: `DropWheel\` (the git repo), `_local\` (testdata, sdk, old builds; never committed), worktrees. | DeepSeek and Claude |
+| `Documents\DropWheel\` | The owner's personal test copy of the app. | **The owner only.** DeepSeek and Claude never read, write, build into, copy to, or delete anything under `%USERPROFILE%\Documents`. |
+| `Desktop\DropWheel_1\` | Old copy. The owner is deleting it. | Nobody. Never recreate it. |
+
 ## Git
-- Remote: `origin` = `https://github.com/Faisaldhd/dropwheel` (private). This is the ONLY remote.
-- Releases (installers only): `Faisaldhd/dropwheel` (public).
+- Remote: `origin` = `https://github.com/Faisaldhd/dropwheel` (PUBLIC). This is the ONLY remote. It holds the source and the GitHub Releases.
+- Never commit secrets or personal paths. The update-signing key stays outside the repo.
 - Branch: `main`. Tag every release `vX.Y.Z`.
