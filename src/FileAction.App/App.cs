@@ -353,20 +353,21 @@ internal sealed class App : Application
             if (status == UpdateCheckStatus.UpToDate)
             {
                 _tray?.ClearUpdate();
-                _tray?.Show("DropWheel", T("update.check.upToDate"), false);
+                _tray?.Show("DropWheel",
+                    T("update.check.upToDate", Bidi.Value(_updates.CurrentVersion.ToString(3))), false);
             }
             else if (status == UpdateCheckStatus.Failed)
             {
                 var error = _updates.LastError;
                 AppLog.Warn($"update check failed from the tray: {error ?? "no details"}");
-                _tray?.Show(T("update.error.title"), WithDetail(T("update.error.body"), error), true);
+                _tray?.Show(T("update.error.title"), T("update.check.failed", Bidi.Value(error ?? "")), true);
             }
             // Available: UpdateAvailable already showed the balloon and added the menu item.
         }
         catch (Exception ex)
         {
             AppLog.Error("update check from the tray failed", ex);
-            _tray?.Show(T("update.error.title"), WithDetail(T("update.error.body"), ex.Message), true);
+            _tray?.Show(T("update.error.title"), T("update.error.body", Bidi.Value(ex.Message)), true);
         }
     }
 
@@ -381,19 +382,16 @@ internal sealed class App : Application
             var result = await UpdateApplier.DownloadAndApplyAsync(_updates, info, null, CancellationToken.None);
             if (result.Success)
                 return; // the app exits for the update
+            var error = string.IsNullOrWhiteSpace(result.Error) ? T("update.error.title") : result.Error;
             AppLog.Error($"update {info.Version} failed: {result.Error ?? "no details"}");
-            _tray?.Show(T("update.error.title"), WithDetail(T("update.error.body"), result.Error), true);
+            _tray?.Show(T("update.error.title"), T("update.error.body", Bidi.Value(error)), true);
         }
         catch (Exception ex)
         {
             AppLog.Error("update download/apply failed", ex);
-            _tray?.Show(T("update.error.title"), WithDetail(T("update.error.body"), ex.Message), true);
+            _tray?.Show(T("update.error.title"), T("update.error.body", Bidi.Value(ex.Message)), true);
         }
     }
-
-    /// <summary>A localized sentence plus an optional technical detail, kept as one balloon line.</summary>
-    private static string WithDetail(string text, string? detail) =>
-        string.IsNullOrWhiteSpace(detail) ? text : text + " " + Bidi.Value(detail);
 
     /// <summary>Starts the 60 s / 24 h background checks; calling it twice is harmless.</summary>
     private void StartBackgroundChecks()

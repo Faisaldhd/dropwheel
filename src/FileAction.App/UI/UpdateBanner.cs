@@ -221,14 +221,10 @@ internal sealed class UpdateBanner : Border
                     T("settings.updates.upToDate", Bidi.Value(_upToDate?.ToString(3) ?? "")), 12.5, brush: Theme.Muted);
                 break;
             case Notice.CheckFailed:
-                message = Text(_error is null
-                    ? T("update.check.failed")
-                    : T("settings.updates.failed", Bidi.Value(_error)), 12.5, brush: Theme.Error);
+                message = Text(T("settings.updates.failed", Bidi.Value(_error ?? "")), 12.5, brush: Theme.Error);
                 break;
             case Notice.DownloadFailed:
-                message = Text(_error is null
-                    ? T("update.download.failed")
-                    : T("update.download.failed") + Environment.NewLine + Bidi.Value(_error), 12.5, brush: Theme.Error);
+                message = Text(T("update.download.failed", Bidi.Value(_error ?? "")), 12.5, brush: Theme.Error);
                 break;
             default:
                 return null;
