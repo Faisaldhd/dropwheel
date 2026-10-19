@@ -45,6 +45,8 @@ internal sealed class PdfOrganizeTool : IToolWindowSpec
 
     public string TitleKey => "tool.pdforganize.title";
 
+    public string PrimaryLabelKey => "tool.pdforganize.save";
+
     public ToolSpecLayout Layout => Size;
 
     public bool Applies(IReadOnlyList<FileItem> items) =>
@@ -171,10 +173,7 @@ internal sealed class PdfOrganizeView
         root.Children.Add(footer);
 
         ShowStatus(T("tool.pdforganize.hint"));
-        return new ToolContent(root, Reset, ApplyAsync, Task.FromResult<MediaSize?>(null), ActivateAsync)
-        {
-            ApplyLabel = T("tool.pdforganize.save"),
-        };
+        return new ToolContent(root, Reset, ApplyAsync, Task.FromResult<MediaSize?>(null), ActivateAsync);
     }
 
     /// <summary>Reads the page count, then renders the page thumbnails one at a time.</summary>

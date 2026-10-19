@@ -48,6 +48,8 @@ internal sealed class PdfMergeTool : IToolWindowSpec
 
     public string TitleKey => "tool.pdfmerge.title";
 
+    public string PrimaryLabelKey => "tool.pdfmerge.merge";
+
     public ToolSpecLayout Layout => Size;
 
     /// <summary>Two or more PDFs and/or images; a single image is the Crop tool's job.</summary>
@@ -144,10 +146,7 @@ internal sealed class PdfMergeView
         root.Children.Add(scroll);
 
         Rebuild();
-        return new ToolContent(root, Reset, ApplyAsync, Task.FromResult<MediaSize?>(null), ActivateAsync)
-        {
-            ApplyLabel = T("tool.pdfmerge.merge"),
-        };
+        return new ToolContent(root, Reset, ApplyAsync, Task.FromResult<MediaSize?>(null), ActivateAsync);
     }
 
     /// <summary>Fills in the row thumbnails one by one; the window is usable while they load.</summary>

@@ -19,6 +19,12 @@ internal interface IToolWindowSpec
     /// <summary>Localization key for the window title.</summary>
     string TitleKey { get; }
 
+    /// <summary>
+    /// Localization key for the bottom-right primary button. Tools override this with their own verb
+    /// ("Save Annotated Copy", "Merge PDFs", ...); the default keeps older tools on "Apply".
+    /// </summary>
+    string PrimaryLabelKey => "tool.window.apply";
+
     /// <summary>Chrome height/width and preview min/max (see <see cref="ToolSizes"/>).</summary>
     ToolSpecLayout Layout { get; }
 
@@ -40,11 +46,4 @@ internal sealed record ToolContent(
     Action Reset,
     Func<Task<string?>> Apply,
     Task<MediaSize?> Ready,
-    Func<Task> Activate)
-{
-    /// <summary>
-    /// Text for the primary bottom-right button. Null keeps the generic "Apply"; tools with a more
-    /// specific action (e.g. "Merge PDFs") set their own label here.
-    /// </summary>
-    public string? ApplyLabel { get; init; }
-}
+    Func<Task> Activate);
