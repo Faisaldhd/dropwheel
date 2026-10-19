@@ -271,5 +271,18 @@
   "job.doneCount.many": "Done: {0} outputs",
   "job.doneCount.other": "Done: {0} outputs",
   "tool.installFailed": "Couldn't save {0} to {1} ({2}). Check that DropWheel may write to that folder, or install {0} yourself (winget) and it will be found automatically.",
-  "tool.installAccessDenied": "access denied"
+  "tool.installAccessDenied": "access denied",
+  "app.tray.hooksUnavailable": "DropWheel can't watch the mouse and keyboard on this PC (security software may block it). Use Ctrl+Alt+Space or right-click DropWheel.",
+  "app.tray.gesturesOff": "Gesture monitoring is off (company-safe default). Open the wheel from the DropWheel menu or by dropping a file. Enable it in Settings → Company mode.",
+  "app.tray.gesturesOn": "Gesture monitoring is on.",
+  "app.screenshot.defaultName": "Screenshot",
+  "app.editor.group.images": "Images",
+  "app.editor.group.video": "Video",
+  "app.editor.group.audio": "Audio",
+  "app.editor.group.pdf": "PDF",
+  "app.editor.group.documents": "Documents",
+  "app.editor.group.slides": "Slides",
+  "app.editor.group.spreadsheets": "Spreadsheets",
+  "app.editor.group.subtitles": "Subtitles",
+  "app.editor.group.archives": "Archives"
 }
