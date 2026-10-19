@@ -162,3 +162,44 @@ and a post-write verification against the app's public key.
   `docs/signing-updates.md` too.
 - `docs/signing.md` (SignPath/Authenticode) is a different topic and was left untouched.
 - No `ci.yml`, `Core/**` or `installer/**` changes were made from this branch.
+
+---
+
+# NOTES - tests (branch `2.2.0-tests`)
+
+Status: test files written; branch based on `main` `5003b7e` (update-core `b3eb918`, strings `9b518dc`
+and signing already merged).
+
+## Files added (only new files under `tests/FileAction.Tests/`)
+
+| File | Covers |
+| --- | --- |
+| `UpdateCoreTests.cs` | `SemanticVersion` numeric rules, `ParseSha256Digest`, `Sha256Sums`, `GitHubReleaseClient.ParseLatest`, `UpdateVerifier` (ephemeral P-256), `UpdateService.CheckAsync`/`DownloadAsync` failure paths and cancellation with a fake `HttpMessageHandler`. |
+| `SettingsDefaultsTests.cs` | `new AppSettings()` defaults, `SettingsJson.Default.AppSettings` round-trip, legacy language migration. |
+| `PolicyTests2.cs` | `Policy.ParsePolicyValue` and the hooks/downloads gates (defaults only, no HKLM write). |
+| `SettingsTabsTests.cs` | Six tab keys, one card per toggle key, no Czech text, public static `SettingsWindow.Updates`. |
+| `InstallerSpecTests.cs` | AppId, privileges, languages, two checked tasks, `CloseApplications=yes`, `uninsdeletevalue`, `--set-watch`, `/VERYSILENT`, output name. |
+| `NewStringsTests.cs` | 2.2.0 keys in `en.json`/`ar.json`, key-set parity, placeholder parity, Arabic bidi isolates. |
+
+## Requests from tests
+
+None. No extra package or project reference is needed: xunit 2.9.3 and the BCL
+(`System.Text.Json`, `System.Security.Cryptography`) cover every test.
+
+## Expected CI state on this branch
+
+- **Green** on `main` `5003b7e`: `UpdateCoreTests`, `SettingsDefaultsTests`, `PolicyValueTests2`,
+  `PolicyGateTests2`, `NewStringsTests`.
+- **Red until `2.2.0-settings-tabs` merges (`5a7cd76`)**: `SettingsTabsTests` (six tabs,
+  `settings.general.watch`, `IUpdateService? Updates`). `settings.company.hooks` is deliberately not
+  required: the watch toggle moved to General under `settings.general.watch`.
+- **Red until `2.2.0-installer` merges**: `InstallerSpecTests` needs the edited
+  `installer/DropWheel.iss` plus `scripts/test-installer.ps1` and `scripts/build-installer.ps1`.
+  A missing file fails with its exact path, never a skip.
+
+## Constraints kept
+
+- Offline/deterministic: no GitHub call, no HKLM write, no process/exe launch, no installer execution.
+- Temp files only under `Path.GetTempPath()` and deleted in `Dispose`.
+- No production signing key is used: signature tests generate an ephemeral ECDSA P-256 key in-process.
+- No existing test file, `TestSetup.cs`, `.csproj`, `src/**` or `ci.yml` was modified.
