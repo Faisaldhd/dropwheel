@@ -32,7 +32,7 @@ internal sealed class SettingsWindow : Window
         _tools = tools;
         _changed = changed;
         Theme.Refresh();
-        Title = T("DropWheel – nastavení", "DropWheel – settings");
+        Title = T("settings.title");
         Width = 680;
         Height = 820;
         MinWidth = 520;
@@ -93,16 +93,16 @@ internal sealed class SettingsWindow : Window
 
     private void Build()
     {
-        Title = T("DropWheel – nastavení", "DropWheel – settings");
+        Title = T("settings.title");
         FlowDirection = LanguageManager.FlowDirection;
         var root = new StackPanel { Margin = new Thickness(32, 28, 32, 32), MaxWidth = 720 };
         root.Children.Add(Header());
 
-        root.Children.Add(SectionHeader(T("Jazyk", "Language")));
-        root.Children.Add(Card(T("Jazyk aplikace", "App language"),
-            T("Změní se hned, bez restartu.", "Applies immediately, no restart."),
+        root.Children.Add(SectionHeader(T("settings.language.section")));
+        root.Children.Add(Card(T("settings.language.app"),
+            T("settings.language.detail"),
             Segmented<UiLanguage>(
-                [(T("Systém", "System"), UiLanguage.System), ("العربية", UiLanguage.Arabic), ("English", UiLanguage.English)],
+                [(T("settings.system.section"), UiLanguage.System), ("العربية", UiLanguage.Arabic), ("English", UiLanguage.English)],
                 _settings.Language,
                 value =>
                 {
@@ -113,39 +113,38 @@ internal sealed class SettingsWindow : Window
                 }),
             glyph: "\uE774"));
 
-        root.Children.Add(SectionHeader(T("Gesto", "Gesture")));
+        root.Children.Add(SectionHeader(T("settings.gesture.section")));
         root.Children.Add(Card(
-            T("Chyťte soubor a během tažení ťukněte na klávesu", "Grab a file and tap a key while dragging"),
-            T("Otevře se kolo; soubor pusťte na výseč. Do středu = zrušit.", "A wheel opens; drop the file on a slice. Drop in the middle to cancel."),
+            T("settings.gesture.lead"),
+            T("settings.gesture.detail"),
             null, glyph: Glyphs.Extract));
         foreach (var (wheel, description) in new[]
                  {
-                     (WheelKind.Convert, T("Převod na jiný formát", "Convert to another format")),
-                     (WheelKind.Tools, T("Komprimovat, zmenšit, oříznout, spojit…", "Compress, shrink, trim, merge…")),
-                     (WheelKind.Actions, T("Kopírovat, přesunout, cesta, terminál, sdílet…", "Copy, move, path, terminal, share…")),
+                     (WheelKind.Convert, T("settings.gesture.convert")),
+                     (WheelKind.Tools, T("settings.gesture.tools")),
+                     (WheelKind.Actions, T("settings.gesture.actions")),
                  })
         {
             root.Children.Add(Card(AppSettings.WheelName(wheel), description, KeyChooser(wheel)));
         }
-        root.Children.Add(Card(T("Upravit kolo", "Customize wheels"),
-            T("Oblíbené výseče jako první, nepoužívané skrýt. Ťuknutí na stejnou klávesu znovu (nebo R) zopakuje poslední akci.",
-              "Favourite slices first, hide the ones you never use. Tap the same key again (or press R) to repeat the last action."),
-            Button(T("Upravit…", "Customize…"), () =>
+        root.Children.Add(Card(T("settings.wheels.customize.title"),
+            T("settings.wheels.customize.detail"),
+            Button(T("settings.wheels.customize.button"), () =>
             {
                 if (Operations is not null)
                     WheelEditorWindow.ShowSingle(_settings, Operations(), _changed);
             }, glyph: "\uE70F"),
             glyph: "\uE8EE"));
-        root.Children.Add(Card(T("Pozastavit gesta", "Pause gestures"), T("Kolo se při tažení neotevře.", "The wheel won’t open while dragging."),
+        root.Children.Add(Card(T("settings.gesture.pause.title"), T("settings.gesture.pause.detail"),
             Toggle(_settings.Paused, v =>
             {
                 _settings.Paused = v;
                 Save();
             })));
 
-        root.Children.Add(SectionHeader(T("Klávesnice", "Keyboard")));
-        root.Children.Add(Card(T("Zkratka pro výběr v Průzkumníku", "Shortcut for the File Explorer selection"),
-            T("Šipky vyberou výseč, Enter potvrdí, Tab přepne kolo, Esc zavře.", "Arrows pick a slice, Enter runs it, Tab switches wheels, Esc closes."),
+        root.Children.Add(SectionHeader(T("settings.keyboard.section")));
+        root.Children.Add(Card(T("settings.keyboard.shortcut.title"),
+            T("settings.keyboard.shortcut.detail"),
             null,
             below: Wrap(Segmented(
                 Enum.GetValues<HotkeyPreset>().Where(p => p != HotkeyPreset.None).Append(HotkeyPreset.None)
@@ -158,17 +157,17 @@ internal sealed class SettingsWindow : Window
                 })),
             glyph: "\uE765"));
 
-        root.Children.Add(SectionHeader(T("Výsledky", "Results")));
+        root.Children.Add(SectionHeader(T("settings.results.section")));
         var folderLine = Text(Bidi.Value(_settings.OutputDirectory ?? ""), 12, brush: Theme.Muted, wrap: false);
         var folderRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
-        folderRow.Children.Add(Button(T("Vybrat složku…", "Choose folder…"), PickFolder, glyph: Glyphs.Folder));
+        folderRow.Children.Add(Button(T("settings.results.chooseFolder"), PickFolder, glyph: Glyphs.Folder));
         folderLine.Margin = new Thickness(12, 0, 0, 0);
         folderLine.VerticalAlignment = VerticalAlignment.Center;
         folderRow.Children.Add(folderLine);
         var toFolder = !string.IsNullOrWhiteSpace(_settings.OutputDirectory);
         var below = new StackPanel();
         below.Children.Add(Wrap(Segmented(
-            [(T("Vedle originálu", "Next to the original"), false), (T("Do složky", "To a folder"), true)],
+            [(T("settings.results.nextToOriginal"), false), (T("settings.results.toFolder"), true)],
             toFolder,
             value =>
             {
@@ -185,25 +184,25 @@ internal sealed class SettingsWindow : Window
             })));
         if (toFolder)
             below.Children.Add(folderRow);
-        root.Children.Add(Card(T("Kam ukládat", "Save results"), T("Originál zůstává vždy beze změny.", "The original file is never changed."), null, below, Glyphs.Folder));
-        root.Children.Add(Card(T("Po dokončení ukázat ve složce", "Show in folder when done"), null,
+        root.Children.Add(Card(T("settings.results.saveTitle"), T("settings.results.saveDetail"), null, below, Glyphs.Folder));
+        root.Children.Add(Card(T("settings.results.reveal"), null,
             Toggle(_settings.RevealResult, v =>
             {
                 _settings.RevealResult = v;
                 Save();
             })));
 
-        root.Children.Add(SectionHeader(T("Kvalita", "Quality")));
-        root.Children.Add(Card(T("JPG, WebP a AVIF", "JPG, WebP and AVIF"), T("Kvalita při převodu obrázků", "Quality when converting images"),
+        root.Children.Add(SectionHeader(T("settings.quality.section")));
+        root.Children.Add(Card(T("settings.quality.images.title"), T("settings.quality.images.detail"),
             Slider(50, 100, _settings.Quality.JpegQuality, v => _settings.Quality.JpegQuality = v, Save), glyph: Glyphs.Photo));
-        root.Children.Add(Card(T("Komprimovat", "Compress"), T("Kvalita nástroje Komprimovat", "Quality of the Compress tool"),
+        root.Children.Add(Card(T("settings.quality.compress.title"), T("settings.quality.compress.detail"),
             Slider(30, 95, _settings.Quality.CompressQuality, v => _settings.Quality.CompressQuality = v, Save), glyph: Glyphs.Shrink));
-        root.Children.Add(Card(T("PDF na obrázky", "PDF to images"), T("Rozlišení v DPI", "Resolution in DPI"),
+        root.Children.Add(Card(T("settings.quality.pdf.title"), T("settings.quality.pdf.detail"),
             Slider(72, 600, _settings.Quality.PdfDpi, v => _settings.Quality.PdfDpi = v, Save), glyph: Glyphs.Page));
 
         // R-20/R-31: company-safe switches in one section. Hooks and downloads default to OFF and IT can
         // lock them with HKLM policies; nothing is registered automatically, every integration is opt-in.
-        root.Children.Add(SectionHeader(T("Firemní režim", "Company mode")));
+        root.Children.Add(SectionHeader(T("settings.company.section")));
         root.Children.Add(Card(Loc.T("settings.company.autostart.title"),
             Loc.T("settings.company.autostart.detail"),
             Toggle(Shell.ShellIntegration.IsAutostartEnabled, v =>
@@ -231,7 +230,7 @@ internal sealed class SettingsWindow : Window
             glyph: "\uE8A7"));
         root.Children.Add(Card(Loc.T("settings.company.hooks.title"),
             Shell.Policy.HooksDisabled
-                ? T("Zakázáno zásadou správce.", "Disabled by the administrator policy.")
+                ? T("settings.company.policy.disabled")
                 : Loc.T("settings.company.hooks.detail"),
             Toggle(_settings.WatchGestures && !Shell.Policy.HooksDisabled, v =>
             {
@@ -242,7 +241,7 @@ internal sealed class SettingsWindow : Window
             glyph: "\uE7C9"));
         root.Children.Add(Card(Loc.T("settings.company.downloads.title"),
             Shell.Policy.DownloadsDisabled
-                ? T("Zakázáno zásadou správce.", "Disabled by the administrator policy.")
+                ? T("settings.company.policy.disabled")
                 : Loc.T("settings.company.downloads.detail"),
             Toggle(_settings.AutoDownloadTools && !Shell.Policy.DownloadsDisabled, v =>
             {
@@ -252,11 +251,10 @@ internal sealed class SettingsWindow : Window
             }),
             glyph: "\uE896"));
 
-        root.Children.Add(SectionHeader(T("Pomocné programy", "Helper programs")));
-        root.Children.Add(Card(T("Co zvládá DropWheel sám", "Built in"),
-            T("Obrázky, PDF, tabulky, titulky a archivy. Audio a video potřebují FFmpeg, dokumenty Pandoc a soubory Office LibreOffice.",
-              "Images, PDFs, spreadsheets, subtitles and archives. Audio and video need FFmpeg, documents need Pandoc and Office files need LibreOffice."),
-            Button(T("Zkontrolovat znovu", "Check again"), () =>
+        root.Children.Add(SectionHeader(T("settings.tools.section")));
+        root.Children.Add(Card(T("settings.tools.builtIn.title"),
+            T("settings.tools.builtIn.detail"),
+            Button(T("settings.tools.checkAgain"), () =>
             {
                 _tools.Refresh();
                 Rebuild();
@@ -266,7 +264,7 @@ internal sealed class SettingsWindow : Window
             root.Children.Add(ToolCard(tool));
 
         var version = typeof(SettingsWindow).Assembly.GetName().Version;
-        var footer = Text($"DropWheel {Bidi.Value(version?.ToString(3))} · " + T("vše běží lokálně, soubory se nikam neodesílají.", "everything runs locally, files never leave your PC."), 12, brush: Theme.Muted);
+        var footer = Text($"DropWheel {Bidi.Value(version?.ToString(3))} · " + T("settings.footer"), 12, brush: Theme.Muted);
         footer.Margin = new Thickness(2, 24, 0, 0);
         root.Children.Add(footer);
 
@@ -295,13 +293,13 @@ internal sealed class SettingsWindow : Window
         var title = Text("DropWheel", 28, FontWeights.SemiBold);
         title.FontFamily = Theme.DisplayFont;
         text.Children.Add(title);
-        text.Children.Add(Text(T("Chyťte soubor, ťukněte na klávesu, pusťte ho na formát.", "Grab a file, tap a key, drop it on a format."), 13.5, brush: Theme.Muted));
+        text.Children.Add(Text(T("settings.header.tagline"), 13.5, brush: Theme.Muted));
         panel.Children.Add(text);
         return panel;
     }
 
     private Border KeyChooser(WheelKind wheel) => Segmented(
-        [("Shift", ModifierKey.Shift), ("Ctrl", ModifierKey.Ctrl), ("Alt", ModifierKey.Alt), (T("Vyp.", "Off"), ModifierKey.None)],
+        [("Shift", ModifierKey.Shift), ("Ctrl", ModifierKey.Ctrl), ("Alt", ModifierKey.Alt), (T("settings.gesture.off"), ModifierKey.None)],
         _settings.KeyFor(wheel),
         key =>
         {
@@ -335,7 +333,7 @@ internal sealed class SettingsWindow : Window
 
     private void PickFolder()
     {
-        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = T("Výstupní složka", "Output folder") };
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = T("settings.outputFolder.dialogTitle") };
         if (dialog.ShowDialog(this) == true)
         {
             _settings.OutputDirectory = dialog.FolderName;
@@ -351,12 +349,12 @@ internal sealed class SettingsWindow : Window
             ? Bidi.Value(path)
             : (tool switch
             {
-                ExternalTool.Ffmpeg => T("Audio a video", "Audio and video"),
-                ExternalTool.Pandoc => T("Dokumenty (DOCX, Markdown, EPUB…)", "Documents (DOCX, Markdown, EPUB…)"),
-                _ => T("DOC, PPTX, ODS a převod do PDF", "DOC, PPTX, ODS and conversion to PDF"),
+                ExternalTool.Ffmpeg => T("settings.tools.audioVideo"),
+                ExternalTool.Pandoc => T("settings.tools.documents"),
+                _ => T("settings.tools.office"),
             });
         var right = new StackPanel { Orientation = Orientation.Horizontal };
-        right.Children.Add(Badge(path is null ? T("chybí", "missing") : T("nalezeno", "found"), path is not null));
+        right.Children.Add(Badge(path is null ? T("settings.tools.missing") : T("settings.tools.found"), path is not null));
         if (path is null)
         {
             var id = tool switch
@@ -367,17 +365,17 @@ internal sealed class SettingsWindow : Window
             };
             var downloadSize = Bidi.Value(Shell.ToolInstaller.DownloadSize(tool));
             var install = Shell.ToolInstaller.CanInstall(tool) && DownloadTool is not null
-                ? Button(T($"Stáhnout ({downloadSize})", $"Download ({downloadSize})"), async () =>
+                ? Button(T("settings.tools.download", downloadSize), async () =>
                 {
                     if (await DownloadTool(tool))
                         Rebuild();
                 }, primary: true, glyph: "\uE896")
-                : Button(T("Nainstalovat", "Install"), () =>
+                : Button(T("settings.tools.install"), () =>
             {
                 try
                 {
                     Process.Start(new ProcessStartInfo("cmd.exe",
-                        $"/c winget install -e --id {id} --accept-source-agreements --accept-package-agreements & echo. & echo {T("Hotovo. Ve DropWheel kliknete na Zkontrolovat znovu.", "Done. Click Check again in DropWheel.")} & pause")
+                        $"/c winget install -e --id {id} --accept-source-agreements --accept-package-agreements & echo. & echo {T("settings.tools.installDone")} & pause")
                     { UseShellExecute = true });
                 }
                 catch (System.ComponentModel.Win32Exception ex)
