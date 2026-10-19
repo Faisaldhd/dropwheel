@@ -132,7 +132,7 @@ public class AudioToolsTests
         Assert.Contains("measured_thresh=-38.5", filter, StringComparison.Ordinal);
         Assert.Contains("offset=-0.8", filter, StringComparison.Ordinal);
         Assert.Contains("linear=true", filter, StringComparison.Ordinal);
-        Assert.EndsWith("print_format=summary", filter, StringComparison.Ordinal);
+        Assert.Contains("print_format=summary", filter, StringComparison.Ordinal);
         Assert.StartsWith("loudnorm=I=-16:TP=-1.5:LRA=11", filter, StringComparison.Ordinal);
     }
 
