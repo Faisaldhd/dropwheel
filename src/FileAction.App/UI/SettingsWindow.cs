@@ -5,6 +5,7 @@ using System.Windows.Media.Imaging;
 using FileAction.App.Input;
 using FileAction.App.Shell;
 using FileAction.Core;
+using FileAction.Core.Updates;
 using static FileAction.App.UI.Controls;
 using static FileAction.Core.Loc;
 
@@ -21,6 +22,9 @@ internal sealed class SettingsWindow : Window
 
     /// <summary>Downloads FFmpeg or Pandoc in the app (set by the app).</summary>
     public static Func<ExternalTool, Task<bool>>? DownloadTool { get; set; }
+
+    /// <summary>2.2.0: the update service shown in the Updates tab (set by the app).</summary>
+    public static IUpdateService? Updates { get; set; }
     private readonly AppSettings _settings;
     private readonly ToolLocator _tools;
     private readonly Action _changed;
