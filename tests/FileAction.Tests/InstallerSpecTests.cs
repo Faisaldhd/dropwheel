@@ -34,7 +34,7 @@ public class InstallerSpecTests
             iss.Contains(AppId, StringComparison.OrdinalIgnoreCase),
             $"installer/DropWheel.iss must keep AppId {AppId} so a new setup upgrades the previous install.");
         Assert.Matches(@"(?im)^\s*PrivilegesRequired\s*=\s*lowest\s*$", iss);
-        Assert.Matches(@"(?im)^\s*PrivilegesRequiredOverridesAllowed\s*=\s*dialog\s*$", iss);
+        Assert.Matches(@"(?im)^\s*PrivilegesRequiredOverridesAllowed\s*=\s*dialog(\s+commandline)?\s*$", iss);
     }
 
     [Fact]
@@ -64,8 +64,9 @@ public class InstallerSpecTests
 
         Assert.Matches(@"(?im)^\s*CloseApplications\s*=\s*yes\s*$", iss);
         Assert.True(
-            iss.Contains("uninsdeletevalue", StringComparison.OrdinalIgnoreCase),
-            "The Run entry written by the installer must use uninsdeletevalue so uninstall removes it.");
+            iss.Contains("RemoveShellIntegration", StringComparison.OrdinalIgnoreCase) &&
+            iss.Contains("RegDeleteValue", StringComparison.OrdinalIgnoreCase),
+            "The uninstaller must remove the per-user Run value in [Code] (RemoveShellIntegration/RegDeleteValue).");
         Assert.Matches(
             @"(?im)^\s*OutputBaseFilename\s*=\s*" +
             Regex.Escape("DropWheel-{#AppVersion}-Setup") +
