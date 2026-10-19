@@ -3,7 +3,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -457,8 +456,9 @@ internal sealed class SettingsWindow : Window
         var websiteText = T("settings.about.website");
         if (!websiteText.Contains("http", StringComparison.OrdinalIgnoreCase))
             websiteText = websiteText + " · " + Bidi.Value(RepositoryUrl);
-        var websiteLink = new Hyperlink { Foreground = Theme.Accent, TextDecorations = null };
-        websiteLink.Inlines.Add(new Run(websiteText));
+        // Fully qualified: System.Windows.Documents.Glyphs would clash with FileAction.Core.Glyphs.
+        var websiteLink = new System.Windows.Documents.Hyperlink { Foreground = Theme.Accent, TextDecorations = null };
+        websiteLink.Inlines.Add(new System.Windows.Documents.Run(websiteText));
         websiteLink.Click += (_, _) => OpenRepository();
         website.Inlines.Add(websiteLink);
         page.Children.Add(website);
