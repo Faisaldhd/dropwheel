@@ -1,4 +1,31 @@
-# DropWheel 2.2.3 — CHANGES
+# DropWheel 2.3.0 — CHANGES
+
+## 2.3.0
+
+### English
+
+- **Crop tool (first floating tool).** With a single image selected, the Tools wheel (Ctrl) now offers
+  **Crop**; it opens a floating tool window instead of starting a job. Drag the rectangle by its corner or
+  edge handles, see the area outside it dimmed, pick an aspect ratio (Free, 1:1, 16:9, 9:16, 4:3, 3:4) and
+  adjust the width/height boxes in original-image pixels. Reset restores the whole image and Free.
+  **Apply** writes `<name> Cropped.<ext>` next to the source — or into the folder the drop resolved — never
+  overwrites the original, keeps the format and applies the EXIF orientation first.
+- **A reusable floating-tool framework.** Tools declare their own size (clamped to 95% of the work-area
+  width and 90% of its height), get a borderless rounded card centred on the monitor under the cursor,
+  draggable by its title, closed with Esc or the round X, with a Reset / primary-action bar. Each tool
+  lives in its own file and registers itself, so adding the next tool never edits a shared file.
+
+### العربية
+
+- **أداة القصّ (أول أداة عائمة).** عند تحديد صورة واحدة تعرض عجلة الأدوات (Ctrl) خيار **قصّ**، فيُفتح إطار
+  أداة عائم بدل بدء مهمة. اسحب المستطيل من مقابض الزوايا والحواف، والمنطقة خارجه معتمة، واختر نسبة الأبعاد
+  (حر، 1:1، 16:9، 9:16، 4:3، 3:4) واضبط مربعَي العرض والارتفاع ببكسلات الصورة الأصلية. تعيد «إعادة ضبط»
+  الصورة كاملة مع «حر». يكتب **تطبيق** ملفًا باسم `<الاسم> مقصوصة.<الامتداد>` بجانب المصدر أو في المجلد
+  الذي حُلّت إليه الإفلاتة، دون استبدال الأصل، مع الحفاظ على الصيغة وتطبيق اتجاه EXIF أولًا.
+- **إطار أدوات عائم قابل لإعادة الاستخدام.** تعلن كل أداة حجمها (مقيّد بـ95% من عرض مساحة العمل و90% من
+  ارتفاعها)، ويظهر إطار مستدير بلا حدود في وسط الشاشة تحت المؤشر، يُسحب من شريطه ويُغلق بـEsc أو بزر X
+  الدائري، مع شريط «إعادة ضبط» وزر الإجراء الأساسي. كل أداة في ملفها وتُسجّل نفسها، فلا تحتاج الأداة
+  التالية إلى تعديل ملف مشترك.
 
 ## 2.2.3
 

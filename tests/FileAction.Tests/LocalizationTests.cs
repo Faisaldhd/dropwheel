@@ -30,6 +30,12 @@ public class LocalizationTests
         "catalog.pdf.toMd.subtitle",
         "catalog.pdf.toWord.subtitle",
         "catalog.doc.toWord.subtitle",
+        // Aspect ratios are written with Western digits in both languages.
+        "tool.crop.aspect.1x1",
+        "tool.crop.aspect.16x9",
+        "tool.crop.aspect.9x16",
+        "tool.crop.aspect.4x3",
+        "tool.crop.aspect.3x4",
         "catalog.doc.toMd.subtitle",
         "catalog.sheet.toXlsx.subtitle",
     ];

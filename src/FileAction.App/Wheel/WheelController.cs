@@ -84,8 +84,9 @@ internal sealed class WheelController
         _wheel?.Relocalize();
     }
 
-    /// <summary>The cross-platform catalog plus tools that need Windows itself (OCR).</summary>
-    public static IReadOnlyList<Operation> BuildOperations() => [.. Catalog.Build(), new Ocr.OcrOperation()];
+    /// <summary>The cross-platform catalog plus tools that need Windows itself (OCR) or a window (Crop).</summary>
+    public static IReadOnlyList<Operation> BuildOperations() =>
+        [.. Catalog.Build(), new Ocr.OcrOperation(), new UI.Tools.Image.CropOperation()];
 
     /// <summary>
     /// What fits these items. Conversions that need FFmpeg or Pandoc stay on the wheel even before those are
@@ -218,6 +219,15 @@ internal sealed class WheelController
         Open(WheelMode.Click, WheelKind.Convert, items, at);
     }
 
+    /// <summary>Runs a wheel choice: a floating tool opens its window, everything else becomes a job.</summary>
+    private void RunOperation(Operation op, IReadOnlyList<FileItem> items, DropTargets? targets)
+    {
+        if (op is UI.Tools.IInteractiveTool tool)
+            tool.Open(items, targets);
+        else
+            _jobs.StartInto(op, items, null, targets);
+    }
+
     private void Open(WheelMode mode, WheelKind wheel, IReadOnlyList<FileItem>? items, Win32.POINT at)
     {
         _wheel?.Finish();
@@ -232,13 +242,13 @@ internal sealed class WheelController
             ? OutputTarget.SourceFolder(items[0].Path)
             : _dragOriginFolder;
         var window = new WheelWindow(mode, wheel, items, _settings, Operations,
-            (op, list, dropTargets) => _jobs.StartInto(op, list, null, dropTargets), targets)
+            (op, list, dropTargets) => RunOperation(op, list, dropTargets), targets)
         {
             LastOperation = LastFor,
             RunRepeat = repeatItems =>
             {
                 if (LastFor(repeatItems) is { } last)
-                    _jobs.StartInto(last, repeatItems, _settings.LastParameters, targets);
+                    RunOperation(last, repeatItems, targets);
             },
         };
         window.Closed += (_, _) =>

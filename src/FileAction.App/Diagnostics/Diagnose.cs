@@ -70,6 +70,8 @@ internal static class Diagnose
         // --diagnose is a fresh process: in-memory state is empty, so prefer the last line the log kept.
         text.AppendLine($"drop folder: {LastLogged("drop target:") ?? ShellFolders.LastDetection}");
         text.AppendLine($"drop choice: {LastLogged("drop folder decision:") ?? ShellFolders.LastDecision}");
+        var registered = UI.Tools.ToolRegistry.All;
+        text.AppendLine($"tools:      {registered.Count} registered ({string.Join(", ", registered.Select(t => t.Id))})");
         text.AppendLine();
 
         text.AppendLine("Folders (first writable one holds the log)");

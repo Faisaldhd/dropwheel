@@ -8,10 +8,13 @@ using System.Windows.Media.Media3D;
 using FileAction.App.Actions;
 using FileAction.App.Jobs;
 using FileAction.App.UI;
+using FileAction.App.UI.Tools;
+using FileAction.App.UI.Tools.Image;
 using FileAction.App.Wheel;
 using FileAction.Core;
 using FileAction.Core.Operations;
 using FileAction.Core.Updates;
+using ImageMagick;
 
 namespace FileAction.App;
 
@@ -67,7 +70,7 @@ internal static class SelfTest
 
             log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
             // Saved after every step, so a hard crash (which skips the catch below) still shows where it stopped.
-            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestOcr(outDir, log) })
+            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestOcr(outDir, log), () => TestToolWindows(outDir, log) })
             {
                 File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
                 step();
@@ -422,6 +425,27 @@ internal static class SelfTest
         if (bad.Count > 0)
             throw new InvalidOperationException(
                 $"raw localization key rendered in {where}: {string.Join(", ", bad.Distinct(StringComparer.Ordinal))}");
+    }
+
+    /// <summary>Builds every registered floating tool offscreen, so --self-test covers their layout and strings.</summary>
+    private static void TestToolWindows(string outDir, List<string> log)
+    {
+        var directory = Path.Combine(outDir, "tools");
+        Directory.CreateDirectory(directory);
+        if (ToolRegistry.All.Count == 0)
+            throw new InvalidOperationException("no tool windows registered");
+
+        var sample = Path.Combine(directory, "crop-sample.png");
+        using (var image = new MagickImage(MagickColors.RebeccaPurple, 640, 420))
+            image.Write(sample);
+
+        var item = new FileItem(sample);
+        if (!CropTool.Instance.Applies([item]))
+            throw new InvalidOperationException("the crop tool does not accept a png");
+
+        var window = new ToolWindow(CropTool.Instance, [item], null);
+        SaveWindow(window, Path.Combine(directory, "crop.png"), ToolSizes.Crop.Width, desktop: true);
+        log.Add($"ok tools/crop ({ToolRegistry.All.Count} registered)");
     }
 
     private static void SaveWindow(Window window, string file, double width, bool desktop = false)
