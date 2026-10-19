@@ -98,35 +98,46 @@ internal static class ShellFolders
             if (type is null)
                 return new Detection(null, $"drop target: {cursor} class={windowClass} Shell.Application unavailable");
             shell = Activator.CreateInstance(type);
-            if (shell?.GetType().InvokeMember("Windows", BindingFlags.InvokeMethod, null, shell, null) is not IEnumerable windows)
-                return new Detection(null, $"drop target: {cursor} class={windowClass} no Shell.Windows collection");
-
-            foreach (var window in windows)
+            var collection = shell?.GetType().InvokeMember("Windows", BindingFlags.InvokeMethod, null, shell, null);
+            if (collection is not IEnumerable windows)
             {
-                if (window is null)
-                    continue;
-                try
-                {
-                    var id = ReadHandle(window);
-                    var browserHandle = BrowserHandle(window) ?? id;
-                    var path = ReadFolderPath(window);
-                    if (string.IsNullOrEmpty(path) || !IsUnderRoot(browserHandle, root))
-                        continue;
+                ReleaseCom(collection);
+                return new Detection(null, $"drop target: {cursor} class={windowClass} no Shell.Windows collection");
+            }
 
-                    candidates.Add(new ShellFolderCandidate(path, browserHandle.ToInt64()));
-                    var kind = browserHandle.ToInt64() == tabHandle ? "tab"
-                        : browserHandle == root ? "root"
-                        : "other";
-                    described.Add($"{path} (0x{browserHandle.ToInt64():X},{kind})");
-                }
-                catch
+            try
+            {
+                foreach (var window in windows)
                 {
-                    // Not a shell browser, or the window closed while we were asking.
+                    if (window is null)
+                        continue;
+                    try
+                    {
+                        var id = ReadHandle(window);
+                        var browserHandle = BrowserHandle(window) ?? id;
+                        var path = ReadFolderPath(window);
+                        if (string.IsNullOrEmpty(path) || !IsUnderRoot(browserHandle, root))
+                            continue;
+
+                        candidates.Add(new ShellFolderCandidate(path, browserHandle.ToInt64()));
+                        var kind = browserHandle.ToInt64() == tabHandle ? "tab"
+                            : browserHandle == root ? "root"
+                            : "other";
+                        described.Add($"{path} (0x{browserHandle.ToInt64():X},{kind})");
+                    }
+                    catch
+                    {
+                        // Not a shell browser, or the window closed while we were asking.
+                    }
+                    finally
+                    {
+                        ReleaseCom(window);
+                    }
                 }
-                finally
-                {
-                    ReleaseCom(window);
-                }
+            }
+            finally
+            {
+                ReleaseCom(collection);
             }
         }
         catch
