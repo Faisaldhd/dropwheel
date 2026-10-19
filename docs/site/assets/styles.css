@@ -1,0 +1,412 @@
+/* DropWheel download page — dark violet theme.
+   Same-origin only: no webfonts, no CDN, no trackers. */
+
+:root {
+  color-scheme: dark;
+  --bg: #16121f;
+  --surface: #1d1729;
+  --surface-2: #251d36;
+  --border: #3a2c52;
+  --text: #f3edfb;
+  --muted: #c8bad9;
+  --accent: #8224d4;
+  --accent-hover: #9739ea;
+  --accent-soft: #c9a6f0;
+  --radius: 16px;
+  --max-width: 64rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html {
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(56rem 28rem at 50% -6rem, rgba(130, 36, 212, 0.3), transparent 70%),
+    var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", Tahoma, "Noto Sans", Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Arabic: Tahoma first, then other system Arabic faces. No downloaded fonts. */
+[lang="ar"] {
+  font-family: Tahoma, "Segoe UI", "Noto Naskh Arabic", "Arabic Typesetting", "Traditional Arabic", Arial, sans-serif;
+  line-height: 1.9;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2.5rem, 7vw, 3.5rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+html[lang="ar"] h1 {
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+h2 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.35rem, 3vw, 1.6rem);
+  line-height: 1.3;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent-soft);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: #eadcfb;
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent-soft);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Skip links: only the active language one is rendered. */
+.skip {
+  position: absolute;
+  inset-block-start: -5rem;
+  inset-inline-start: 0.75rem;
+  z-index: 20;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+  transition: inset-block-start 0.15s ease;
+}
+
+.skip:focus-visible {
+  inset-block-start: 0.75rem;
+}
+
+.skip-ar {
+  display: none;
+}
+
+html[lang="ar"] .skip-en {
+  display: none;
+}
+
+html[lang="ar"] .skip-ar {
+  display: inline-block;
+}
+
+.site-header {
+  display: flex;
+  justify-content: flex-end;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 1rem 1.25rem 0;
+}
+
+.lang-switch {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.lang-switch button {
+  min-height: 2.75rem;
+  padding: 0.4rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.lang-switch button:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.lang-switch button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.lang-switch button[aria-pressed="true"]:hover {
+  background: var(--accent-hover);
+  color: #ffffff;
+}
+
+main {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 3rem;
+}
+
+main:focus-visible {
+  outline: 3px solid var(--accent-soft);
+  outline-offset: 8px;
+  border-radius: 8px;
+}
+
+.lang {
+  max-width: 100%;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1.5rem 0 2rem;
+  text-align: center;
+}
+
+.app-icon {
+  display: block;
+  width: 128px;
+  height: 128px;
+  border-radius: 28px;
+  box-shadow: 0 18px 50px rgba(130, 36, 212, 0.38);
+}
+
+.tagline {
+  max-width: 34rem;
+  color: var(--muted);
+  font-size: 1.15rem;
+}
+
+.download-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3.5rem;
+  margin-block-start: 0.5rem;
+  padding: 1rem 2.4rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: 0 10px 30px rgba(130, 36, 212, 0.45);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.download-button:hover {
+  background: var(--accent-hover);
+  color: #ffffff;
+  transform: translateY(-2px);
+}
+
+.download-button:active {
+  transform: translateY(0);
+}
+
+.download-button:focus-visible {
+  outline-offset: 4px;
+}
+
+.platform {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.version {
+  margin-block-start: 0.35rem;
+  font-weight: 600;
+}
+
+.version bdi {
+  font-variant-numeric: tabular-nums;
+}
+
+.checksum {
+  width: min(100%, 40rem);
+  margin-block-start: 0.35rem;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: start;
+}
+
+.checksum-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+[lang="ar"] .checksum-label {
+  letter-spacing: 0;
+}
+
+.hash {
+  display: block;
+  margin-block-start: 0.35rem;
+  color: var(--text);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
+.hash-file {
+  margin-block-start: 0.3rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
+}
+
+.hash-status,
+.hash-fallback {
+  margin-block-start: 0.35rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.hash-status:empty,
+.hash-file:empty {
+  display: none;
+}
+
+.shots {
+  margin-block-start: 2.5rem;
+}
+
+.shots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.shots figure {
+  margin: 0;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.shots img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  background: #0f0c16;
+}
+
+.shots figcaption {
+  padding: 0.65rem 0.4rem 0.25rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.site-footer {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 3rem;
+  border-block-start: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.license-line {
+  color: var(--text);
+}
+
+.license-line span,
+.license-line {
+  unicode-bidi: isolate;
+}
+
+.source-link {
+  margin-block-start: 0.5rem;
+}
+
+@media (max-width: 40rem) {
+  .site-header {
+    padding-inline: 1rem;
+  }
+
+  main {
+    padding-inline: 1rem;
+  }
+
+  .download-button {
+    width: 100%;
+  }
+
+  .checksum {
+    padding: 0.8rem 0.9rem;
+  }
+
+  .hash {
+    font-size: 0.76rem;
+  }
+
+  .site-footer {
+    padding-inline: 1rem;
+  }
+}
+
+/* Respect the OS reduced-motion preference: no transforms or animated focus. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .download-button:hover {
+    transform: none;
+  }
+}
