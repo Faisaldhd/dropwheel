@@ -56,3 +56,41 @@ The self-test renders `settings.png` with `SettingsWindow.Updates == null`, so i
 `https://github.com/Faisaldhd/dropwheel/releases/tag/v9.9.9`) before constructing `SettingsWindow`, render
 `updates-available.png`, then restore `SettingsWindow.Updates = null`. A `Checking`/`Downloading` capture needs
 the fake to raise `StateChanged`/report progress; do not do network work in the self-test.
+
+## Requests from update-apply
+
+### 1. `.github/workflows/ci.yml` (lead; routed to release-clean) — one step
+
+The portable helper has an end-to-end CI script that is not invoked yet. It needs `windows-latest` and a
+Release build of `DropWheel.exe`:
+
+```yaml
+      - name: Apply-update helper (portable)
+        shell: pwsh
+        run: '& ./scripts/test-update-apply.ps1'
+```
+
+The script starts the built exe in `--apply-update` mode (a windowless process) and checks the success,
+corrupt-zip and rollback cases. If `bin\Release\net10.0-windows\DropWheel.exe` is missing it publishes a
+framework-dependent folder itself. Never run it on the owner's PC.
+
+### 2. App wiring and string keys — already handled
+
+`UpdateApplier.TryRun` is called before the single-instance check and `--updated` calls
+`AnnounceUpdated` on main. `update.updated.title/body/whatsNew` are in both string tables on main.
+
+### 3. Note on the helper copy (for review, not a request)
+
+The portable build is a **folder** (apphost + DLLs), not a single-file exe, so a lone `DropWheel.exe`
+copy in `%TEMP%` cannot start. `PortableUpdater` therefore copies the running exe (as required) **and**
+the app's runtime files, while excluding user data (`settings.json`, `portable.txt`, `log.txt`),
+`licenses\` and `tools\`. That is what frees the install folder's exe lock without shipping a broken
+helper.
+
+## What update-apply did
+
+- Replaced the `UpdateApplier` stub; added `PortableUpdater`, `SetupUpdater` and `UpdatedWindow` under
+  `src/FileAction.App/Updates/`.
+- Added `scripts/test-update-apply.ps1` (success, corrupt-zip and true-rollback cases).
+- No changes to `App.cs`, `TrayIcon.cs`, `SettingsWindow.cs`, `UpdateBanner.cs`, `ci.yml` or the string tables.
+
