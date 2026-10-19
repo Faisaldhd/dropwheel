@@ -131,7 +131,9 @@ public class LockSafetyTests
         public List<string> Deleted { get; } = [];
 
         public bool KeyExists(string path) =>
-            Values.ContainsKey(path) || Values.Keys.Any(k => k.StartsWith(path + "\\", StringComparison.OrdinalIgnoreCase));
+            Values.ContainsKey(path) ||
+            Values.Keys.Any(k => k.StartsWith(path + "|", StringComparison.OrdinalIgnoreCase) ||
+                                 k.StartsWith(path + "\\", StringComparison.OrdinalIgnoreCase));
 
         public string? GetValue(string path, string? name) =>
             Values.TryGetValue(path + "|" + (name ?? string.Empty), out var value) ? value : null;
