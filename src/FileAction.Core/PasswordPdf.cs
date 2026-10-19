@@ -28,7 +28,12 @@ public static class PdfPasswordProtection
 
         try
         {
-            using var document = PdfReader.Open(sourcePath, PdfDocumentOpenMode.Modify);
+            // If the source is already protected, the provider aborts and Open returns null; that is a
+            // clearer answer than trying to re-encrypt an encrypted document.
+            using var document = PdfReader.Open(sourcePath, PdfDocumentOpenMode.Modify, args => args.Abort = true);
+            if (document is null)
+                throw new PasswordProtectionException(
+                    PasswordProtectionFailure.AlreadyProtected, "tool.protect.error.pdfAlready");
             if (document.SecuritySettings.IsEncrypted)
                 throw new PasswordProtectionException(
                     PasswordProtectionFailure.AlreadyProtected, "tool.protect.error.pdfAlready");
@@ -82,6 +87,9 @@ public static class PdfPasswordProtection
                 password,
                 PdfDocumentOpenMode.Modify,
                 args => args.Abort = true);
+            if (document is null)
+                throw new PasswordProtectionException(
+                    PasswordProtectionFailure.WrongPasswordOrCorrupt, "tool.unlock.error.password");
 
             if (!document.SecuritySettings.IsEncrypted)
                 throw new PasswordProtectionException(
@@ -113,6 +121,9 @@ public static class PdfPasswordProtection
                 password,
                 PdfDocumentOpenMode.Import,
                 args => args.Abort = true);
+            if (source is null)
+                throw new PasswordProtectionException(
+                    PasswordProtectionFailure.WrongPasswordOrCorrupt, "tool.unlock.error.password");
 
             using var target = new PdfDocument();
             for (var index = 0; index < source.PageCount; index++)
