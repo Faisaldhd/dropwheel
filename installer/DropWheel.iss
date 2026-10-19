@@ -82,10 +82,12 @@ WizardSmallImageFile={#WizardSmallImageFile}
 
 [Languages]
 ; English is built in. Arabic is vendored in installer\Arabic.isl (the Inno Setup 6.5+ Arabic
-; translation) so the build does not depend on which languages the installed compiler ships.
-; Arabic.isl sets RightToLeft=yes, which makes the whole wizard RTL.
+; translation) plus DropWheel-ar.isl, so the build does not depend on which languages the
+; installed compiler ships. compiler:Default.isl comes first only as the fallback for a message
+; a newer compiler might add; every option and message Arabic.isl defines overrides it (later
+; files win) and RightToLeft=yes makes the whole wizard RTL.
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "arabic"; MessagesFile: "Arabic.isl,DropWheel-ar.isl"
+Name: "arabic"; MessagesFile: "compiler:Default.isl,Arabic.isl,DropWheel-ar.isl"
 
 [CustomMessages]
 ; English side of the installer-only strings. The Arabic side lives in DropWheel-ar.isl; a
