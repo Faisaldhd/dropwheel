@@ -177,6 +177,22 @@ try {
     try { $fingerprint = (($sha.ComputeHash($publicBytes) | ForEach-Object { $_.ToString('x2') }) -join '') }
     finally { $sha.Dispose() }
 
+    Write-Host ''
+    Write-Host 'New update signing key generated in memory. Nothing has been uploaded yet.'
+    Write-Host ''
+    Write-Host 'Public key (base64 SubjectPublicKeyInfo):'
+    Write-Host $publicKeyBase64
+    Write-Host ''
+    Write-Host 'Paste this into src/FileAction.Core/Updates/UpdateKey.cs:'
+    Write-Host ''
+    Write-Host '    public const string PublicKeyBase64 ='
+    Write-Host ('        "{0}";' -f $publicKeyBase64)
+    Write-Host ''
+    Write-Host ("Fingerprint (SHA-256 of the SPKI DER): {0}" -f $fingerprint)
+    Write-Host ''
+    Write-Host 'Setting the GitHub secret now. Keep the public key above even if this fails.'
+    Write-Host ''
+
     $privateBytes = $key.ExportPkcs8PrivateKey()
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -225,21 +241,11 @@ try {
     }
 
     Write-Host ''
-    Write-Host 'Update signing key rotated. The private key was piped to gh on stdin; it was not written'
-    Write-Host 'to disk and is not printed by this script.'
+    Write-Host ('Update signing key rotated. Secret {0} is now set for {1}.' -f $SecretName, $Repository)
+    Write-Host 'The private key was piped to gh on stdin; it was not written to disk and is not printed.'
     Write-Host ''
-    Write-Host 'Public key (base64 SubjectPublicKeyInfo):'
-    Write-Host $publicKeyBase64
-    Write-Host ''
-    Write-Host 'Paste this into src/FileAction.Core/Updates/UpdateKey.cs:'
-    Write-Host ''
-    Write-Host '    public const string PublicKeyBase64 ='
-    Write-Host ('        "{0}";' -f $publicKeyBase64)
-    Write-Host ''
-    Write-Host ('Secret {0} is now set for {1}. The exact command this script ran was:' -f $SecretName, $Repository)
+    Write-Host 'The exact command this script ran was:'
     Write-Host ('    gh secret set {0} --repo {1}' -f $SecretName, $Repository)
-    Write-Host ''
-    Write-Host ("Fingerprint (SHA-256 of the SPKI DER): {0}" -f $fingerprint)
     Write-Host ''
     Write-Host 'Also update the key snapshot in scripts/sign-release.ps1, scripts/verify-signature.ps1'
     Write-Host 'and docs/signing-updates.md, then ship a build carrying the new public key.'

@@ -259,7 +259,7 @@ keeps automatic updates working.
 | --- | --- |
 | `UPDATE_SIGNING_KEY is not set` | The job did not map the secret, or you ran `sign-release.ps1` locally. Never set a real key locally; run the self-test or let CI sign. |
 | `UPDATE_SIGNING_KEY does not match the update public key` | The secret and `UpdateKey.cs` disagree (rotation half-finished, wrong repository/secret, or wrong key format). Refusing is correct; fix the key or the constant. Do not bypass. |
-| `is not an ECDSA P-256 key` | The secret holds an RSA key, another curve, or is truncated. Re-run the rotation helper. |
+| `is not an ECDSA P-256 key` | The secret holds an RSA key, another curve, or is truncated. If it is corrupt, restore the intended key (there is no backup by design) or follow the rotation runbook. |
 | `signature verification failed for ...` | A file changed after signing, or the public key used for verification is not the one that signed. Regenerate the `.sig` from the final asset. |
 | `verify-signature.ps1` exits 1 with `signature does not match` | Corrupt/partial download, a `.sig` from a different version, or the wrong public key. Delete both files and download again; do not run the asset. |
 | `gh secret set failed` | `gh` is not authenticated or the account lacks admin on the repository. Run `gh auth login`; the helper checks this before generating anything. |
