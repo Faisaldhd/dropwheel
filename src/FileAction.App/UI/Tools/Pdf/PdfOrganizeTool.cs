@@ -102,10 +102,9 @@ internal sealed class PdfOrganizeView
         var hint = Controls.Text(T("tool.pdforganize.hint"), 12, brush: Theme.Muted);
         hint.TextWrapping = TextWrapping.Wrap;
         hint.VerticalAlignment = VerticalAlignment.Center;
-        DockPanel.SetDock(hint, Dock.Left);
         DockPanel.SetDock(_summary, Dock.Right);
-        head.Children.Add(hint);
         head.Children.Add(_summary);
+        head.Children.Add(hint);
 
         _grid.AllowDrop = true;
         _grid.Background = Brushes.Transparent;

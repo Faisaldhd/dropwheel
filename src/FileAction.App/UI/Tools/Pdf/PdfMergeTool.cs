@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -93,10 +93,9 @@ internal sealed class PdfMergeView
         var hint = Controls.Text(T("tool.pdfmerge.hint"), 12, brush: Theme.Muted);
         hint.TextWrapping = TextWrapping.Wrap;
         hint.VerticalAlignment = VerticalAlignment.Center;
-        DockPanel.SetDock(hint, Dock.Left);
         DockPanel.SetDock(_summary, Dock.Right);
-        head.Children.Add(hint);
         head.Children.Add(_summary);
+        head.Children.Add(hint);
 
         _list.AllowDrop = true;
         _list.Background = Brushes.Transparent;
