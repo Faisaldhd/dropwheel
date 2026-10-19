@@ -85,6 +85,9 @@ public class CompressMetadataFunctionTests
                 "-f", "lavfi", "-i", "testsrc=size=320x240:rate=15",
                 "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100",
                 "-t", "8",
+                // Realistic footage is harder to encode than a flat test pattern; noise makes the two-pass
+                // bitrate target meaningful instead of letting x264 undershoot on trivial content.
+                "-vf", "noise=alls=35:allf=t+u",
                 "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-b:a", "96k",
                 source,
