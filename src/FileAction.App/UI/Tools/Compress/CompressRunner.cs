@@ -147,7 +147,7 @@ internal static class CompressRunner
         {
             args.AddRange(["-c:v", "libvpx-vp9", "-row-mt", "1", "-deadline", "good", "-cpu-used", "4"]);
             if (plan.TwoPass)
-                args.AddRange(["-b:v", $"{plan.VideoKbps}k"]);
+                AddBitrateTarget(args, plan.VideoKbps);
             else
                 args.AddRange(["-crf", plan.Crf.ToString(CultureInfo.InvariantCulture), "-b:v", "0"]);
         }
@@ -155,7 +155,7 @@ internal static class CompressRunner
         {
             args.AddRange(["-c:v", "libx264", "-preset", "medium", "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2"]);
             if (plan.TwoPass)
-                args.AddRange(["-b:v", $"{plan.VideoKbps}k"]);
+                AddBitrateTarget(args, plan.VideoKbps);
             else
                 args.AddRange(["-crf", plan.Crf.ToString(CultureInfo.InvariantCulture)]);
         }
@@ -170,6 +170,13 @@ internal static class CompressRunner
 
         return args;
     }
+
+    /// <summary>
+    /// The two-pass bitrate target. The matching maxrate/bufsize cap the peaks and keep the average at or
+    /// below the requested size; without them x264 spends up to 15 % more than the target on hard footage.
+    /// </summary>
+    private static void AddBitrateTarget(List<string> args, int videoKbps) =>
+        args.AddRange(["-b:v", $"{videoKbps}k", "-maxrate", $"{videoKbps}k", "-bufsize", $"{videoKbps * 2}k"]);
 
     private static IReadOnlyList<string> AudioForVideo(string container, int kbps) =>
         container == "webm"

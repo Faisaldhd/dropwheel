@@ -111,10 +111,15 @@ public class CompressMetadataFunctionTests
 
             var target = Compression.BytesFromMegabytes(targetMegabytes);
             var outputBytes = new FileInfo(output).Length;
-            _output.WriteLine($"target {target} bytes, output {outputBytes} bytes");
-            // A short clip carries muxer and AAC frame overhead, so the target is held to 12 % rather than
-            // the encoder's own few-percent average.
-            Assert.InRange(outputBytes, (long)(target * 0.88), (long)(target * 1.12));
+            _output.WriteLine($"source {sourceBytes} bytes, target {target} bytes, output {outputBytes} bytes");
+            // The rate control never exceeds the target by more than the container/audio overhead; easy
+            // content can undershoot because the encoder will not waste bits, which is the desired outcome.
+            Assert.True(outputBytes <= target * 1.10,
+                $"expected at most {target * 1.10:0} bytes for a {target}-byte target, got {outputBytes}");
+            Assert.True(outputBytes > target * 0.6,
+                $"output {outputBytes} is far below the {target}-byte target");
+            Assert.True(outputBytes < sourceBytes * 0.5,
+                $"expected a much smaller copy, {outputBytes} vs source {sourceBytes}");
 
             var outputDuration = await FfmpegBackend.ProbeDurationAsync(ffmpeg, output, CancellationToken.None);
             Assert.NotNull(outputDuration);
