@@ -1,4 +1,33 @@
-# DropWheel 2.2.2 — CHANGES
+# DropWheel 2.2.3 — CHANGES
+
+## 2.2.3
+
+### English
+
+- **The folder you drag onto is honoured in tabbed File Explorer.** Windows 11 lists every tab of one
+  Explorer window as a separate shell window that shares the same top-level handle, so 2.2.2 could pick a
+  background tab or no folder at all and save the result next to the source file. The tab window under the
+  cursor is now matched through `IShellBrowser.GetWindow`, and while a drag is in progress the last folder
+  the cursor crossed is remembered and used when the cursor is back over the source (a folder seen before
+  the drag started is never used). Only an existing, writable folder that differs from the source folder is
+  used, and a short notification names the destination. Every detection and decision is written to the log
+  and the last one appears in `--diagnose`.
+- **The wheel says where the result will go, before you drop.** A label in the middle of the wheel shows
+  "Save to: <folder>" with the full path as its tooltip, "Save next to the file" when no other folder was
+  found, and a warning "Can't save here, will save next to the file" when the folder refuses a write. It
+  updates while the drag continues, following the same remembered-folder rules as the drop itself.
+
+### العربية
+
+- **يُحترم المجلد الذي تسحب إليه في مستكشف الملفات ذي التبويبات.** يعرض ويندوز 11 كل تبويب في نافذة
+  المستكشف كنافذة غلاف منفصلة تشترك في المقبض الأعلى نفسه، لذا كان 2.2.2 قد يختار تبويبًا غير مرئي أو لا
+  يجد مجلدًا فيحفظ النتيجة بجانب الملف الأصلي. الآن يُطابَق مقبض التبويب تحت المؤشر عبر
+  `IShellBrowser.GetWindow`، ويُتذكَّر آخر مجلد عبره المؤشر أثناء السحب ويُستخدم عند رجوع المؤشر إلى مجلد
+  المصدر (ولا يُستخدم مجلد رُئي قبل بدء السحب). لا يُستخدم إلا مجلد موجود وقابل للكتابة ويختلف عن مجلد
+  المصدر، ويسمّي إشعار قصير وجهة الحفظ. تُكتب كل عملية كشف وقرار في السجل ويظهر آخرها في `--diagnose`.
+- **تعرض العجلة وجهة الحفظ قبل الإفلات.** يظهر في وسط العجلة «الحفظ في: <المجلد>» ويحمل المسار الكامل
+  كتلميح، و«الحفظ بجانب الملف» عند عدم العثور على مجلد آخر، وتحذير «لا يمكن الحفظ هنا، سيُحفظ بجانب
+  الملف» عندما يرفض المجلد الكتابة. يتحدّث النص أثناء استمرار السحب وفق قواعد المجلد المتذكَّر نفسها.
 
 ## 2.2.2
 
