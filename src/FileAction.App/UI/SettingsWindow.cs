@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -414,9 +415,14 @@ internal sealed class SettingsWindow : Window
 
         // The banner owns the automatic-check switch and every check/download state; never add a second one.
         if (Updates is { } updates)
-            page.Children.Add(UpdateBanner.Create(updates, _settings, Save));
-        else
+        {
             page.Children.Add(SectionDetail(T("settings.updates.detail")));
+            page.Children.Add(UpdateBanner.Create(updates, _settings, Save));
+        }
+        else
+        {
+            page.Children.Add(SectionDetail(T("settings.updates.unavailable")));
+        }
 
         return TabPage(page);
     }
@@ -442,8 +448,19 @@ internal sealed class SettingsWindow : Window
         actions.Children.Add(source);
         page.Children.Add(actions);
 
-        var website = Text(T("settings.about.website", Bidi.Value(RepositoryUrl)), 12, brush: Theme.Muted, wrap: false);
-        website.Margin = new Thickness(2, 14, 0, 0);
+        var website = new TextBlock
+        {
+            FontSize = 12.5,
+            TextWrapping = TextWrapping.NoWrap,
+            Margin = new Thickness(2, 14, 0, 0),
+        };
+        var websiteText = T("settings.about.website");
+        if (!websiteText.Contains("http", StringComparison.OrdinalIgnoreCase))
+            websiteText = websiteText + " · " + Bidi.Value(RepositoryUrl);
+        var websiteLink = new Hyperlink { Foreground = Theme.Accent, TextDecorations = null };
+        websiteLink.Inlines.Add(new Run(websiteText));
+        websiteLink.Click += (_, _) => OpenRepository();
+        website.Inlines.Add(websiteLink);
         page.Children.Add(website);
 
         var credits = Text(T("settings.about.credits"), 12.5, brush: Theme.Muted);

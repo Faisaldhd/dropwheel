@@ -1,49 +1,67 @@
-# NOTES
+# NOTES — cross-agent requests
+
+## Requests from update-core
+
+1. **Setup asset name is inconsistent (blocks the setup-install update path).**
+   `UpdateConfig.SetupAssetName` (shared, lead-owned) and the update-core brief name the installer
+   `DropWheel-<version>-Setup.exe`, but `installer/DropWheel.iss` sets
+   `OutputBaseFilename=DropWheel-Setup-{#AppVersion}`, and `.github/workflows/ci.yml`, `README*.md` and
+   `docs/prompts/UPDATE_PROMPT.md` use `DropWheel-Setup-<version>.exe`. The updater looks for the exact
+   `DropWheel-<version>-Setup.exe`, so an installed copy would never find the setup asset. Request to the
+   installer/CI owners: rename the installer output to `DropWheel-<version>-Setup.exe`; alternatively the
+   lead changes `UpdateConfig.SetupAssetName` and tells update-core. The portable name
+   (`DropWheel-<version>-portable-win-x64.zip`) already matches everywhere.
+
+2. **Release signing assets (signing agent).** For the selected asset, `UpdateService.DownloadAsync`
+   downloads `<asset name>.sig` and the release asset `SHA256SUMS.txt`. The `.sig` must be the base64
+   ECDSA P-256 signature over the file's SHA-256 with the `UpdateKey` private key; IEEE P1363 (r||s) and
+   DER are both accepted. `SHA256SUMS.txt` must contain `<sha256hex>  <asset name>` (sha256sum format).
+   CI currently creates no `.sig` assets, so every download is refused as
+   "Update could not be verified" until the signing + upload step lands (this is the intended fail-closed
+   behaviour).
+
+3. **GitHub asset `digest` must be populated.** Per the 2.2.0 spec the updater requires BOTH the GitHub
+   asset `digest` field (sha256) and the `SHA256SUMS.txt` entry. GitHub fills `digest` for assets uploaded
+   to a release; please confirm the v2.2.0 release payload carries it for the setup exe and the portable
+   zip before shipping, otherwise every update will be refused.
+
+4. **Tests note (tests agent).** `DownloadAsync` success cannot be exercised with the production
+   `UpdateKey` because its private half is a secret. Cover `UpdateVerifier` with a generated P-256 key pair
+   (optional `publicKeyBase64` argument) and cover the `DownloadAsync` failure paths (bad/missing
+   signature, digest or sums) plus cancellation; assert the exact message
+   `UpdateService.VerificationFailure` ("Update could not be verified").
+
+5. **Version shape (tests agent).** `UpdateInfo.Version` is normalised to the shortest exact form
+   (`2.3.0`, not `2.3.0.0`) unless the tag has a non-zero revision. Tags such as `v2.3.0` therefore compare
+   equal to `new Version(2, 3, 0)`; asset names still use `Version.ToString(3)` via `UpdateConfig`.
 
 ## Requests from settings-tabs
 
-### 1. Strings (owner: strings agent / lead) — CI stays red until merged
+### 1. Strings — merged, nothing to do
 
-`src/FileAction.App/UI/SettingsWindow.cs` now uses the 2.2.0 tab keys from `AGENT_RULES.md`. They do not
-exist in `src/FileAction.Core/Strings/en.json` / `ar.json` on this branch yet, so
-`LocaleUsageTests.Every_key_used_in_source_exists_in_both_tables` fails **by design** until the strings
-branch is merged (the lead asked for exactly these call sites, with no local keys and no workaround).
+The six-tab window uses exactly the 2.2.0 keys from `AGENT_RULES.md`. They arrived with the strings branch
+(main `ce3dcdc` / `7cc3e30`), so `LocaleUsageTests` passes now. Reused keys: `settings.language.*`,
+`settings.gesture.*`, `settings.wheels.customize.*`, `settings.keyboard.*`, `settings.results.*`,
+`settings.quality.*`, `settings.company.*`, `settings.tools.*`, `settings.footer`, `language.english`,
+`language.arabic`. `settings.updates.automatic.*` and `settings.updates.check*` are **not** used here: the
+update banner owns the automatic-check switch and every check/download state (no second toggle).
 
-Keys referenced directly (must exist in both tables):
+Notes on two strings, for whoever edits the tables next:
 
-- tabs: `settings.tab.general`, `settings.tab.wheels`, `settings.tab.quality`,
-  `settings.tab.integration`, `settings.tab.updates`, `settings.tab.about`
-- watch: `settings.general.watch.title`, `settings.general.watch.detail`,
-  `settings.general.watch.policy`
-- theme: `settings.general.theme.title`, `settings.general.theme.detail`, `settings.theme.system`,
-  `settings.theme.dark`, `settings.theme.light`
-- gestures: `settings.general.gestures.title`, `settings.general.gestures.detail`
-- updates: `settings.updates.title`, `settings.updates.detail`
-- about: `settings.about.tagline`, `settings.about.version`, `settings.about.licenses`,
-  `settings.about.source`, `settings.about.website`, `settings.about.credits`
-
-Existing keys reused (no change requested): `settings.language.*`, `settings.gesture.*`,
-`settings.wheels.customize.*`, `settings.keyboard.*`, `settings.results.*`, `settings.quality.*`,
-`settings.company.*`, `settings.tools.*`, `settings.footer`, `language.english`, `language.arabic`,
-`settings.header.tagline` (no longer used by this window).
-
-Two of the new keys are called with one format argument, so please keep a `{0}` where the value belongs:
-
-- `settings.about.version` is called as `T("settings.about.version", version)` (version = `2.2.0`).
-  English should read like `Version {0}`; if the value has no placeholder the window appends the
-  version itself, so the number still shows.
-- `settings.about.website` is called as
-  `T("settings.about.website", "https://github.com/Faisaldhd/dropwheel")`. Plain text or `{0}` both work.
-
-`settings.updates.automatic.*` and `settings.updates.check*` are **not** used by this window: the update
-banner owns the automatic-check switch and every check/download state (per the spec: no second toggle).
+- `settings.updates.detail` is shown as the description above the banner when an update service exists.
+  When it does not (self-test build / no service), the tab shows `settings.updates.unavailable` instead —
+  that key was added by the strings branch exactly for this state and is more accurate than the old
+  "show detail instead" wording.
+- `settings.about.website` is "Website" (no `{0}`). About renders it as a link to
+  `https://github.com/Faisaldhd/dropwheel` and appends that URL to the label when the localized value does
+  not contain a URL, so the address is visible in both languages. No table change needed.
 
 ### 2. App.cs (not mine): assign the update service
 
 `SettingsWindow.Updates` (the static property on main) has to be set by `App.cs` once the update service
 exists, e.g. `SettingsWindow.Updates = _updates;`. Until then the Updates tab shows
-`settings.updates.detail` (the specified fallback) and no banner. `UpdateBanner.Create` is called with the
-service, this window's `AppSettings` and the window's `Save` callback.
+`settings.updates.unavailable` and no banner. `UpdateBanner.Create` is called with the service, this
+window's `AppSettings` and the window's `Save` callback.
 
 ### 3. Self-test tabs (`SelfTest.cs` is not mine)
 
@@ -60,3 +78,9 @@ The three gesture-key chooser cards are in **General**, under `settings.general.
 (as approved). **Wheels** shows customise, pause and the keyboard shortcut plus the
 `settings.general.gestures.detail` pointer to General — no control is duplicated. The watch and
 download toggles are greyed out and non-interactive when the HKLM policy locks them.
+
+### 5. Merge-resolution warning (SettingsWindow.cs)
+
+Inside a `Window`, WPF's `Window.ThemeMode` instance property shadows the app's `ThemeMode` enum name, so
+`ThemeMode.System` gives CS0176. The file uses `using AppThemeMode = FileAction.App.ThemeMode;`. Keep that
+alias when resolving future merges — do not "simplify" it back.
