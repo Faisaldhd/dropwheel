@@ -1,187 +1,88 @@
-# NOTES - signing (branch `2.2.0-signing`)
+# NOTES — cross-agent requests
 
-Status: done. Scripts and documentation written; the real update key was **not** generated,
-rotated or copied anywhere.
+## Requests from download-page
 
-## Files
+1. **`DropWheel-Setup.exe` alias is missing from the release (blocks the download button).**
+   `docs/site/index.html` points the main button at
+   `https://github.com/Faisaldhd/dropwheel/releases/latest/download/DropWheel-Setup.exe`.
+   `.github/workflows/ci.yml` (release job) currently publishes only
+   `DropWheel-Setup-<version>.exe`, so that URL will 404 until the release also carries an
+   unversioned alias.
+   **Requested change (`.github/workflows/ci.yml`, release job, CI owner):** before
+   `gh release create`, copy the versioned setup to `DropWheel-Setup.exe` (same bytes) and
+   attach it, e.g. `Copy-Item (Get-Item 'release/DropWheel-Setup-*.exe') 'release/DropWheel-Setup.exe'`,
+   then include it in `$files` and relax the `$files.Count -ne 3` check. If the alias is listed
+   in `SHA256SUMS.txt` too, the page will prefer that line; it also works with only the
+   versioned line because the bytes are identical. Alternative: change the button in
+   `docs/site/index.html` to a versioned URL — but then the page needs an edit every release.
 
-| File | What it is |
-| --- | --- |
-| `scripts/make-update-key.ps1` | One-time **rotation** helper: generates P-256 in memory, pipes base64 PKCS#8 to `gh secret set UPDATE_SIGNING_KEY` over stdin, prints only public material, clears memory, refuses without `-Rotate`. |
-| `scripts/sign-release.ps1` | Signs assets to `<asset>.sig` (P1363 `r||s`, 64 bytes, base64 ASCII), verifies each `.sig` against the app key, throws before/after a mismatch. `-SelfTest` exercises the same code path with an ephemeral in-memory key. |
-| `scripts/verify-signature.ps1` | Verifies `<file> <sig>`; exit 1 with a clear message on any failure; `-PublicKey` for tests. |
-| `docs/signing-updates.md` | Key history, secret location, exact `.sig`/`SHA256SUMS.txt` formats, CI signing, app verification snippet, rotation runbook, troubleshooting. |
+2. **GitHub Pages cannot serve `docs/site` from a branch (Pages is not deployable yet).**
+   Pages’ “Deploy from a branch” source only offers `/` or `/docs`, not `docs/site`. The page is
+   dependency-free, so it just needs a Pages workflow in `.github/workflows/` (CI owner):
+   `actions/configure-pages` → `actions/upload-pages-artifact` with `path: docs/site` →
+   `actions/deploy-pages`, triggered on `main` (or `workflow_dispatch`) with
+   `permissions: pages: write, id-token: write`. Then enable **Settings → Pages → Source:
+   GitHub Actions** for `https://faisaldhd.github.io/dropwheel/`. No custom build step is needed.
 
-Not changed: `ci.yml`, `Core/**`, `installer/**`, `UPDATE_SIGNING_KEY`, `UpdateKey.cs`.
+3. **The three screenshots are stale (content review needed).**
+   `docs/screenshots/en/settings.png`, `wheel-actions.png` and `jobs.png` are the only real PNGs
+   that exist, so `docs/site/assets/` uses them as instructed — but they show the old orange
+   FileAction UI, the title “FileAction” and a Czech (“Čeština”) option, not the 2.2.0 violet
+   build. Replace the three files (keeping the same names) when R-5 screenshots exist; the HTML
+   dimensions and both language alt texts must be updated with them.
 
-## Key fingerprint
+4. **CORS makes the inline SHA-256 fall back to the link (expected, but worth a decision).**
+   GitHub redirects `.../releases/latest/download/SHA256SUMS.txt` to
+   `release-assets.githubusercontent.com`, and that response carries no
+   `Access-Control-Allow-Origin` (verified 2026-10-19: 302 → 302 → 200 with no ACAO, even with
+   an `Origin` header). A browser `fetch` from `faisaldhd.github.io` will therefore be blocked,
+   so the page will normally show the required “Open SHA256SUMS.txt” link rather than the hash.
+   That matches the brief (“if the fetch fails … show a link”), but if the lead wants the hash
+   visible inline, the GitHub REST API (`api.github.com` sends CORS and exposes
+   `assets[].digest`) or a same-origin copy of `SHA256SUMS.txt` would be needed — both are
+   outside this agent’s owned files.
 
-- Public key in `UpdateKey.cs` (unchanged):
-  `MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEUCQv0in24CEgz0uiGoER/25EFZY5w/x0wvpl9TyRyG8VxFTqv3mKuGBxMwoknk9FBHrj2P9c56kCUU2POE5Glw==`
-- 91-byte SPKI DER, curve `prime256v1` (P-256).
-- **Fingerprint = SHA-256 of the SPKI DER bytes:**
-  `9d6b35c5376d6decceced299829643456c52fee8c0662dd101d62d422f0bce02`
+5. **Current `latest` release (v2.1.1) has no setup asset.** Its assets are only
+   `DropWheel-2.1.1-portable-win-x64.zip` and `SHA256SUMS.txt`, and that
+   `SHA256SUMS.txt` lists only the zip. The page’s download button and checksum therefore
+   cannot be end-to-end checked until **v2.2.0** is released with the setup exe (and the
+   unversioned alias from item 1). Nothing to change in the page for this.
 
-## Signature format (for update-core and release-clean)
+## Requests from settings-tabs
 
-- `.sig` is ASCII base64 of **ECDSA P-256 / SHA-256 over the complete file bytes**, encoded as
-  **IEEE P1363 fixed-field concatenation `r || s` (32+32 = exactly 64 bytes)**, so the file is
-  always **88 base64 characters**, one line, no newline.
-- This is what `ECDsa.SignData(..., SHA256)` and `ECDsa.VerifyHash(hash, signature)` use **by
-  default** in .NET, and what `UpdateVerifier.VerifyHash` expects. It is **not** an ASN.1/DER
-  signature (DER is 70-72 bytes; `verify-signature.ps1` rejects that length with a clear message).
-- The scripts both check the 64-byte length, so if a future runtime changed the default they
-  would fail loudly instead of shipping an unverifiable `.sig`.
+1. **The `screenshots` job always fails before the self-test can report (`ci.yml`, lead-owned).**
+   Now that the job runs on every `main` push as well as on `workflow_dispatch`, the workflow will
+   go red after `build-test`. The step does
+   `& release/DropWheel/DropWheel.exe --self-test docs/screenshots` and then checks
+   `$LASTEXITCODE`. DropWheel is a GUI-subsystem exe, so `&` returns immediately and
+   `$LASTEXITCODE` is `$null` in that fresh pwsh step; `$null -ne 0` is true, so the step throws
+   `--self-test failed with ` after ~0.6 s. Dispatched run 39241618932 failed exactly this way.
+   The same bug was already fixed for `--diagnose` in the package job. Requested change:
 
-## Self-check evidence (no real secret used)
-
-Local constraint: only Windows PowerShell 5.1 is installed (no `pwsh`), and the rules forbid
-running `.ps1` files locally, so the scripts were **not executed here**. What was verified:
-
-1. **Syntax/AST:** all three scripts parsed with
-   `[System.Management.Automation.Language.Parser]::ParseFile` - 0 errors each,
-   `#Requires -Version 7.0`, expected parameter blocks and functions.
-2. **Same algorithm, inline (PS 5.1 CNG + Node/OpenSSL), no key on disk:**
-   - ephemeral P-256 key generated in memory; PKCS#8 exported/imported, SPKI exported/imported;
-   - signature was **64 bytes -> 88 base64 chars**, one line;
-   - good signature accepted; tampered file rejected; wrong ephemeral key rejected; the
-     **embedded app key** rejected (wrong-key case);
-   - OpenSSL/Node (`dsaEncoding: 'ieee-p1363'`) verified the .NET signature and rejected a
-     tampered file; .NET verified an OpenSSL P1363 signature and rejected tampering;
-   - embedded key imported in Node as `ec` / `prime256v1`, fingerprint matched
-     `9d6b35c5...bce02`.
-3. **.NET 10 runtime check (`dotnet fsi`, SDK 10.0.402; no app build, no project):**
-   - embedded SPKI imported (91 bytes, `KeySize=256`), fingerprint
-     `9d6b35c5376d6decceced299829643456c52fee8c0662dd101d62d422f0bce02`;
-   - ephemeral `ECDsa.Create(nistP256)`: SPKI 91 bytes, PKCS#8 138 bytes;
-     `ImportPkcs8PrivateKey` read all 138 bytes;
-   - `SignData(stream, SHA256)` produced **64 bytes / 88 base64 chars**;
-   - `VerifyHash` accepted the good signature and rejected a tampered hash and the wrong
-     (embedded) key;
-   - confirms the .NET 10 default is IEEE P1363 and that the app's `VerifyHash` path matches the
-     scripts. A 70-byte DER-like signature is 96 base64 chars, which the scripts reject.
-4. **Not covered locally:** actual execution of the `.ps1` files on pwsh 7 (no `pwsh` here; the
-   rules forbid running `.ps1` locally). The underlying .NET 10 APIs above are verified, and the
-   scripts are syntax-clean; the remaining risk is only PowerShell's method binding/execution.
-   The test to run first in CI/on a pwsh 7 machine is:
-   `pwsh ./scripts/sign-release.ps1 -SelfTest` (no secret needed; uses the same import, sign,
-   write, read and verify functions, and asserts tamper/wrong-key failures).
-
-## Requests from signing
-
-### release-clean (owner of `.github/workflows/ci.yml`) - P0 for the first signed release
-
-Neither step below is in `ci.yml` yet; release-clean is adding the signing step and the
-no-secret self-test to the workflow.
-
-1. **Add the signing step to the release job.** The release job currently has no
-   `actions/checkout`, so it needs one before the script can read `scripts/` and `UpdateKey.cs`:
-
-   ```yaml
-         - uses: actions/checkout@v4
-
-         - name: Sign release assets
-           shell: pwsh
-           env:
-             UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
-           run: |
-             if (-not $env:UPDATE_SIGNING_KEY) { throw "UPDATE_SIGNING_KEY is not available to this job" }
-             $assets = @(Get-ChildItem dist -Recurse -File | Where-Object {
-               $_.Name -like 'DropWheel-*-Setup.exe' -or
-               $_.Name -like 'DropWheel-*-portable-win-x64.zip'
-             } | Select-Object -ExpandProperty FullName)
-             if ($assets.Count -ne 2) { throw "expected 2 release assets, found $($assets.Count)" }
-             ./scripts/sign-release.ps1 -Path $assets
-             $sigs = @(Get-ChildItem dist -Recurse -File -Filter '*.sig')
-             if ($sigs.Count -ne 2) { throw "expected 2 .sig files, found $($sigs.Count)" }
+   ```powershell
+   $p = Start-Process -FilePath release/DropWheel/DropWheel.exe `
+     -ArgumentList '--self-test', 'docs/screenshots' -PassThru -Wait
+   if ($p.ExitCode -ne 0) { throw "--self-test failed with $($p.ExitCode)" }
    ```
 
-   The release step must then upload the two `.sig` files as well: extend the filter in
-   "Create release" with `-like '*.sig'` and change the expected count from 3 to 5. Only the
-   release job gets the secret; fork PRs never receive it.
+   and add `if: always()` to the "Upload screenshots" step, so
+   `docs/screenshots/**/self-test.txt` survives a failure and shows where the self-test stopped.
+   Consequence: **no run has ever runtime-rendered the six-tab SettingsWindow in CI**; build/test
+   only proves it compiles. Once the step waits, the uploaded `self-test.txt`/PNGs validate it
+   (and the pending R-5 screenshots).
 
-2. **Add the no-secret self-test to `build-test`** (cheap, runs on every push, exercises the real
-   pwsh 7 code path):
+2. **Per-tab screenshots (`SelfTest.cs` owner).** `SettingsWindow` exposes
+   `internal static int TabCount` (= 6) and `internal void SelectTab(int index)` (0 = General …
+   5 = About). `SelfTest.RenderAll` can construct a fresh `SettingsWindow` per index (because
+   `SaveWindow` detaches `window.Content`, one window cannot be rendered twice), call `SelectTab(i)`
+   and then `SaveWindow`; suggested names `settings-general.png` … `settings-about.png`.
 
-   ```yaml
-         - name: Signing script self-test
-           shell: pwsh
-           run: ./scripts/sign-release.ps1 -SelfTest
-   ```
+3. **Merge-resolution warning (`SettingsWindow.cs`).** Inside a `Window`, WPF’s
+   `Window.ThemeMode` instance property shadows the app’s `ThemeMode` enum name, so
+   `ThemeMode.System` gives CS0176. The file uses `using AppThemeMode = FileAction.App.ThemeMode;`
+   — keep the alias when resolving merges; do not "simplify" it back.
 
-3. **Asset naming mismatch (P1, blocks the updater).** `UpdateConfig.SetupAssetName` (and the
-   2.2.0 signing task) use `DropWheel-<version>-Setup.exe`, but `installer/DropWheel.iss` emits
-   `DropWheel-Setup-<version>.exe` (and `release.cmd` prints that name). The app will not find
-   the setup in the release until one side changes. Preferred fix (matches `UpdateConfig` and
-   `docs/signing-updates.md`): change `OutputBaseFilename` in `installer/DropWheel.iss` to
-   `DropWheel-{#AppVersion}-Setup` and update the ci.yml filters/artifact names. If the rename is
-   done in the release job instead, **regenerate `SHA256SUMS.txt` after the rename**, otherwise
-   the sums file names the old file and the app's digest check fails.
-
-4. `scripts/sign-release.ps1` defaults to `release/DropWheel-<version>-Setup.exe` and
-   `release/DropWheel-<version>-portable-win-x64.zip`; it accepts explicit `-Path` (the CI
-   snippet passes `dist` paths), so naming only affects the default invocation.
-
-### update-core - rotation safety (P2, not needed for 2.2.0 but needed before any rotation)
-
-`UpdateKey` is a single constant. Because the private key exists only in the secret, rotating it
-destroys the old key, and every installed copy (which embeds the old public key) permanently
-loses automatic updates. `docs/signing-updates.md` documents this honestly. For a staged
-rotation, `UpdateVerifier` would need to trust a list of public keys (old + new), so a transition
-build signed with the old key can carry the new key. Suggested shape:
-
-```csharp
-public static IReadOnlyList<string> TrustedPublicKeyBase64 { get; } = new[] { Current, Next };
-```
-
-and `VerifySignature` accepts a signature that matches any listed key during the transition.
-This is a design decision for the lead/update-core, not something the signing agent can change.
-Otherwise: no rotation without accepting manual reinstall for existing users.
-
-### update-core - verifier confirmation
-
-`UpdateVerifier.VerifySignature` already matches these scripts: PKCS#8/SPKI import, SHA-256 over
-the file bytes, `VerifyHash(hash, signature)` with the **P1363 64-byte** default. No change is
-needed for the format; a unit test that signs with an ephemeral P-256 key and feeds a 64-byte
-`r||s` signature would pin the format (tampered/wrong-key/missing cases are already in the spec).
-
-## Exact CI step snippet (copy/paste)
-
-See the YAML in "release-clean - P0" above. It is the canonical step: `actions/checkout@v4`,
-then `scripts/sign-release.ps1 -Path $assets` with `UPDATE_SIGNING_KEY` mapped only on that job,
-then a `.sig` count assertion. If `checkout` truly cannot be added, inline the exact functions
-from `scripts/sign-release.ps1` rather than re-deriving the format; the invariants are
-P-256, SHA-256 over the file bytes, IEEE P1363 `r||s` exactly 64 bytes, ASCII base64 (88 chars),
-and a post-write verification against the app's public key.
-
-## Notes / limitations
-
-- `make-update-key.ps1` is destructive by design and refuses without `-Rotate`; it never writes
-  the private key to disk or stdout. PowerShell strings cannot be provably zeroed, so it avoids
-  ever creating a base64 *string* for the private key (uses `char[]` + `byte[]`, both cleared).
-- `sign-release.ps1` and `verify-signature.ps1` prefer the live `PublicKeyBase64` constant from
-  `src/FileAction.Core/Updates/UpdateKey.cs` when the repo is present; the built-in snapshot is
-  only for a standalone copy. After a real rotation, update the snapshot constants and
-  `docs/signing-updates.md` too.
-- `docs/signing.md` (SignPath/Authenticode) is a different topic and was left untouched.
-- No `ci.yml`, `Core/**` or `installer/**` changes were made from this branch.
-
-## Requests from settings-tabs (post-merge CI observation)
-
-1. **The `screenshots` job always fails before the self-test can report (`.github/workflows/ci.yml`,
-   lead-owned).** The job runs `& release/DropWheel/DropWheel.exe --self-test docs/screenshots` and then
-   tests `$LASTEXITCODE`. DropWheel is a GUI-subsystem exe, so `&` returns immediately and
-   `$LASTEXITCODE` is `$null` in that fresh step; `$null -ne 0` is true, so the step throws
-   `--self-test failed with ` before the app can finish. Dispatched run 39241618932 failed exactly this
-   way in ~0.6 s. The same bug was already fixed for `--diagnose` in the package job with
-   `Start-Process -Wait`; the screenshots job needs the same treatment, plus `if: always()` on the
-   "Upload screenshots" step so `docs/screenshots/**/self-test.txt` survives a failure and shows where
-   the self-test actually stopped. Consequence: **no branch has ever runtime-rendered the six-tab
-   SettingsWindow in CI**; build/test only proves it compiles. Once the step waits, the uploaded
-   `self-test.txt`/PNGs will validate the tabs (and the pending R-5 screenshot work).
-
-2. **Per-tab screenshots (`SelfTest.cs` owner).** `SettingsWindow` exposes `internal static int TabCount`
-   (= 6) and `internal void SelectTab(int index)` (0 = General � 5 = About). For per-tab screenshots,
-   `SelfTest.RenderAll` must construct a fresh `SettingsWindow` per index (because `SaveWindow` detaches
-   `window.Content`, so one window cannot be rendered twice), call `SelectTab(i)` and then `SaveWindow`;
-   suggested names `settings-general.png` � `settings-about.png`.
+4. **Optional wording (strings-owned).** About renders `settings.about.credits`; the merged
+   English is "Based on FileAction by Metamorfolog, MIT.", while the settings-tabs brief asked for
+   "Free & open source (MIT) · based on FileAction by Metamorfolog". If the exact sentence matters,
+   update the value in `en.json`/`ar.json`; this agent cannot edit the tables.

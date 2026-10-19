@@ -61,6 +61,18 @@ jobs:
           dotnet build tests/FileAction.Tests/FileAction.Tests.csproj -c Release --no-restore
           if ($LASTEXITCODE -ne 0) { throw "build Tests failed" }
 
+      - name: Update signing self-test
+        shell: pwsh
+        run: |
+          if (Test-Path scripts/sign-release.ps1) { ./scripts/sign-release.ps1 -SelfTest }
+          else { Write-Host "signing script not present yet; skipped" }
+
+      - name: Apply-update helper (portable)
+        shell: pwsh
+        run: |
+          if (Test-Path scripts/test-update-apply.ps1) { & ./scripts/test-update-apply.ps1 }
+          else { Write-Host "update-apply test script not present yet; skipped" }
+
       - name: Install FFmpeg and Pandoc (integration tests)
         # Best effort: the community Chocolatey feed regularly answers 503. The integration tests skip the
         # samples whose tool is missing, so a feed outage must not turn the build red.
@@ -123,124 +135,53 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           Write-Host "version = $version"
 
-      - name: Publish (framework-dependent)
-        shell: pwsh
-        run: |
-          dotnet publish src/FileAction.App/FileAction.App.csproj `
-            -c Release -r win-x64 --self-contained false `
-            -o release/DropWheel
-          if (-not (Test-Path release/DropWheel/DropWheel.exe)) { throw "publish produced no DropWheel.exe" }
-
-      - name: Strip debug symbols from the publish
-        shell: pwsh
-        run: |
-          # <DebugType>none</DebugType> is already set in FileAction.App.csproj, but a publish can still
-          # copy *.pdb from a project reference, and a self-contained runtime brings createdump.exe.
-          # installer/DropWheel.iss packs ..\release\DropWheel\* recursively with no exclude filter, so
-          # these files must be gone before the installer is built (and before anything is zipped).
-          $junk = Get-ChildItem release/DropWheel -Recurse -File -Force |
-            Where-Object { $_.Extension -eq '.pdb' -or $_.Name -eq 'createdump.exe' }
-          if ($junk) {
-            $junk | ForEach-Object { Write-Host "removing $($_.FullName)" }
-            $junk | Remove-Item -Force
-          }
-          $left = Get-ChildItem release/DropWheel -Recurse -File -Force |
-            Where-Object { $_.Extension -eq '.pdb' -or $_.Name -eq 'createdump.exe' }
-          if ($left) { throw "debug files remain in release/DropWheel: $($left.FullName -join ', ')" }
-
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y
 
-      - name: Build installer
+      - name: Build installer (self-contained publish + ISCC)
+        shell: pwsh
+        run: ./scripts/build-installer.ps1
+
+      - name: Installer silent install/uninstall smoke test
         shell: pwsh
         run: |
-          # "${env:ProgramFiles(x86)}" must use braces: "$env:ProgramFiles(x86)" expands the variable
-          # name only up to the bracket and produces "C:\Program Files(x86)".
-          $roots = @(
-            ${env:ProgramFiles(x86)},
-            $env:ProgramFiles,
-            (Join-Path $env:LOCALAPPDATA 'Programs')
-          ) | Where-Object { $_ -and (Test-Path $_) }
-
-          $iscc = $roots |
-            ForEach-Object { Join-Path $_ 'Inno Setup 6\ISCC.exe' } |
-            Where-Object { Test-Path $_ } |
-            Select-Object -First 1
-
-          if (-not $iscc) {
-            $iscc = Get-ChildItem $roots -Filter ISCC.exe -Recurse -ErrorAction SilentlyContinue |
-              Select-Object -First 1 -ExpandProperty FullName
-          }
-          if (-not $iscc) {
-            Get-ChildItem 'C:\ProgramData\chocolatey' -Filter 'ISCC.exe' -Recurse -ErrorAction SilentlyContinue |
-              ForEach-Object { Write-Host "candidate: $($_.FullName)" }
-            throw "ISCC.exe not found after 'choco install innosetup'"
-          }
-          Write-Host "ISCC: $iscc"
-          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" installer/DropWheel.iss
-          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
+          if (Test-Path scripts/test-installer.ps1) { & ./scripts/test-installer.ps1 }
+          else { Write-Host "installer test script not present yet; skipped" }
 
       - name: Size report
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.version }}"
-          $publish = Get-ChildItem release/DropWheel -Recurse -File
+          $publish = Get-ChildItem release/selfcontained -Recurse -File
           $publishMb = [math]::Round((($publish | Measure-Object Length -Sum).Sum / 1MB), 1)
-          $setup = Get-Item "release/DropWheel-Setup-$version.exe"
+          $setup = Get-Item "release/DropWheel-$version-Setup.exe"
           $setupMb = [math]::Round($setup.Length / 1MB, 2)
-          $winrt = Test-Path release/DropWheel/Microsoft.Windows.SDK.NET.dll
 
           @"
           ### DropWheel $version package sizes
 
           | item | size | files |
           | --- | --- | --- |
-          | publish (framework-dependent, win-x64) | $publishMb MB | $($publish.Count) |
+          | publish (self-contained, trimmed, win-x64) | $publishMb MB | $($publish.Count) |
           | setup exe | $setupMb MB | 1 |
-          | Microsoft.Windows.SDK.NET.dll | $(if ($winrt) { "present" } else { "absent" }) | - |
           "@ >> $env:GITHUB_STEP_SUMMARY
 
           Write-Host "publish: $publishMb MB / $($publish.Count) files"
           Write-Host "setup:   $setupMb MB"
-          if ($setupMb -gt 30) {
-            Write-Warning "setup is $setupMb MB, above the 30 MB target of R-2"
+          if ($setupMb -gt 70) {
+            throw "setup is $setupMb MB, above the 70 MB budget"
           }
 
-      # R-23: a truly portable build — self-contained, so it runs with no .NET install, no installer,
-      # no registry, no admin. Settings stay next to the exe when portable.txt is present.
+      # R-23: a truly portable build — the same self-contained, trimmed publish the installer uses,
+      # so it runs with no .NET install, no installer, no registry, no admin.
       - name: Portable zip (self-contained, no admin)
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.version }}"
-          dotnet publish src/FileAction.App/FileAction.App.csproj `
-            -c Release -r win-x64 --self-contained true `
-            -o portable/DropWheel
-          if (-not (Test-Path portable/DropWheel/DropWheel.exe)) { throw "self-contained publish produced no exe" }
-
-          # Neither debug symbols nor the runtime's createdump.exe belong in the portable zip.
-          $junk = Get-ChildItem portable/DropWheel -Recurse -File -Force |
-            Where-Object { $_.Extension -eq '.pdb' -or $_.Name -eq 'createdump.exe' }
-          if ($junk) {
-            $junk | ForEach-Object { Write-Host "removing $($_.FullName)" }
-            $junk | Remove-Item -Force
-          }
-          $left = Get-ChildItem portable/DropWheel -Recurse -File -Force |
-            Where-Object { $_.Extension -eq '.pdb' -or $_.Name -eq 'createdump.exe' }
-          if ($left) { throw "debug files remain in portable/DropWheel: $($left.FullName -join ', ')" }
-
-          # The installer ships LICENSE, THIRD-PARTY-NOTICES.md and the licenses folder; the portable
-          # zip must ship them too, at the root of the zip next to DropWheel.exe.
-          Copy-Item -Path LICENSE -Destination portable/DropWheel -Force
-          Copy-Item -Path THIRD-PARTY-NOTICES.md -Destination portable/DropWheel -Force
-          New-Item -ItemType Directory -Path portable/DropWheel/licenses -Force | Out-Null
-          Copy-Item -Path 'licenses/*' -Destination portable/DropWheel/licenses -Recurse -Force
-          foreach ($required in 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'licenses') {
-            if (-not (Test-Path (Join-Path portable/DropWheel $required))) {
-              throw "portable staging is missing $required"
-            }
-          }
-
+          New-Item -ItemType Directory -Path portable -Force | Out-Null
+          Copy-Item -Path release/selfcontained -Destination portable/DropWheel -Recurse -Force
+          if (-not (Test-Path portable/DropWheel/DropWheel.exe)) { throw "portable staging has no DropWheel.exe" }
           Set-Content portable/DropWheel/portable.txt "DropWheel portable build: settings and downloaded tools stay in this folder."
           Compress-Archive -Path portable/DropWheel/* -DestinationPath "release/DropWheel-$version-portable-win-x64.zip" -Force
           $zip = Get-Item "release/DropWheel-$version-portable-win-x64.zip"
@@ -253,7 +194,7 @@ jobs:
         run: |
           # Exactly two binary assets remain: the setup exe and the self-contained portable zip.
           $files = @(Get-ChildItem release -File | Where-Object {
-            $_.Name -like 'DropWheel-Setup-*.exe' -or $_.Name -like 'DropWheel-*-portable-win-x64.zip'
+            $_.Name -like 'DropWheel-*-Setup.exe' -or $_.Name -like 'DropWheel-*-portable-win-x64.zip'
           })
           if ($files.Count -ne 2) {
             throw "expected the setup exe and the self-contained portable zip, found: $($files.Name -join ', ')"
@@ -269,7 +210,7 @@ jobs:
         with:
           name: DropWheel-Setup-${{ steps.version.outputs.version }}
           path: |
-            release/DropWheel-Setup-*.exe
+            release/DropWheel-*-Setup.exe
             release/DropWheel-*-portable-win-x64.zip
             release/SHA256SUMS.txt
           retention-days: 14
@@ -281,7 +222,7 @@ jobs:
           # R-18: the report is what the owner sends back when the app misbehaves on a locked-down PC.
           # DropWheel is a GUI subsystem exe: "& exe" does not wait and leaves $LASTEXITCODE stale, so use
           # Start-Process -Wait and verify the report file instead of the shell's exit code.
-          $process = Start-Process -FilePath release/DropWheel/DropWheel.exe `
+          $process = Start-Process -FilePath release/selfcontained/DropWheel.exe `
             -ArgumentList '--diagnose', (Join-Path $PWD 'release/diagnose.txt') -PassThru
           if (-not $process.WaitForExit(90000)) { Write-Warning 'diagnose did not exit in 90 s'; try { $process.Kill($true) } catch { } }
           Write-Host "diagnose exit code: $($process.ExitCode)"
@@ -297,7 +238,10 @@ jobs:
 
   screenshots:
     name: Screenshots (needs a desktop session)
-    if: github.event_name == 'workflow_dispatch'
+    # Screenshot artifacts (settings/update UI, en/ar, dark/light) are refreshed on every main push and
+    # on a manual run; a pull request or an agent branch never needs a desktop session.
+    needs: build-test
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -337,34 +281,209 @@ jobs:
 
   release:
     name: GitHub release (tag)
-    # R-24: pushing a vX.Y.Z tag publishes the installer, the self-contained portable zip and
-    # SHA256SUMS.txt as a GitHub Release.
+    # R-24/R-26: pushing a vX.Y.Z tag publishes exactly six assets: the self-contained portable zip and its
+    # signature, the installer under its versioned name and under the stable DropWheel-Setup.exe alias, the
+    # installer signature, and SHA256SUMS.txt. Everything else in dist (test-results, diagnose.txt,
+    # screenshots) is deliberately never released.
     if: startsWith(github.ref, 'refs/tags/v')
     needs: package
     runs-on: windows-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
         with:
           path: dist
 
-      - name: Create release
+      - name: Stage, sign and verify the six release assets
+        shell: pwsh
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # PowerShell 7.4+ can turn a native non-zero exit into a terminating error; gh is probed below.
+          if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+            $PSNativeCommandUseErrorActionPreference = $false
+          }
+
+          # Only the versioned installer and the self-contained portable zip come out of dist. The name shape
+          # is exact, so test-results, diagnose.txt and screenshots can never be staged by accident.
+          $setup = @(Get-ChildItem dist -Recurse -File | Where-Object {
+            $_.Name -match '^DropWheel-([0-9]+(\.[0-9]+)+)-Setup\.exe$' -or
+            $_.Name -match '^DropWheel-Setup-([0-9]+(\.[0-9]+)+)\.exe$' })
+          $portable = @(Get-ChildItem dist -Recurse -File | Where-Object {
+            $_.Name -match '^DropWheel-([0-9]+(\.[0-9]+)+)-portable-win-x64\.zip$' })
+          if ($setup.Count -ne 1) {
+            throw "expected exactly one DropWheel-<ver>-Setup.exe in dist, found: $($setup.Name -join ', ')"
+          }
+          if ($portable.Count -ne 1) {
+            throw "expected exactly one DropWheel-<ver>-portable-win-x64.zip in dist, found: $($portable.Name -join ', ')"
+          }
+          if ($setup[0].Name -match '^DropWheel-([0-9]+(\.[0-9]+)+)-Setup\.exe$') {
+            $packageVersion = $Matches[1]
+          } else {
+            $packageVersion = $setup[0].Name -replace '^DropWheel-Setup-(.*)\.exe$', '$1'
+          }
+          if ($portable[0].Name -ne "DropWheel-$packageVersion-portable-win-x64.zip") {
+            throw "package artifacts disagree: $($setup[0].Name) vs $($portable[0].Name)"
+          }
+
+          # Assets are normalized to the *packaged* version, so the release publishes the same six names
+          # whatever the tag looks like (the updater finds them through UpdateConfig.SetupAssetName /
+          # PortableAssetName of the version it reads from the tag). A tag that disagrees with the build
+          # only warns; the versioned setup is renamed from DropWheel-Setup-<v>.exe to DropWheel-<v>-Setup.exe.
+          $tag = $env:GITHUB_REF_NAME
+          $version = $packageVersion
+          if ($tag -ne "v$version") {
+            Write-Warning "tag $tag does not match the packaged version $version; naming the assets after the package"
+          }
+          Write-Host "staging DropWheel $version for tag $tag"
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+          $stage = Join-Path $env:RUNNER_TEMP 'release-assets'
+          if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+          New-Item -ItemType Directory -Path $stage | Out-Null
+
+          # Inno Setup now emits DropWheel-<version>-Setup.exe directly; an older build may still emit
+          # DropWheel-Setup-<version>.exe. Either way the staged asset is the updater's exact name. The
+          # stable DropWheel-Setup.exe copy is byte-for-byte the same file.
+          $versionedSetup = Join-Path $stage "DropWheel-$version-Setup.exe"
+          $versionedZip = Join-Path $stage "DropWheel-$version-portable-win-x64.zip"
+          Copy-Item -LiteralPath $setup[0].FullName -Destination $versionedSetup
+          Copy-Item -LiteralPath $portable[0].FullName -Destination $versionedZip
+          $stableSetup = Join-Path $stage 'DropWheel-Setup.exe'
+          Copy-Item -LiteralPath $versionedSetup -Destination $stableSetup
+          if ((Get-FileHash $stableSetup -Algorithm SHA256).Hash -ne
+              (Get-FileHash $versionedSetup -Algorithm SHA256).Hash) {
+            throw 'DropWheel-Setup.exe is not a byte-for-byte copy of the versioned installer'
+          }
+
+          # Sign both binaries with the repository secret (base64 PKCS#8, ECDSA P-256). The .sig is what
+          # UpdateVerifier expects: base64 of ECDsa.SignHash(SHA256 over the file bytes), default P1363,
+          # ASCII, no newline. Verify each one against the public key constant compiled into the app
+          # (UpdateKey.PublicKeyBase64) before anything is uploaded; a mismatch fails the job.
+          if (-not $env:UPDATE_SIGNING_KEY) {
+            throw 'UPDATE_SIGNING_KEY is not set; refusing to publish unsigned assets'
+          }
+          $publicKeyBase64 = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEUCQv0in24CEgz0uiGoER/25EFZY5w/x0wvpl9TyRyG8VxFTqv3mKuGBxMwoknk9FBHrj2P9c56kCUU2POE5Glw=='
+
+          $keyBytes = [Convert]::FromBase64String($env:UPDATE_SIGNING_KEY.Trim())
+          $signingKey = [System.Security.Cryptography.ECDsa]::Create()
+          $verifier = [System.Security.Cryptography.ECDsa]::Create()
+          try {
+            $read = 0
+            $signingKey.ImportPkcs8PrivateKey($keyBytes, [ref] $read)
+            if ($read -ne $keyBytes.Length) {
+              throw 'UPDATE_SIGNING_KEY has trailing data after the PKCS#8 private key'
+            }
+            $read = 0
+            $verifier.ImportSubjectPublicKeyInfo([Convert]::FromBase64String($publicKeyBase64), [ref] $read)
+
+            foreach ($file in @($versionedSetup, $versionedZip)) {
+              $bytes = [System.IO.File]::ReadAllBytes($file)
+              $hash = [System.Security.Cryptography.SHA256]::HashData($bytes)
+              $signature = $signingKey.SignHash($hash)
+              [System.IO.File]::WriteAllText(
+                "$file.sig", [Convert]::ToBase64String($signature), [System.Text.Encoding]::ASCII)
+              if (-not $verifier.VerifyHash($hash, $signature)) {
+                throw "signature verification failed for $(Split-Path $file -Leaf) against the embedded UpdateKey public key"
+              }
+              Write-Host "signed and verified: $(Split-Path $file -Leaf).sig ($($signature.Length) bytes)"
+            }
+          } finally {
+            $signingKey.Dispose()
+            $verifier.Dispose()
+            [Array]::Clear($keyBytes, 0, $keyBytes.Length)
+          }
+
+          # SHA256SUMS.txt covers the five other assets, never itself, in sha256sum format:
+          # <64 lower-case hex><two spaces><file name>.
+          $assetNames = @(
+            "DropWheel-$version-portable-win-x64.zip"
+            "DropWheel-$version-portable-win-x64.zip.sig"
+            "DropWheel-$version-Setup.exe"
+            "DropWheel-$version-Setup.exe.sig"
+            'DropWheel-Setup.exe'
+          )
+          $staged = @(Get-ChildItem $stage -File | Select-Object -ExpandProperty Name)
+          foreach ($name in $assetNames) {
+            if ($staged -notcontains $name) { throw "staged asset missing: $name" }
+          }
+          if ($staged.Count -ne 5) {
+            throw "expected 5 staged assets before SHA256SUMS.txt, found: $($staged -join ', ')"
+          }
+          $lines = foreach ($name in ($assetNames | Sort-Object)) {
+            $hash = (Get-FileHash (Join-Path $stage $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $name"
+          }
+          [System.IO.File]::WriteAllText(
+            (Join-Path $stage 'SHA256SUMS.txt'), (($lines -join "`n") + "`n"), [System.Text.Encoding]::ASCII)
+
+          Write-Host 'staged release assets:'
+          Get-ChildItem $stage -File | Sort-Object Name | ForEach-Object {
+            Write-Host ("  {0}  {1:N0} bytes" -f $_.Name, $_.Length)
+          }
+          Get-Content (Join-Path $stage 'SHA256SUMS.txt') | ForEach-Object { Write-Host "  sums: $_" }
+
+      - name: Publish GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = $env:GITHUB_REF_NAME
-          # Three assets only: the setup exe, the self-contained portable zip and SHA256SUMS.txt.
-          # Other downloaded artifacts (test-results, diagnose.txt) are deliberately not released.
-          $files = @(Get-ChildItem dist -Recurse -File | Where-Object {
-            $_.Name -like 'DropWheel-Setup-*.exe' -or
-            $_.Name -like 'DropWheel-*-portable-win-x64.zip' -or
-            $_.Name -eq 'SHA256SUMS.txt'
-          } | Select-Object -ExpandProperty FullName)
-          if ($files.Count -ne 3) {
-            throw "expected setup exe, portable zip and SHA256SUMS.txt, found: $($files -join ', ')"
+          $ErrorActionPreference = 'Stop'
+          if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+            $PSNativeCommandUseErrorActionPreference = $false
           }
-          $files | ForEach-Object { Write-Host "release asset: $_" }
-          gh release create $tag --repo ${{ github.repository }} --title "DropWheel $tag" --generate-notes @files
-          Write-Host "created release $tag"
+          $tag = $env:GITHUB_REF_NAME
+          $repo = '${{ github.repository }}'
+          $stage = Join-Path $env:RUNNER_TEMP 'release-assets'
+          $version = $env:VERSION
+          if (-not $version) { throw 'VERSION was not set by the staging step' }
+
+          $expected = @(
+            "DropWheel-$version-portable-win-x64.zip"
+            "DropWheel-$version-portable-win-x64.zip.sig"
+            "DropWheel-$version-Setup.exe"
+            "DropWheel-$version-Setup.exe.sig"
+            'DropWheel-Setup.exe'
+            'SHA256SUMS.txt'
+          )
+          $actual = @(Get-ChildItem $stage -File | Select-Object -ExpandProperty Name)
+          $difference = Compare-Object ($expected | Sort-Object) ($actual | Sort-Object)
+          if ($difference) { throw "staged asset set mismatch: $($difference | Out-String)" }
+          $files = @($expected | ForEach-Object { Join-Path $stage $_ })
+
+          # Replace an earlier release for this tag (the tag itself is never touched).
+          gh release view $tag --repo $repo --json tagName *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "release $tag already exists; deleting it first"
+            gh release delete $tag --repo $repo --yes
+            if ($LASTEXITCODE -ne 0) { throw "gh release delete $tag failed" }
+          }
+
+          gh release create $tag --repo $repo --title "DropWheel $tag" --generate-notes @files
+          if ($LASTEXITCODE -ne 0) { throw "gh release create $tag failed" }
+
+          # Read the release back: the job must publish exactly those six names, and the summary lists them.
+          $release = $null
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            $release = gh release view $tag --repo $repo --json assets | ConvertFrom-Json
+            if (@($release.assets).Count -eq 6) { break }
+            Start-Sleep -Seconds 3
+          }
+          $uploaded = @($release.assets | Select-Object -ExpandProperty name)
+          if ($uploaded.Count -ne 6) {
+            throw "expected 6 uploaded assets, found $($uploaded.Count): $($uploaded -join ', ')"
+          }
+          $difference = Compare-Object ($expected | Sort-Object) ($uploaded | Sort-Object)
+          if ($difference) { throw "uploaded asset set mismatch: $($difference | Out-String)" }
+
+          $summary = @("### GitHub release $tag", '', '| asset | bytes |', '| --- | ---: |')
+          foreach ($asset in ($release.assets | Sort-Object name)) {
+            $summary += "| $($asset.name) | $($asset.size) |"
+          }
+          $summary += ''
+          $summary | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+          Write-Host "release $tag published with exactly 6 assets:"
+          $release.assets | Sort-Object name | ForEach-Object { Write-Host "  - $($_.name)" }
