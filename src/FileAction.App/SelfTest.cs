@@ -40,6 +40,9 @@ internal static class SelfTest
 
     public static int Run(string outDir)
     {
+        // Assigned before anything else: a static field initializer is not guaranteed to run before the
+        // first static method call, and the probe process needs the real process start time.
+        _processStart = ProcessStart();
         if (outDir.StartsWith(ColdStartProbeArgument, StringComparison.Ordinal))
             return RunColdStartProbe(outDir[ColdStartProbeArgument.Length..]);
 
@@ -47,7 +50,6 @@ internal static class SelfTest
         try
         {
             Directory.CreateDirectory(outDir);
-            _processStart = ProcessStart();
             // The earliest managed observation point: the tool module initializers have run, the app has
             // not built a wheel or a tool view yet. A heavy registrar (bitmap, Magick, ToolWindow) would
             // have loaded its renderer assembly by now, so this is the registration laziness proof.
@@ -529,7 +531,7 @@ internal static class SelfTest
     /// Median process-start → wheel-ready time of several fresh probe processes. Falls back to this
     /// process's own elapsed time when the probe processes cannot be started.
     /// </summary>
-    private static double MeasureColdStart(out string source)
+    private static double MeasureColdStart(double fallbackMs, out string source)
     {
         const int probes = 5;
         var values = new List<double>();
@@ -605,7 +607,7 @@ internal static class SelfTest
         {
             source = "in-process fallback" +
                      (failures.Count == 0 ? string.Empty : " (" + string.Join("; ", failures.Take(3)) + ")");
-            return (DateTime.Now - _processStart).TotalMilliseconds;
+            return fallbackMs;
         }
         values.Sort();
         source = $"median of {values.Count} fresh probe process(es)" +
@@ -629,7 +631,7 @@ internal static class SelfTest
         }
 
         var ownElapsedMs = (DateTime.Now - _processStart).TotalMilliseconds;
-        var coldStartMs = MeasureColdStart(out var coldStartSource);
+        var coldStartMs = MeasureColdStart(ownElapsedMs, out var coldStartSource);
         var coldStartLimitMs = LaunchBudget.ColdStartMs * (1 + LaunchBudget.ColdStartGrowth);
         log.Add($"perf cold-start: {coldStartMs:F0} ms ({coldStartSource}; this process {ownElapsedMs:F0} ms) " +
                 $"(v2.3.0 baseline {LaunchBudget.ColdStartMs:F0} ms, +{LaunchBudget.ColdStartGrowth:P0} budget {coldStartLimitMs:F0} ms)");
