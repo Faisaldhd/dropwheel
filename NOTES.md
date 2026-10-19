@@ -109,8 +109,8 @@ no-secret self-test to the workflow.
            run: ./scripts/sign-release.ps1 -SelfTest
    ```
 
-3. **Asset naming mismatch (P1, blocks the updater).** `UpdateConfig.SetupAssetName` and the
-   spec use `DropWheel-<version>-Setup.exe`, but `installer/DropWheel.iss` emits
+3. **Asset naming mismatch (P1, blocks the updater).** `UpdateConfig.SetupAssetName` (and the
+   2.2.0 signing task) use `DropWheel-<version>-Setup.exe`, but `installer/DropWheel.iss` emits
    `DropWheel-Setup-<version>.exe` (and `release.cmd` prints that name). The app will not find
    the setup in the release until one side changes. Preferred fix (matches `UpdateConfig` and
    `docs/signing-updates.md`): change `OutputBaseFilename` in `installer/DropWheel.iss` to
