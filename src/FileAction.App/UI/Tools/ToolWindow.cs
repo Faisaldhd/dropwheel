@@ -250,8 +250,17 @@ internal sealed class ToolWindow : Window
         DockPanel.SetDock(reset, Dock.Left);
         DockPanel.SetDock(apply, Dock.Right);
         bar.Children.Add(reset);
-        bar.Children.Add(apply);
-        return bar;
+        bar.Children.Add(apply);        return bar;
+    }
+
+    /// <summary>
+    /// Changes the primary button's text at runtime, for labels that depend on state
+    /// (e.g. "Save 3 Frames"). Tools call this from their own view; the window never reads tool state.
+    /// </summary>
+    public void SetPrimaryLabel(string text)
+    {
+        if (_applyButton is not null)
+            Controls.SetText(_applyButton, text);
     }
 
     private async Task ApplyAsync()
