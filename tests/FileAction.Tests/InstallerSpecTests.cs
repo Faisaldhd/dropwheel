@@ -52,7 +52,8 @@ public class InstallerSpecTests
             .Select(line => line.Trim())
             .Count(line =>
                 line.Contains("Flags:", StringComparison.OrdinalIgnoreCase) &&
-                line.Contains("checked", StringComparison.OrdinalIgnoreCase));
+                line.Contains("checked", StringComparison.OrdinalIgnoreCase) &&
+                !line.Contains("unchecked", StringComparison.OrdinalIgnoreCase));
 
         Assert.Equal(2, checkedTasks);
     }
