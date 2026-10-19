@@ -59,8 +59,18 @@ internal sealed class ThemeWatcher
     {
         if (e.Category is not (UserPreferenceCategory.General or UserPreferenceCategory.Color or UserPreferenceCategory.VisualStyle))
             return;
-        // The broadcast arrives on its own thread; the palette and the visuals belong to the UI thread.
-        _root.Dispatcher.InvokeAsync(Check);
+        try
+        {
+            // The broadcast arrives on its own thread; the palette and the visuals belong to the UI thread.
+            var dispatcher = _root.Dispatcher;
+            if (dispatcher.HasShutdownStarted)
+                return;
+            dispatcher.InvokeAsync(Check);
+        }
+        catch (InvalidOperationException)
+        {
+            // The window closed while the broadcast was in flight.
+        }
     }
 
     private void Check()
