@@ -445,7 +445,7 @@ internal static class SelfTest
             throw new InvalidOperationException("the crop tool does not accept a png");
 
         var window = new ToolWindow(CropTool.Instance, [item], null);
-        Pump(window.PrepareAsync(animate: false));
+        Pump(() => window.PrepareAsync(animate: false));
         SaveWindow(window, Path.Combine(directory, "crop.png"), window.Width, desktop: true);
 
         // The adaptive sizer must keep every media shape inside the work area.
@@ -465,7 +465,9 @@ internal static class SelfTest
     }
 
     /// <summary>Runs an async preparation to completion while the self-test keeps the UI thread alive.</summary>
-    private static void Pump(Task task)
+    /// <param name="start">Starts the work. It must be called after the dispatcher context is installed,
+    /// otherwise its awaits resume on the thread pool and touch WPF objects off the UI thread.</param>
+    private static void Pump(Func<Task> start)
     {
         var previous = SynchronizationContext.Current;
         if (previous is not DispatcherSynchronizationContext)
@@ -473,8 +475,22 @@ internal static class SelfTest
         try
         {
             var frame = new DispatcherFrame();
-            task.ContinueWith(_ => frame.Continue = false, TaskScheduler.FromCurrentSynchronizationContext());
+            var guard = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+            var task = start();
+            guard.Tick += (_, _) =>
+            {
+                guard.Stop();
+                frame.Continue = false;
+            };
+            guard.Start();
+            task.ContinueWith(_ =>
+            {
+                guard.Stop();
+                frame.Continue = false;
+            }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.FromCurrentSynchronizationContext());
             Dispatcher.PushFrame(frame);
+            if (!task.IsCompleted)
+                throw new TimeoutException("the tool window preview did not finish within 30 s");
             task.GetAwaiter().GetResult();
         }
         finally
