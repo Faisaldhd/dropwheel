@@ -41,9 +41,9 @@
     carries the runtime itself.
 
     A runtime identifier is still needed to get the native apphost (DropWheel.exe) and the RID-specific
-    native libraries (Magick, Skia, pdfium). Self-contained builds are deliberately NOT trimmed:
-    PublishTrimmed broke reflection-based System.Text.Json in 2.2.0 (raw Loc keys, black Settings
-    window), and WPF trimming is not officially supported. The 70 MB setup budget is checked in CI.
+    native libraries (Magick, Skia, pdfium). Self-contained builds are deliberately NOT trimmed: trimming
+    broke reflection-based System.Text.Json in 2.2.0 (raw Loc keys, black Settings window), and WPF is not
+    trim-safe. Setup size is reported in CI, not capped.
   -->
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
     <SelfContained>false</SelfContained>

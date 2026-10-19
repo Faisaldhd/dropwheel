@@ -7,15 +7,10 @@
     <AssemblyName>dropwheel</AssemblyName>
     <RootNamespace>FileAction.Linux</RootNamespace>
     <Version>1.0.0</Version>
-    <!-- Smaller download: trim only libraries marked as trim-safe; the CI self-test runs conversions in the trimmed build. -->
+    <!-- No trimming: keep every reflection/resource path available in the Linux build too. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Linux-only app. -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
-  </PropertyGroup>
-  <!-- Only when publishing for a platform (trimming needs a runtime identifier). -->
-  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
-    <PublishTrimmed>true</PublishTrimmed>
-    <TrimMode>partial</TrimMode>
   </PropertyGroup>
 
   <ItemGroup>
