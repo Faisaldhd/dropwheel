@@ -40,6 +40,7 @@
   "job.download.downloading": "جارٍ تنزيل ⁦{0}⁩",
   "job.download.ready": "جاهز؛ لن يُنزَّل مرة أخرى.",
   "error.output.notWritable": "تعذّرت الكتابة إلى المجلد الهدف. اختر مجلد إخراج آخر من الإعدادات.",
+  "error.output.dropFolderFallback": "تعذّرت الكتابة في ذلك المجلد، لذا حُفظت النتيجة بجانب الملف.",
   "error.file": "خطأ في الملف: {0}",
   "error.image.process": "تعذّرت معالجة الصورة: {0}",
   "jobs.title": "DropWheel – التقدّم",

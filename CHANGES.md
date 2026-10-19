@@ -1,4 +1,22 @@
-# DropWheel 2.2.1 — CHANGES
+# DropWheel 2.2.2 — CHANGES
+
+## 2.2.2
+
+### English
+
+- **Results land in the folder you drop them on.** When the wheel opens over a File Explorer window, the
+  folder shown there becomes the output folder for that drop, so a file dragged from the desktop into a
+  folder on `D:` keeps its result in that folder instead of next to the original. The folder must exist,
+  be writable and differ from the source folder; otherwise DropWheel keeps its previous behaviour (next to
+  the file, or the folder chosen in Settings), and a notification explains a refused folder.
+
+### العربية
+
+- **النتائج تُحفظ في المجلد الذي تُفلتها عليه.** عندما تُفتح العجلة فوق نافذة مستكشف الملفات يصبح المجلد
+  المعروض فيها هو مجلد الإخراج لتلك العملية، فيبقى ناتج ملف يُسحب من سطح المكتب إلى مجلد على `D:` داخل ذلك
+  المجلد بدلًا من جوار الملف الأصلي. يجب أن يكون المجلد موجودًا وقابلًا للكتابة ومختلفًا عن مجلد المصدر،
+  وإلا يحتفظ DropWheel بسلوكه السابق (بجوار الملف أو المجلد المختار في الإعدادات)، ويوضّح إشعار سبب رفض
+  المجلد.
 
 ## 2.2.1
 

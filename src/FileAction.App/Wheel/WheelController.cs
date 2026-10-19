@@ -179,17 +179,10 @@ internal sealed class WheelController
     {
         _wheel?.Finish();
         UI.Theme.Refresh();
-        string? targetDir = null;
-        if (items is { Count: > 0 })
-        {
-            var dir = ShellFolders.FolderAt(at);
-            if (!string.IsNullOrEmpty(dir))
-            {
-                var src = Path.GetDirectoryName(Path.GetFullPath(items[0].Path));
-                if (!string.Equals(dir, src, StringComparison.OrdinalIgnoreCase))
-                    targetDir = dir;
-            }
-        }
+        // The folder under the cursor when the wheel opens is the folder the user is dropping onto.
+        // In drag mode the file itself is only known after it lands on the wheel, so the candidate is
+        // captured here and validated against the real item when the operation starts (JobRunner).
+        var targetDir = ShellFolders.FolderAt(at);
         var window = new WheelWindow(mode, wheel, items, _settings, Operations,
             (op, list, outDir) => _jobs.StartInto(op, list, null, outDir), targetDir)
         {
