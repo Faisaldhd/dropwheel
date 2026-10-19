@@ -417,6 +417,16 @@ internal static class PortableUpdater
         if (!File.Exists(exe))
             throw new FileNotFoundException("the updated DropWheel.exe is missing", exe);
 
+        // Never hand a non-PE file to CreateProcess: on Windows that can surface a blocking "this app
+        // can't run" dialog (or a WER prompt) instead of a clean exception, which would leave the update
+        // half-applied. Rejecting it here lets the caller roll back deterministically.
+        var header = new byte[2];
+        using (var stream = File.OpenRead(exe))
+        {
+            if (stream.Read(header, 0, header.Length) != header.Length || header[0] != (byte)'M' || header[1] != (byte)'Z')
+                throw new InvalidDataException("the updated DropWheel.exe is not a Windows executable");
+        }
+
         var info = new ProcessStartInfo(exe)
         {
             UseShellExecute = false,

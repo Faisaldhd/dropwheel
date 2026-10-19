@@ -68,6 +68,7 @@ jobs:
           else { Write-Host "signing script not present yet; skipped" }
 
       - name: Apply-update helper (portable)
+        timeout-minutes: 10
         shell: pwsh
         run: |
           if (Test-Path scripts/test-update-apply.ps1) { & ./scripts/test-update-apply.ps1 }
@@ -267,10 +268,14 @@ jobs:
       - name: Render screenshots
         shell: pwsh
         run: |
-          & release/DropWheel/DropWheel.exe --self-test docs/screenshots
-          if ($LASTEXITCODE -ne 0) { throw "--self-test failed with $LASTEXITCODE" }
+          # DropWheel is a GUI-subsystem exe: "& exe" returns immediately and leaves $LASTEXITCODE null
+          # in a fresh step, which previously turned a successful render into a false failure.
+          $process = Start-Process -FilePath release/DropWheel/DropWheel.exe `
+            -ArgumentList '--self-test', 'docs/screenshots' -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "--self-test failed with $($process.ExitCode)" }
 
       - name: Upload screenshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: screenshots

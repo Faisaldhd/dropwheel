@@ -26,6 +26,16 @@ public static class Program
             return SelfTest.Run(args.Length >= 2 ? args[1] : "self-test");
         if (args.Contains("--diagnose"))
             return Diagnose.Run(args.SkipWhile(a => a != "--diagnose").Skip(1).FirstOrDefault());
+        if (args.Contains("--set-watch"))
+        {
+            // Installer task "Watch mouse and keyboard": write the initial choice and exit immediately.
+            // The setup uses this instead of shipping a pre-made settings.json, so an upgrade keeps the
+            // user's existing file and the app stays the only writer of its settings.
+            var settings = AppSettings.Load();
+            settings.WatchGestures = true;
+            settings.Save();
+            return 0;
+        }
         if (args.Contains("--unregister"))
         {
             // Called by the uninstaller.
