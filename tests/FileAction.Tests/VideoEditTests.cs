@@ -235,6 +235,7 @@ public class VideoEditTests
         AssertPair(args, "-i", @"C:\in\clip.mp4");
         AssertPair(args, "-t", "00:00:10.000");
         AssertPair(args, "-c", "copy");
+        Assert.DoesNotContain("-avoid_negative_ts", args);
         AssertPair(args, "-map", "0:v:0");
         AssertPair(args, "-map", "0:a?");
         AssertPair(args, "-movflags", "+faststart");
@@ -406,11 +407,20 @@ public class VideoEditTests
         var args = VideoEdit.BuildSpeedArgs(new VideoSpeedRequest(
             "in.mp4", "out.mp4", 2.0, "mp4", HasAudio: true));
 
-        AssertPair(args, "-vf", "setpts=0.5*PTS");
+        AssertPair(args, "-vf", "setpts=(PTS-STARTPTS)*0.5,fps=30");
         AssertPair(args, "-af", "atempo=2");
         AssertPair(args, "-c:v", "libx264");
         AssertPair(args, "-c:a", "aac");
         Assert.Equal("out.mp4", args[^1]);
+    }
+
+    [Fact]
+    public void Speed_args_use_the_source_frame_rate_after_setpts()
+    {
+        var args = VideoEdit.BuildSpeedArgs(new VideoSpeedRequest(
+            "in.mp4", "out.mp4", 2.0, "mp4", HasAudio: true, Fps: 25));
+
+        AssertPair(args, "-vf", "setpts=(PTS-STARTPTS)*0.5,fps=25");
     }
 
     [Fact]
@@ -419,7 +429,7 @@ public class VideoEditTests
         var args = VideoEdit.BuildSpeedArgs(new VideoSpeedRequest(
             "in.mp4", "out.mp4", 0.25, "mp4", HasAudio: true));
 
-        AssertPair(args, "-vf", "setpts=4*PTS");
+        AssertPair(args, "-vf", "setpts=(PTS-STARTPTS)*4,fps=30");
         AssertPair(args, "-af", "atempo=0.5,atempo=0.5");
     }
 
