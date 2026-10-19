@@ -13,6 +13,9 @@ public sealed class ToolLocator
     /// <summary>Where the Windows app downloads FFmpeg and Pandoc when they are needed.</summary>
     public static string DownloadFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DropWheel", "tools");
 
+    /// <summary>Second choice when the folder above is not writable (R-16: locked-down machines).</summary>
+    public static string FallbackDownloadFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "DropWheel", "tools");
+
     /// <summary>A view that pretends <paramref name="tools"/> are installed: "would this work after downloading X?"</summary>
     public ToolLocator Assuming(IEnumerable<ExternalTool> tools)
     {
@@ -83,6 +86,7 @@ public sealed class ToolLocator
         candidates.Add(Path.Combine(_appDir, "tools", bundledName));
         candidates.Add(Path.Combine(_appDir, bundledName));
         candidates.Add(Path.Combine(DownloadFolder, bundledName));
+        candidates.Add(Path.Combine(FallbackDownloadFolder, bundledName));
 
         if (tool == ExternalTool.LibreOffice && IsWindows)
         {

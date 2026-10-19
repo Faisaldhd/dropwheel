@@ -1,3 +1,4 @@
+using FileAction.App.Diagnostics;
 using FileAction.App.Actions;
 using FileAction.App.Shell;
 using FileAction.App.UI;
@@ -137,6 +138,13 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
             catch (OperationCanceledException)
             {
                 card.Cancelled();
+                return false;
+            }
+            catch (ToolInstallException ex)
+            {
+                // R-16: name the tool, the folder and the OS error; never blame the output folder here.
+                AppLog.Error($"tool install failed: {ex.Tool} into {ex.Path}", ex.InnerException ?? ex);
+                card.Fail(ex.Describe());
                 return false;
             }
             catch (Exception ex)

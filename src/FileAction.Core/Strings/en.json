@@ -259,5 +259,7 @@
   "job.doneCount.two": "Done: {0} outputs",
   "job.doneCount.few": "Done: {0} outputs",
   "job.doneCount.many": "Done: {0} outputs",
-  "job.doneCount.other": "Done: {0} outputs"
+  "job.doneCount.other": "Done: {0} outputs",
+  "tool.installFailed": "Couldn't save {0} to {1} ({2}). Check that DropWheel may write to that folder, or install {0} yourself (winget) and it will be found automatically.",
+  "tool.installAccessDenied": "access denied"
 }

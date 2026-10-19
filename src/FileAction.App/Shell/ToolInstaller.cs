@@ -2,6 +2,7 @@ using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
+using FileAction.App.Diagnostics;
 using FileAction.Core;
 using SharpCompress.Archives;
 using SharpCompress.Common;
@@ -24,6 +25,42 @@ internal static class ToolInstaller
 
     public static bool CanInstall(ExternalTool tool) => Installable.Contains(tool);
 
+    private static string? _installFolder;
+
+    /// <summary>
+    /// R-16: the first tool folder that is actually writable. A locked-down machine can refuse
+    /// <c>%LOCALAPPDATA%\DropWheel\tools</c>, so fall back to <c>%LOCALAPPDATA%\Programs\DropWheel\tools</c>,
+    /// then to TEMP.
+    /// </summary>
+    public static string InstallFolder => _installFolder ??= ResolveInstallFolder();
+
+    private static string ResolveInstallFolder()
+    {
+        foreach (var folder in new[] { ToolLocator.DownloadFolder, ToolLocator.FallbackDownloadFolder, Path.Combine(Path.GetTempPath(), "DropWheel", "tools") })
+        {
+            if (IsWritable(folder))
+                return folder;
+        }
+        AppLog.Warn("no writable tool folder; the install will report the access error for " + ToolLocator.DownloadFolder);
+        return ToolLocator.DownloadFolder;
+    }
+
+    private static bool IsWritable(string folder)
+    {
+        try
+        {
+            Directory.CreateDirectory(folder);
+            var probe = Path.Combine(folder, ".write-probe");
+            File.WriteAllText(probe, "x");
+            File.Delete(probe);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Approximate download size for the confirmation question.</summary>
     public static string DownloadSize(ExternalTool tool) => tool == ExternalTool.Ffmpeg ? "34 MB" : "35 MB";
 
@@ -36,7 +73,8 @@ internal static class ToolInstaller
             _ => throw new ConversionException(T("Tento nástroj se instaluje zvlášť.", "This tool is installed separately.")),
         };
 
-        Directory.CreateDirectory(ToolLocator.DownloadFolder);
+        var folder = InstallFolder;
+        Directory.CreateDirectory(folder);
         var archive = Path.Combine(Path.GetTempPath(), $"dropwheel-{exeName}-{Guid.NewGuid():N}{Path.GetExtension(new Uri(url).AbsolutePath)}");
         try
         {
@@ -48,7 +86,13 @@ internal static class ToolInstaller
                 if (actual != sha256)
                     throw new ConversionException(T("Stažený soubor nesouhlasí s otiskem zveřejněným autory.", "The download doesn't match the checksum published by its authors."));
             }
-            await Task.Run(() => ExtractExe(archive, exeName, ct), ct);
+            await Task.Run(() => ExtractExe(archive, exeName, folder, ct), ct);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // R-16: say which tool, which folder and which OS error — not "choose another output folder".
+            AppLog.Error($"could not install {tool} into {folder}", ex);
+            throw new ToolInstallException(tool, folder, ex);
         }
         finally
         {
@@ -91,9 +135,9 @@ internal static class ToolInstaller
     }
 
     /// <summary>Takes just the program out of the archive (FFmpeg's 7z also holds ffplay, ffprobe and docs).</summary>
-    private static void ExtractExe(string archivePath, string exeName, CancellationToken ct)
+    private static void ExtractExe(string archivePath, string exeName, string folder, CancellationToken ct)
     {
-        var target = Path.Combine(ToolLocator.DownloadFolder, exeName);
+        var target = Path.Combine(folder, exeName);
         var temp = target + ".part";
         using (var archive = ArchiveFactory.OpenArchive(archivePath, new ReaderOptions()))
         {

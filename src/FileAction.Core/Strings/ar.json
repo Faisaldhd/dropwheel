@@ -259,5 +259,7 @@
   "job.doneCount.two": "تم: مخرجان",
   "job.doneCount.few": "تم: {0} مخرجات",
   "job.doneCount.many": "تم: {0} مخرجًا",
-  "job.doneCount.other": "تم: {0} مخرج"
+  "job.doneCount.other": "تم: {0} مخرج",
+  "tool.installFailed": "تعذّر حفظ {0} في {1} ({2}). تحقّق من إمكانية الكتابة في هذا المجلد، أو ثبّت {0} بنفسك عبر winget وسيُكتشف تلقائيًا.",
+  "tool.installAccessDenied": "تم رفض الوصول"
 }
