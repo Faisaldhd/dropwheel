@@ -240,8 +240,13 @@ jobs:
       - name: Installer silent install/uninstall smoke test
         shell: pwsh
         run: |
-          if (Test-Path scripts/test-installer.ps1) { & ./scripts/test-installer.ps1 }
-          else { Write-Host "installer test script not present yet; skipped" }
+          # This is the only step that exercises the installed bytes, so it must never be skipped:
+          # a missing script fails the job instead of silently dropping the gate.
+          if (-not (Test-Path -LiteralPath 'scripts/test-installer.ps1')) {
+            throw 'scripts/test-installer.ps1 is missing; the installer smoke test cannot be skipped.'
+          }
+          & ./scripts/test-installer.ps1
+          if ($LASTEXITCODE -ne 0) { throw "test-installer.ps1 failed with exit code $LASTEXITCODE" }
 
       - name: Size report
         shell: pwsh
