@@ -106,7 +106,7 @@ public class CropMathTests
         Assert.Equal(500, w);
         Assert.Equal(745, h);
 
-        var small = ToolLayout.Clamp(500, 745, 600, 500);
+        var small = ToolLayout.Clamp(800, 745, 600, 500);
         Assert.Equal(570, small.Width, 3);
         Assert.Equal(450, small.Height, 3);
     }
