@@ -16,10 +16,6 @@
 #define AppVersion "2.2.0"
 #endif
 
-; The same value as AppId below (AppId needs the doubled brace to escape it); [Code] uses this
-; one to look for a previous installation in the uninstall registry.
-#define MyAppId "{1AB9CDBE-C50D-484B-96ED-5D575D0806D2}"
-
 [Setup]
 ; Same AppId as every DropWheel release: in-place upgrades, one entry in "Apps & features".
 AppId={{1AB9CDBE-C50D-484B-96ED-5D575D0806D2}
@@ -144,12 +140,14 @@ var
   RemoveUserData: Boolean;
 
 { True when no previous DropWheel is registered, i.e. this is a first installation rather than
-  an upgrade. Checked in both hives so a change of install mode is still seen as an upgrade. }
+  an upgrade. Checked in both hives so a change of install mode is still seen as an upgrade. The
+  key name is AppId above (the doubled brace there only escapes it) plus "_is1"; the braces are
+  part of the name and are not constants here. }
 function IsFirstInstall: Boolean;
 var
   UninstallKey: String;
 begin
-  UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1';
+  UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{1AB9CDBE-C50D-484B-96ED-5D575D0806D2}_is1';
   Result := not (RegKeyExists(HKCU, UninstallKey) or RegKeyExists(HKLM, UninstallKey));
 end;
 
