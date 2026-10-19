@@ -71,9 +71,9 @@ DropWheel handles images, PDFs, spreadsheets, subtitles and archives on its own.
 
 ## Install
 
-DropWheel is published on the [Releases](https://github.com/Faisaldhd/dropwheel/releases) page for Windows x64 as a portable, self-contained zip (`DropWheel-<version>-portable-win-x64.zip`) and a per-user installer (`DropWheel-Setup-<version>.exe`), with `SHA256SUMS.txt` covering both. Nothing is added to startup or to the Explorer menu unless you opt in, and no administrator rights are needed for DropWheel itself.
+DropWheel is published on the [Releases](https://github.com/Faisaldhd/dropwheel/releases) page for Windows x64 as a portable, self-contained zip (`DropWheel-<version>-portable-win-x64.zip`) and a self-contained installer (`DropWheel-<version>-Setup.exe`, also published as the stable `DropWheel-Setup.exe`), with `SHA256SUMS.txt` and an ECDSA P-256 `.sig` for each binary. The same download is on the [download page](https://faisaldhd.github.io/dropwheel/). Nothing is added to startup or to the Explorer menu unless you opt in.
 
-1. Download `DropWheel-<version>-portable-win-x64.zip` and `SHA256SUMS.txt` (and `DropWheel-Setup-<version>.exe` if you would rather use the installer) from the latest release.
+1. Download `DropWheel-<version>-portable-win-x64.zip` and `SHA256SUMS.txt` (and `DropWheel-<version>-Setup.exe` if you would rather use the installer) from the latest release.
 2. Compare the SHA-256 of each file you downloaded with its line in `SHA256SUMS.txt` (PowerShell):
 
    ```powershell
@@ -81,15 +81,17 @@ DropWheel is published on the [Releases](https://github.com/Faisaldhd/dropwheel/
    ```
 
    The value must match that line exactly.
-3. Unzip it to `%LOCALAPPDATA%\Programs\DropWheel` (recommended) and run `DropWheel.exe`, or run the Setup exe (it installs to the same folder for the current user and adds a Start-menu shortcut).
+3. Unzip it to `%LOCALAPPDATA%\Programs\DropWheel` (recommended) and run `DropWheel.exe`, or run the Setup exe. The installer offers **Install for me only** (no administrator rights, `%LOCALAPPDATA%\Programs\DropWheel`) or **Install for all users** (administrator, `%ProgramFiles%\DropWheel`), creates a Start-menu shortcut and offers an optional desktop shortcut.
 
 A copy started from a low-integrity location (a sandbox, temp or `Downloads` copy carrying a Low integrity label) cannot write its settings or receive input, while `%LOCALAPPDATA%\Programs\DropWheel` is a normal user-writable location.
 
-The portable zip is self-contained: it includes the .NET runtime, so no .NET install is required; the installer installs the free .NET 10 Desktop Runtime from Microsoft if the PC does not have it yet. The build is unsigned for now, so Windows SmartScreen may ask once (“More info”, then “Run anyway”); [SECURITY.md](SECURITY.md) lists exactly what the app writes and which endpoints it can contact.
+Both the zip and the setup are self-contained: they include the .NET runtime, so no .NET install is required and the setup downloads nothing. The binaries are Authenticode-unsigned for now, so Windows SmartScreen may ask once (“More info”, then “Run anyway”); auto-updates are separately signed with ECDSA P-256 and are verified against the public key built into the app before anything runs. [SECURITY.md](SECURITY.md) lists exactly what the app writes and which endpoints it can contact.
 
 With the portable zip, settings and the log stay next to `DropWheel.exe` (the zip contains a `portable.txt` marker); the installer keeps them in `%APPDATA%\DropWheel`. If the portable folder is read-only, the log falls back to `%LOCALAPPDATA%` or `%TEMP%`; the portable copy can be removed by deleting its folder, and the installed copy is removed from Settings → Apps.
 
-**Company-safe by default:** global keyboard/mouse monitoring is **off** and helper-tool downloads are **off**. Nothing is written to `HKLM`. Turn gestures on in **Settings → Company mode**, and downloads in the same place. `--no-hooks` disables the hooks, and the policy keys `HKLM\SOFTWARE\Policies\DropWheel\DisableHooks=1` / `DisableDownloads=1` let IT force either feature off.
+**Company-safe by default:** global keyboard/mouse monitoring is **off** and helper-tool downloads are **off**. Nothing is written to `HKLM`. Turn gestures on in **Settings → Integration** (the installer's checked task writes the initial choice), and downloads in the same place. `--no-hooks` disables the hooks, and the policy keys `HKLM\SOFTWARE\Policies\DropWheel\DisableHooks=1` / `DisableDownloads=1` let IT force either feature off.
+
+**Signed auto-update (2.2.0):** DropWheel checks the public GitHub release one minute after start and then once a day (or on demand). A tray item and a violet banner in **Settings → Updates** offer the new version; nothing downloads until you click **Update now**. Every download is checked against the GitHub asset digest, `SHA256SUMS.txt` and an ECDSA P-256 `.sig`; a failure deletes the files and says “Update could not be verified”. Installed copies run the new setup silently in the same install mode; portable copies replace their folder and restart, keeping `settings.json` and `portable.txt`. The **Check for updates automatically** switch only checks.
 
 English and Arabic, light and dark, following Windows. Requirements: Windows 10 (1809+) or Windows 11, x64.
 
