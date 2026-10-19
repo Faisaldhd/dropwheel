@@ -69,35 +69,29 @@ DropWheel handles images, PDFs, spreadsheets, subtitles and archives on its own.
 
 ## Install
 
-Build it yourself (see below) and run `DropWheel.exe`; a portable folder is all it needs. The installer is not published anywhere: this is an independent build.
+DropWheel is published on the [Releases](https://github.com/Faisaldhd/dropwheel/releases) page as a portable zip.
+Nothing is installed, nothing is added to startup or to the Explorer menu, and no administrator rights are needed.
 
-The app speaks English and Czech and comes in light and dark mode; both follow your Windows settings, and the language can be switched in Settings.
+1. Download `DropWheel-<version>-portable-win-x64.zip` and `SHA256SUMS.txt` from the latest release.
+2. Check the hash before running anything (PowerShell):
 
-On first launch DropWheel adds itself to startup and to the File Explorer context menu (both can be turned off in Settings). It then lives in the notification area next to the clock.
+   ```powershell
+   Get-FileHash .\DropWheel-<version>-portable-win-x64.zip -Algorithm SHA256
+   ```
 
-Requirements: Windows 10 (1809+) or Windows 11, x64.
+   The value must match the line for that file in `SHA256SUMS.txt`.
+3. Unzip it anywhere (for example `%LOCALAPPDATA%\Programs\DropWheel`) and run `DropWheel.exe`.
 
-## Linux
+The zip is self-contained, so no .NET install is required. It is unsigned for now, so Windows SmartScreen may
+ask once ("More info" then "Run anyway"); `SECURITY.md` lists exactly what the app does on a machine.
 
-**Arch Linux:** every release has a `PKGBUILD` attached (the `dropwheel-bin` package). Download it into an empty folder and run `makepkg -si`. The package is coming to the AUR (`yay -S dropwheel-bin`) as soon as AUR account registration reopens.
+Settings and the log stay next to `DropWheel.exe` (the zip contains a `portable.txt` marker).
 
-**Other distributions:** this fork does not ship Linux binaries.
+**Company-safe by default:** keyboard/mouse monitoring is **off** (no global hooks at all until you turn it on in
+Settings then Company mode), and DropWheel never downloads helper tools on its own - install FFmpeg or Pandoc with
+winget and it finds them. Autostart and the Explorer context menu are opt-in in the same place.
 
-Linux doesn't let apps watch the keyboard and mouse of other programs (Wayland forbids it on purpose), so the "drag and tap a key" gesture is Windows-only. On Linux you use the same wheel like this:
-
-- **Drop zone:** run `dropwheel` (or *DropWheel* from the app menu) and drag files onto the wheel. It stays on screen; move it by its middle.
-- **Right-click in the file manager:** `dropwheel integrate` adds *DropWheel…* to Nautilus (*Scripts* submenu), Dolphin and Nemo (the AUR package installs Dolphin and Nemo for everyone).
-- **Command line** and keyboard shortcuts of your desktop:
-
-  ```sh
-  dropwheel photo.heic                       # the wheel for this file
-  dropwheel list photo.heic                  # what can be done with it
-  dropwheel run image.to.webp *.heic         # do it, no window
-  dropwheel run video.trim clip.mov --param start=0:10 --param end=0:25
-  ```
-
-Optional packages: `ffmpeg` (audio, video), `pandoc-cli` (documents), `libreoffice-fresh` (Office files), `tesseract` + `tesseract-data-eng` (extract text). Settings live in `~/.config/dropwheel/settings.json`.
-
+English and Arabic, light and dark, following Windows. Requirements: Windows 10 (1809+) or Windows 11, x64.
 ## Build from source
 
 ```powershell

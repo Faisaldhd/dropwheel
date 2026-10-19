@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -211,6 +212,18 @@ jobs:
           Write-Host ("portable self-contained zip: {0:N1} MB" -f ($zip.Length / 1MB))
           "| portable zip (self-contained, no admin) | $([math]::Round($zip.Length / 1MB, 1)) MB | 1 |" >> $env:GITHUB_STEP_SUMMARY
 
+      - name: SHA256SUMS
+        if: always()
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem release -File | Where-Object { $_.Extension -in '.exe', '.zip' }
+          if (-not $files) { throw "no installer or zip to hash" }
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($file.Name)"
+          }
+          $lines | Set-Content release/SHA256SUMS.txt -Encoding ascii
+          Get-Content release/SHA256SUMS.txt
       - name: Upload setup
         uses: actions/upload-artifact@v4
         with:
@@ -218,6 +231,7 @@ jobs:
           path: |
             release/DropWheel-Setup-*.exe
             release/*portable*.zip
+            release/SHA256SUMS.txt
           retention-days: 14
 
       - name: Diagnose report
@@ -298,8 +312,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = $env:GITHUB_REF_NAME
-          $files = Get-ChildItem dist -Recurse -Include *.exe,*.zip | Select-Object -ExpandProperty FullName
+          $files = Get-ChildItem dist -Recurse -Include *.exe,*.zip,*.txt | Select-Object -ExpandProperty FullName
           if (-not $files) { throw "no installer or zip found in the uploaded artifacts" }
           $files | ForEach-Object { Write-Host "release asset: $_" }
-          gh release create $tag --title "DropWheel $tag" --generate-notes @files
+          gh release create $tag --repo ${{ github.repository }} --title "DropWheel $tag" --generate-notes @files
           Write-Host "created release $tag"

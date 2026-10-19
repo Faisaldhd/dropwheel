@@ -229,6 +229,26 @@ internal sealed class SettingsWindow : Window
             }),
             glyph: "\uE896"));
 
+        // R-20: nothing is registered automatically any more; both integrations are opt-in here.
+        root.Children.Add(Card(T("Spustit s Windows", "Start with Windows"),
+            T("Přidá zástupce do složky Po spuštění. Vypnuto = nic se nepřidá.",
+                "Adds a startup entry. Off = nothing is added."),
+            Toggle(Shell.ShellIntegration.IsAutostartEnabled, v =>
+            {
+                Shell.ShellIntegration.SetAutostart(v);
+                Save();
+            }),
+            glyph: "\uE7E8"));
+        root.Children.Add(Card(T("Nabídka v Průzkumníku", "Explorer context menu"),
+            T("Přidá položku DropWheel do nabídky pravého tlačítka. Vypnuto = nic se nezapisuje.",
+                "Adds a DropWheel entry to the right-click menu. Off = nothing is written."),
+            Toggle(Shell.ShellIntegration.IsContextMenuEnabled, v =>
+            {
+                Shell.ShellIntegration.SetContextMenu(v);
+                Save();
+            }),
+            glyph: "\uE8A7"));
+
         root.Children.Add(SectionHeader(T("Systém", "System")));
         root.Children.Add(Card(T("Spouštět po přihlášení", "Start when I sign in"), null,
             Toggle(ShellIntegration.IsAutostartEnabled, v => Apply(() => ShellIntegration.SetAutostart(v))), glyph: "\uE7E8"));

@@ -153,7 +153,6 @@ internal sealed class App : Application
         {
             _settings.FirstRunDone = true;
             _settings.Save();
-            TryIntegrateOnFirstRun();
             OpenSettings();
         }
         else if (!_args.Contains("--background"))
@@ -161,18 +160,6 @@ internal sealed class App : Application
             _tray.Show(T("DropWheel běží", "DropWheel is running"), T("Chyťte soubor, během tažení ťukněte na Shift a pusťte ho na formát.", "Grab a file, tap Shift while dragging and drop it on a format."), false);
         }
         HandleArgs(_args);
-    }
-
-    private static void TryIntegrateOnFirstRun()
-    {
-        try
-        {
-            ShellIntegration.SetContextMenu(true);
-            ShellIntegration.SetAutostart(true);
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
-        {
-        }
     }
 
     private TrayIcon CreateTray()

@@ -28,7 +28,25 @@ public enum HotkeyPreset
 /// <summary>User preferences, stored as JSON in %APPDATA%\DropWheel\settings.json.</summary>
 public sealed class AppSettings
 {
-    public static string Folder { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DropWheel");
+    /// <summary>
+    /// Settings folder: next to the exe for a portable build (a <c>portable.txt</c> marker), otherwise
+    /// <c>%APPDATA%\DropWheel</c>. Nothing is written outside the folder on a portable build.
+    /// </summary>
+    public static string Folder { get; } = ResolveFolder();
+
+    private static string ResolveFolder()
+    {
+        try
+        {
+            var exeFolder = AppContext.BaseDirectory;
+            if (File.Exists(Path.Combine(exeFolder, "portable.txt")))
+                return exeFolder;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DropWheel");
+    }
 
     private static string FilePath => Path.Combine(Folder, "settings.json");
 
