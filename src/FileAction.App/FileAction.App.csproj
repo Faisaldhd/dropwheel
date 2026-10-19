@@ -66,4 +66,9 @@
     <ProjectReference Include="..\FileAction.Core\FileAction.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- R-20: lets tests/FileAction.Tests cover the company-safe defaults and the policy value parser. -->
+    <InternalsVisibleTo Include="FileAction.Tests" />
+  </ItemGroup>
+
 </Project>
