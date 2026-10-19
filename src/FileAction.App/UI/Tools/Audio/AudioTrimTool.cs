@@ -3,8 +3,6 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Threading;
 using FileAction.Core;
 using FileAction.Core.Backends;
 using static FileAction.Core.Loc;
@@ -12,9 +10,9 @@ using static FileAction.Core.Loc;
 namespace FileAction.App.UI.Tools.Audio;
 
 /// <summary>
-/// Trim one audio file: a background waveform, draggable start/end handles, exact time boxes and an
-/// optional "silence at the edges only" pass. Apply writes a new file next to the source; the original is
-/// only read.
+/// Trim one audio file: a background waveform with orange draggable start/end handles, exact time boxes,
+/// an "trim silent ends automatically" checkbox and playback of the selected range. Apply writes a new file
+/// next to the source; the original is only read.
 /// </summary>
 internal sealed class AudioTrimTool : IToolWindowSpec
 {
@@ -40,7 +38,7 @@ internal static class AudioTrimToolRegistration
     internal static void Register() => ToolRegistry.Register(AudioTrimTool.Instance);
 }
 
-/// <summary>The trim window: waveform card, handles, time boxes, silence toggle and the preview button.</summary>
+/// <summary>The trim window: waveform card, handles, time boxes, silence checkbox, playback and Apply.</summary>
 internal sealed class AudioTrimView
 {
     private static readonly string MinimumTimeText =
@@ -51,6 +49,7 @@ internal sealed class AudioTrimView
     private readonly ToolLocator _tools = new();
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly AudioPreview _preview;
     private readonly WaveformStrip _strip = new() { MinHeight = 90 };
     private readonly TextBox _startBox = Entry();
     private readonly TextBox _endBox = Entry();
@@ -78,23 +77,12 @@ internal sealed class AudioTrimView
         VerticalAlignment = VerticalAlignment.Center,
         Margin = new Thickness(2, 6, 12, 0),
     };
-    private readonly StackPanel _silenceRow = new()
-    {
-        Orientation = Orientation.Horizontal,
-        Margin = new Thickness(2, 0, 0, 2),
-    };
-
-    private readonly MediaPlayer _player = new();
-    private readonly DispatcherTimer _playTimer = new() { Interval = TimeSpan.FromMilliseconds(80) };
-    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
 
     private Border? _playButton;
+    private AudioCheckBox? _silenceCheck;
     private TrimRange _selection;
     private double _duration;
     private bool _silenceOn;
-    private bool _playing;
-    private bool _opening;
-    private bool _previewBroken;
     private bool _syncing;
     private bool _applying;
     private int _analysisId;
@@ -103,6 +91,12 @@ internal sealed class AudioTrimView
     {
         _item = item;
         _targets = targets;
+        _preview = new AudioPreview(item.Path);
+        _preview.PositionChanged += seconds => _strip.Playhead = seconds;
+        _preview.Stopped += OnPreviewStopped;
+        _preview.StateChanged += UpdatePlayButton;
+        _preview.Failed += OnPreviewFailed;
+
         foreach (var box in new[] { _startBox, _endBox })
         {
             box.KeyDown += (_, e) =>
@@ -121,12 +115,6 @@ internal sealed class AudioTrimView
 
         _strip.SelectionChanged += range => SetSelection(range, fromUser: true);
         _strip.SelectionCommitted += () => _status.Text = T("tool.audiotrim.ready");
-
-        _player.MediaOpened += (_, _) => _dispatcher.BeginInvoke(new Action(StartPlayback));
-        _player.MediaFailed += (_, _) => _dispatcher.BeginInvoke(new Action(FailPreview));
-        _player.MediaEnded += (_, _) => _dispatcher.BeginInvoke(new Action(StopPreview));
-        _playTimer.Tick += (_, _) => OnPlayTick();
-        BuildSilenceToggle();
     }
 
     public ToolContent Build()
@@ -150,17 +138,22 @@ internal sealed class AudioTrimView
             Child = _strip,
         };
         var times = BuildTimes();
+
+        _silenceCheck = new AudioCheckBox(T("tool.audiotrim.silence"), _silenceOn);
+        _silenceCheck.CheckedChanged += OnSilenceToggle;
+        _silenceCheck.Margin = new Thickness(2, 0, 0, 2);
+
         var bottom = BuildBottom();
 
         Grid.SetRow(header, 0);
         Grid.SetRow(card, 1);
         Grid.SetRow(times, 2);
-        Grid.SetRow(_silenceRow, 3);
+        Grid.SetRow(_silenceCheck, 3);
         Grid.SetRow(bottom, 4);
         root.Children.Add(header);
         root.Children.Add(card);
         root.Children.Add(times);
-        root.Children.Add(_silenceRow);
+        root.Children.Add(_silenceCheck);
         root.Children.Add(bottom);
 
         _status.Text = T("tool.audiotrim.analyzing");
@@ -207,7 +200,7 @@ internal sealed class AudioTrimView
 
     private FrameworkElement BuildBottom()
     {
-        var panel = new DockPanel();
+        var panel = new DockPanel { Margin = new Thickness(2, 4, 2, 2) };
         _playButton = Controls.Button(T("tool.audiotrim.play"), TogglePreview, glyph: Glyphs.Play);
         _playButton.VerticalAlignment = VerticalAlignment.Center;
         DockPanel.SetDock(_playButton, Dock.Right);
@@ -242,23 +235,6 @@ internal sealed class AudioTrimView
         TextAlignment = TextAlignment.Center,
         FlowDirection = FlowDirection.LeftToRight,
     };
-
-    private void BuildSilenceToggle()
-    {
-        _silenceRow.Children.Clear();
-        var toggle = Controls.Toggle(_silenceOn, OnSilenceToggle);
-        toggle.Margin = new Thickness(0, 0, 10, 0);
-        toggle.VerticalAlignment = VerticalAlignment.Center;
-        _silenceRow.Children.Add(toggle);
-        _silenceRow.Children.Add(new TextBlock
-        {
-            Text = T("tool.audiotrim.silence"),
-            FontSize = 12.5,
-            Foreground = Theme.Text,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextWrapping = TextWrapping.NoWrap,
-        });
-    }
 
     private void OnSilenceToggle(bool on)
     {
@@ -315,7 +291,7 @@ internal sealed class AudioTrimView
         {
             _status.Text = T("tool.audiotrim.error.notReady");
             _silenceOn = false;
-            BuildSilenceToggle();
+            _silenceCheck?.SetChecked(false);
             return;
         }
 
@@ -352,7 +328,7 @@ internal sealed class AudioTrimView
         {
             _status.Text = AudioRunner.Message(ex, "tool.audiotrim.error.stream");
             _silenceOn = false;
-            BuildSilenceToggle();
+            _silenceCheck?.SetChecked(false);
         }
     }
 
@@ -364,12 +340,12 @@ internal sealed class AudioTrimView
         if (!fromUser)
             return;
 
-        if (_playing)
-            StopPreview();
+        if (_preview.IsPlaying)
+            _preview.Stop();
         if (_silenceOn)
         {
             _silenceOn = false;
-            BuildSilenceToggle();
+            _silenceCheck?.SetChecked(false);
         }
     }
 
@@ -414,9 +390,9 @@ internal sealed class AudioTrimView
 
     private void Reset()
     {
-        StopPreview();
+        _preview.Stop();
         _silenceOn = false;
-        BuildSilenceToggle();
+        _silenceCheck?.SetChecked(false);
         SetSelection(AudioTrim.Full(_duration), fromUser: false);
         _status.Text = _duration > 0 ? T("tool.audiotrim.ready") : T("tool.audiotrim.analyzing");
         if (_duration <= 0)
@@ -425,86 +401,33 @@ internal sealed class AudioTrimView
 
     private void TogglePreview()
     {
-        if (_previewBroken || _duration <= 0 || _opening)
+        if (_duration <= 0)
             return;
 
-        if (_playing)
-        {
-            StopPreview();
-            return;
-        }
-
-        if (_player.Source is null)
-        {
-            // Opening is asynchronous: playback starts from MediaOpened, once the position can be set.
-            _opening = true;
-            _player.Open(new Uri(_item.Path));
-            return;
-        }
-
-        StartPlayback();
+        _preview.Play(_selection.Start, _selection.End);
+        UpdatePlayButton();
     }
 
-    private void StartPlayback()
+    private void OnPreviewStopped()
     {
-        _opening = false;
-        if (_previewBroken || _duration <= 0 || _lifetime.IsCancellationRequested)
-            return;
-
-        try
-        {
-            var start = AudioTrim.Clamp(_selection, _duration).Start;
-            _player.Position = TimeSpan.FromSeconds(start);
-            _player.Play();
-            _playing = true;
-            _playTimer.Start();
-            _strip.Playhead = start;
-            if (_playButton is not null)
-                Controls.SetText(_playButton, T("tool.audiotrim.pause"));
-        }
-        catch (Exception)
-        {
-            FailPreview();
-        }
-    }
-
-    private void OnPlayTick()
-    {
-        var position = _player.Position.TotalSeconds;
-        _strip.Playhead = position;
-        if (position >= Math.Min(_selection.End, _duration) - 0.02)
-            StopPreview();
-    }
-
-    private void StopPreview()
-    {
-        _playTimer.Stop();
-        _playing = false;
-        try
-        {
-            if (_player.Source is not null)
-                _player.Pause();
-        }
-        catch (InvalidOperationException)
-        {
-            // The media failed to open; there is nothing to pause.
-        }
         _strip.Playhead = null;
-        if (_playButton is not null)
-            Controls.SetText(_playButton, T("tool.audiotrim.play"));
+        UpdatePlayButton();
     }
 
-    private void FailPreview()
+    private void OnPreviewFailed()
     {
-        _previewBroken = true;
-        _opening = false;
-        StopPreview();
         if (_playButton is not null)
         {
             _playButton.IsEnabled = false;
             _playButton.Opacity = 0.5;
         }
         _status.Text = T("tool.audiotrim.preview.unavailable");
+    }
+
+    private void UpdatePlayButton()
+    {
+        if (_playButton is not null)
+            Controls.SetText(_playButton, T(_preview.IsPlaying ? "tool.audiotrim.pause" : "tool.audiotrim.play"));
     }
 
     private async Task<string?> ApplyAsync()
@@ -519,10 +442,9 @@ internal sealed class AudioTrimView
             if (range.Duration < AudioTrim.MinimumDuration)
                 throw new ConversionException(T("tool.audiotrim.error.range", Bidi.Value(MinimumTimeText)));
 
-            StopPreview();
+            _preview.Stop();
             // Release the preview's handle before FFmpeg reads the same source (some codecs lock it).
-            if (_player.Source is not null)
-                _player.Close();
+            _preview.Close();
             _status.Text = T("tool.audiotrim.applying");
             var ffmpeg = AudioRunner.RequireFfmpeg(_tools);
             return await AudioRunner.TrimAsync(
@@ -540,10 +462,7 @@ internal sealed class AudioTrimView
 
     private void Cancel()
     {
-        StopPreview();
-        _playTimer.Stop();
-        if (_player.Source is not null)
-            _player.Close();
+        _preview.Close();
         _lifetime.Cancel();
     }
 }

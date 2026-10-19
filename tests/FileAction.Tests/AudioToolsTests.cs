@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+using FileAction.App.UI.Tools.Audio;
 using FileAction.Core;
 using Xunit;
 
@@ -5,7 +7,8 @@ namespace FileAction.Tests;
 
 /// <summary>
 /// The pure audio-tool core: the loudnorm JSON parser and both pass builders, the silencedetect parser,
-/// the edge-trim math, the waveform envelope and the time boxes. No FFmpeg and no files are involved.
+/// the edge-trim math, the waveform envelope and the time boxes, plus the tool defaults and the string
+/// tables. No FFmpeg and no files are involved.
 /// </summary>
 public class AudioToolsTests
 {
@@ -520,4 +523,87 @@ public class AudioToolsTests
         Assert.DoesNotContain("-ss", arguments);
         Assert.Contains("-t", arguments);
     }
+
+    // ------------------------------------------------------------------ tool defaults and strings
+
+    [Fact]
+    public void Normalize_defaults_are_the_documented_values()
+    {
+        var target = LoudnessTarget.Default;
+
+        Assert.Equal(-16, target.IntegratedLufs, 6);
+        Assert.Equal(11, target.LoudnessRangeLu, 6);
+        Assert.Equal(-1.5, target.TruePeakDb, 6);
+        Assert.True(target.IsValid);
+    }
+
+    [Fact]
+    public void Trim_defaults_are_the_documented_values()
+    {
+        Assert.Equal(0.05, AudioTrim.MinimumDuration, 6);
+        Assert.Equal(0.05, AudioTrim.DefaultPadding, 6);
+        Assert.Equal(8000, AudioTrim.WaveformSampleRate);
+    }
+
+    [Fact]
+    public void Audio_tool_windows_declare_their_specs_and_open_for_audio_only()
+    {
+        var normalize = AudioNormalizeTool.Instance;
+        var trim = AudioTrimTool.Instance;
+
+        Assert.Equal("tools.audionormalize", normalize.Id);
+        Assert.Equal("tools.audiotrim", trim.Id);
+        Assert.Equal(560, normalize.Layout.ChromeWidth + normalize.Layout.DefaultPreviewWidth, 6);
+        Assert.Equal(520, normalize.Layout.ChromeHeight + normalize.Layout.DefaultPreviewHeight, 6);
+        Assert.Equal(560, trim.Layout.ChromeWidth + trim.Layout.DefaultPreviewWidth, 6);
+        Assert.Equal(520, trim.Layout.ChromeHeight + trim.Layout.DefaultPreviewHeight, 6);
+
+        var audio = new FileItem(@"C:\audio\tone.wav");
+        Assert.True(normalize.Applies([audio]));
+        Assert.True(trim.Applies([audio]));
+        Assert.False(normalize.Applies([new FileItem(@"C:\photos\a.png")]));
+        Assert.False(trim.Applies([audio, audio]));
+    }
+
+    /// <summary>The helper sentence the board asked for, character for character (U+2011 first).</summary>
+    [Fact]
+    public void Normalize_helper_text_has_the_exact_wording()
+    {
+        Assert.Equal(
+            "\u201116 LUFS is a balanced default for spoken audio and music. The true peak limit helps prevent clipping after encoding.",
+            Loc.Table(Language.English)["tool.audionormalize.hint"]);
+    }
+
+    [Fact]
+    public void Every_audio_tool_key_exists_in_both_languages_with_the_same_placeholders()
+    {
+        var english = Loc.Table(Language.English);
+        var arabic = Loc.Table(Language.Arabic);
+        string[] prefixes = ["tool.audionormalize.", "tool.audiotrim."];
+
+        var enKeys = english.Keys
+            .Where(key => prefixes.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal)))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var arKeys = arabic.Keys
+            .Where(key => prefixes.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal)))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(enKeys.Length >= 40, $"only {enKeys.Length} audio tool keys in en.json");
+        Assert.Equal(enKeys, arKeys);
+        foreach (var key in enKeys)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(english[key]), key);
+            Assert.NotEqual(english[key], arabic[key]);
+            Assert.Equal(PlaceholderSet(english[key]), PlaceholderSet(arabic[key]));
+        }
+    }
+
+    private static string PlaceholderSet(string value) => string.Join(
+        ",",
+        Regex.Matches(value, @"\{(\d+)\}")
+            .Select(match => match.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal));
 }
