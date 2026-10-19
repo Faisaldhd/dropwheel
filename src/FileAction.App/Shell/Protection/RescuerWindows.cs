@@ -269,6 +269,14 @@ internal sealed class RescuerSetupWindow : Window
                 _allowClose = true;
                 return;
             }
+            if (_confirmed && Result is null && _key.Length > 0)
+            {
+                // The user confirmed the key, so closing keeps it instead of silently losing it.
+                Result = new RescuerSecrets(_key, _keyPassword);
+                LockRuntime.Vault.Save(Result);
+                _allowClose = true;
+                return;
+            }
             var discard = Dialogs.Show(this, T("tool.lock.rescuer.discardBody"),
                 T("tool.lock.rescuer.discardTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (discard != MessageBoxResult.Yes)

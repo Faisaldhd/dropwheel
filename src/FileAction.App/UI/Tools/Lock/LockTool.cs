@@ -110,8 +110,10 @@ internal static class LockOutput
 }
 
 /// <summary>The protect view: password + confirmation + strength meter, Rescuer status and the warning.</summary>
-internal sealed class ActionGateGrid : Grid, IToolActionGate
+internal sealed class ActionGateGrid : Grid, IToolActionGate, IToolActionLabel
 {
+    public string ApplyLabelKey => "tool.lock.protect";
+
     private bool _canApply;
 
     public bool CanApply => _canApply;
@@ -494,6 +496,16 @@ internal sealed class LockWarningDialog : Window
 /// The unlock view for one protected item: any of the three secrets, the recovery ladder behind "I forgot",
 /// and a separate, explicit "Remove protection" action with its own confirmation.
 /// </summary>
+internal sealed class ActionLabelGrid : Grid, IToolActionLabel
+{
+    public ActionLabelGrid(string applyLabelKey)
+    {
+        ApplyLabelKey = applyLabelKey;
+    }
+
+    public string ApplyLabelKey { get; }
+}
+
 internal sealed class LockUnlockView
 {
     private readonly FileItem _item;

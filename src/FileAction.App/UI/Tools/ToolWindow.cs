@@ -250,7 +250,8 @@ internal sealed class ToolWindow : Window
     private FrameworkElement BuildBottomBar()
     {
         var reset = Controls.Button(T("tool.window.reset"), () => _content.Reset());
-        var apply = Controls.Button(T(_spec.ApplyLabelKey), () => _ = ApplyAsync(), primary: true);
+        var applyLabel = (_content.View as IToolActionLabel)?.ApplyLabelKey ?? _spec.ApplyLabelKey;
+        var apply = Controls.Button(T(applyLabel), () => _ = ApplyAsync(), primary: true);
         _applyButton = apply;
         if (_content.View is IToolActionGate gate)
         {
