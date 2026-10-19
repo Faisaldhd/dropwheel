@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using FileAction.App.Actions;
@@ -128,6 +129,14 @@ internal static class SelfTest
         var settingsWindow = new SettingsWindow(settings, tools, () => { });
         Check(settingsWindow.FlowDirection == (rtl ? System.Windows.FlowDirection.RightToLeft : System.Windows.FlowDirection.LeftToRight),
             "settings flow direction");
+        for (var tab = 0; tab < settingsWindow.TabCount; tab++)
+        {
+            settingsWindow.SelectTab(tab);
+            settingsWindow.UpdateLayout();
+            CheckNoRawKeys(settingsWindow, $"settings tab {tab}");
+        }
+        settingsWindow.SelectTab(0);
+        settingsWindow.UpdateLayout();
         SaveWindow(settingsWindow, Path.Combine(outDir, "settings.png"), 560);
         log.Add($"ok {Path.GetFileName(outDir)}/settings");
 
@@ -325,8 +334,54 @@ internal static class SelfTest
             throw new InvalidOperationException("Self-test check failed: " + what);
     }
 
+    /// <summary>
+    /// Fails when a rendered string is itself a string-table key. This is the regression that produced the
+    /// black 2.2.0 Settings window: a broken table made every lookup return its key.
+    /// </summary>
+    private static void CheckNoRawKeys(DependencyObject root, string where)
+    {
+        var bad = new List<string>();
+        var seen = new HashSet<DependencyObject>();
+        void Inspect(string? text)
+        {
+            if (Loc.IsKey(text))
+                bad.Add(text!);
+        }
+
+        void Walk(DependencyObject node)
+        {
+            if (!seen.Add(node))
+                return;
+            if (node is Window window)
+                Inspect(window.Title);
+            if (node is TextBlock block)
+            {
+                Inspect(block.Text);
+                foreach (var inline in block.Inlines)
+                    if (inline is Run run)
+                        Inspect(run.Text);
+            }
+            if (node is ContentControl content && content.Content is string contentText)
+                Inspect(contentText);
+            if (node is HeaderedContentControl headered && headered.Header is string headerText)
+                Inspect(headerText);
+            // The logical tree reaches every tab page even when it has not been realised visually yet.
+            foreach (var child in LogicalTreeHelper.GetChildren(node))
+                if (child is DependencyObject dependency)
+                    Walk(dependency);
+            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
+                Walk(VisualTreeHelper.GetChild(node, i));
+        }
+
+        Walk(root);
+        if (bad.Count > 0)
+            throw new InvalidOperationException(
+                $"raw localization key rendered in {where}: {string.Join(", ", bad.Distinct(StringComparer.Ordinal))}");
+    }
+
     private static void SaveWindow(Window window, string file, double width, bool desktop = false)
     {
+        CheckNoRawKeys(window, Path.GetFileName(file));
         var content = (UIElement)window.Content;
         window.Content = null;
         var root = new Border

@@ -86,6 +86,14 @@ public static class Loc
     /// </summary>
     public static int KeyCount => (Current == Language.Arabic ? ArabicTable : EnglishTable).Value.Count;
 
+    /// <summary>
+    /// True when <paramref name="value"/> is itself a string-table key. The self-test uses this to fail when
+    /// a window renders a raw key (for example <c>settings.title</c>) instead of its translated text.
+    /// </summary>
+    public static bool IsKey(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        (Current == Language.Arabic ? ArabicTable : EnglishTable).Value.ContainsKey(value);
+
     /// <summary>Arabic for <c>ar-*</c> UI cultures, English everywhere else.</summary>
     public static Language Detect() =>
         CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("ar", StringComparison.OrdinalIgnoreCase)

@@ -185,6 +185,39 @@ jobs:
         shell: pwsh
         run: ./scripts/build-installer.ps1
 
+      - name: Self-test the exact packaged publish
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          # release/selfcontained is the folder ISCC packages and the portable zip copies. Run the UI gate
+          # here, on those exact files, instead of only on a separate build-test publish.
+          $out = "release/shipped-self-test"
+          if (Test-Path $out) { Remove-Item -LiteralPath $out -Recurse -Force }
+          $process = Start-Process -FilePath release/selfcontained/DropWheel.exe `
+            -ArgumentList '--self-test', $out -PassThru -Wait
+          $log = Join-Path $out 'self-test.txt'
+          if (Test-Path $log) { Get-Content $log | Select-Object -Last 30 }
+          if ($process.ExitCode -ne 0) { throw "shipped --self-test failed with $($process.ExitCode)" }
+          if (-not (Test-Path $log)) { throw "shipped --self-test wrote no self-test.txt" }
+          $text = Get-Content $log -Raw
+          if ($text -match 'FAILED:.*raw localization key') {
+            throw "a rendered window contains a raw localization key (see self-test.txt)"
+          }
+          $keyLines = [regex]::Matches($text, 'localization:\s+(\d+) keys')
+          if ($keyLines.Count -eq 0) { throw "self-test did not report the Loc key count" }
+          foreach ($match in $keyLines) {
+            if ([int] $match.Groups[1].Value -eq 0) { throw "Loc tables loaded 0 keys" }
+          }
+
+      - name: Upload shipped-publish self-test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shipped-self-test
+          path: release/shipped-self-test/self-test.txt
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Installer silent install/uninstall smoke test
         shell: pwsh
         run: |
@@ -255,7 +288,6 @@ jobs:
           retention-days: 14
 
       - name: Diagnose report
-        continue-on-error: true
         shell: pwsh
         run: |
           # R-18: the report is what the owner sends back when the app misbehaves on a locked-down PC.
@@ -266,7 +298,13 @@ jobs:
           if (-not $process.WaitForExit(90000)) { Write-Warning 'diagnose did not exit in 90 s'; try { $process.Kill($true) } catch { } }
           Write-Host "diagnose exit code: $($process.ExitCode)"
           if (-not (Test-Path release/diagnose.txt)) { throw "--diagnose wrote no report" }
+          $report = Get-Content release/diagnose.txt -Raw
           Get-Content release/diagnose.txt | Select-Object -First 40
+          if ($process.ExitCode -ne 0) { throw "--diagnose failed with $($process.ExitCode)" }
+          $keyMatch = [regex]::Match($report, 'strings:\s+(\d+) keys')
+          if (-not $keyMatch.Success) { throw "diagnose did not report the Loc key count" }
+          if ([int] $keyMatch.Groups[1].Value -eq 0) { throw "diagnose reports 0 Loc keys" }
+          if ($report -match 'settings\.title="settings\.title"') { throw "diagnose reports a raw settings.title" }
 
       - name: Upload diagnose
         uses: actions/upload-artifact@v4
