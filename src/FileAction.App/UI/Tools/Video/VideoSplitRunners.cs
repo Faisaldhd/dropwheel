@@ -18,11 +18,11 @@ internal static class VideoSplitRunner
     {
         var directory = OutputTarget.SourceFolder(plan.SourcePath) ?? Environment.CurrentDirectory;
         var folder = OutputPaths.UniqueDirectory(directory, plan.FolderName);
-        Directory.CreateDirectory(folder);
         var quality = settings ?? new Settings();
 
         try
         {
+            CreatePartFolder(folder);
             for (var index = 0; index < plan.Segments.Count; index++)
             {
                 ct.ThrowIfCancellationRequested();
@@ -35,8 +35,22 @@ internal static class VideoSplitRunner
         }
         catch
         {
+            // A half-written set of parts is not a result: remove the folder this run made.
             OutputPaths.TryDelete(folder);
             throw;
+        }
+    }
+
+    /// <summary>A folder that cannot be created is reported as "cannot write here", with nothing left behind.</summary>
+    private static void CreatePartFolder(string folder)
+    {
+        try
+        {
+            Directory.CreateDirectory(folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new ConversionException(T("error.output.notWritable"), ex);
         }
     }
 
@@ -103,27 +117,37 @@ internal static class VideoJoinRunner
             throw new ConversionException(T("tool.videojoin.noClips"));
 
         var directory = OutputTarget.SourceFolder(clips[0].Path) ?? Environment.CurrentDirectory;
+        if (!OutputTarget.CanWrite(directory))
+            throw new ConversionException(T("error.output.notWritable"));
         var total = clips.Sum(clip => clip.Duration);
         var reported = 0d;
         var quality = settings ?? new Settings();
 
-        return await OutputPaths.ProduceAsync(
-            directory,
-            VideoSplitJoin.JoinedName,
-            VideoSplitJoin.JoinedExtension,
-            async temp =>
-            {
-                var args = VideoSplitJoin.JoinArgs(clips, temp, quality);
-                await ProcessRunner.RunAsync(ffmpeg, args, ct, line =>
+        try
+        {
+            return await OutputPaths.ProduceAsync(
+                directory,
+                VideoSplitJoin.JoinedName,
+                VideoSplitJoin.JoinedExtension,
+                async temp =>
                 {
-                    if (total <= 0 || VideoToolCommon.ProgressSeconds(line) is not { } done)
-                        return;
-                    var value = Math.Clamp(done / total, 0, 0.99);
-                    if (value <= reported)
-                        return;
-                    reported = value;
-                    progress.Report(value);
+                    var args = VideoSplitJoin.JoinArgs(clips, temp, quality);
+                    await ProcessRunner.RunAsync(ffmpeg, args, ct, line =>
+                    {
+                        if (total <= 0 || VideoToolCommon.ProgressSeconds(line) is not { } done)
+                            return;
+                        var value = Math.Clamp(done / total, 0, 0.99);
+                        if (value <= reported)
+                            return;
+                        reported = value;
+                        progress.Report(value);
+                    }).ConfigureAwait(false);
                 }).ConfigureAwait(false);
-            }).ConfigureAwait(false);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            // Never leave the user with an OS error: the result simply cannot be written next to the clip.
+            throw new ConversionException(T("error.output.notWritable"), ex);
+        }
     }
 }
