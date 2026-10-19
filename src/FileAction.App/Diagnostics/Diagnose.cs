@@ -67,8 +67,9 @@ internal static class Diagnose
                 : ""));
         if (Loc.IsKey(settingsTitle))
             text.AppendLine("localization: ERROR — settings.title resolved to its raw key");
-        text.AppendLine($"drop folder: {ShellFolders.LastDetection}");
-        text.AppendLine($"drop choice: {ShellFolders.LastDecision}");
+        // --diagnose is a fresh process: in-memory state is empty, so prefer the last line the log kept.
+        text.AppendLine($"drop folder: {LastLogged("drop target:") ?? ShellFolders.LastDetection}");
+        text.AppendLine($"drop choice: {LastLogged("drop folder decision:") ?? ShellFolders.LastDecision}");
         text.AppendLine();
 
         text.AppendLine("Folders (first writable one holds the log)");
@@ -108,6 +109,26 @@ internal static class Diagnose
         text.AppendLine("--------");
         text.AppendLine(AppLog.Tail(80));
         return text.ToString();
+    }
+
+    /// <summary>The last line of the log that contains <paramref name="marker"/>, or null.</summary>
+    private static string? LastLogged(string marker)
+    {
+        try
+        {
+            string? found = null;
+            foreach (var line in AppLog.Tail(400).Split('\n'))
+            {
+                var trimmed = line.TrimEnd('\r');
+                if (trimmed.Contains(marker, StringComparison.OrdinalIgnoreCase))
+                    found = trimmed;
+            }
+            return found;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static bool Writable(string folder)
