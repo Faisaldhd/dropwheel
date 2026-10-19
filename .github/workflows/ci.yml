@@ -208,6 +208,9 @@ jobs:
           foreach ($match in $keyLines) {
             if ([int] $match.Groups[1].Value -eq 0) { throw "Loc tables loaded 0 keys" }
           }
+          if ($text -notmatch 'ok settings\.json file load/save') {
+            throw "shipped self-test did not exercise settings.json load/save"
+          }
 
       - name: Upload shipped-publish self-test
         if: always()

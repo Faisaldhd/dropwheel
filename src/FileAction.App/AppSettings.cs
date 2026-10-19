@@ -130,13 +130,16 @@ public sealed class AppSettings
         _ => ActionsKey,
     };
 
-    public static AppSettings Load()
+    public static AppSettings Load() => LoadFrom(FilePath);
+
+    /// <summary>Loads one settings file; also used by the self-test to exercise the real file path.</summary>
+    internal static AppSettings LoadFrom(string path)
     {
         try
         {
-            if (File.Exists(FilePath))
+            if (File.Exists(path))
             {
-                var json = File.ReadAllText(FilePath);
+                var json = File.ReadAllText(path);
                 return JsonSerializer.Deserialize(MigrateLanguage(json), SettingsJson.Default.AppSettings) ?? new AppSettings();
             }
         }
@@ -181,14 +184,19 @@ public sealed class AppSettings
         };
     }
 
-    public void Save()
+    public void Save() => SaveTo(FilePath);
+
+    /// <summary>Saves one settings file; also used by the self-test to exercise the real file path.</summary>
+    internal void SaveTo(string path)
     {
         try
         {
-            Directory.CreateDirectory(Folder);
-            var temp = FilePath + ".tmp";
+            var folder = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(folder))
+                Directory.CreateDirectory(folder);
+            var temp = path + ".tmp";
             File.WriteAllText(temp, JsonSerializer.Serialize(this, SettingsJson.Default.AppSettings));
-            File.Move(temp, FilePath, overwrite: true);
+            File.Move(temp, path, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

@@ -199,6 +199,47 @@ internal static class SelfTest
         Check(json.Contains("\"CtrlAltW\""), "enums stored as names");
         Check(json.Contains("\"Arabic\""), "language stored as a name");
 
+        // Exercise the real settings.json file path, not just the JSON serializer: SaveTo writes the same
+        // file AppSettings.Save writes, LoadFrom reads it through the same migration code.
+        var tempDir = Path.Combine(Path.GetTempPath(), "DropWheel-settings-" + Guid.NewGuid().ToString("N"));
+        var settingsFile = Path.Combine(tempDir, "settings.json");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            settings.SaveTo(settingsFile);
+            Check(File.Exists(settingsFile), "settings.json written");
+            var fileText = File.ReadAllText(settingsFile);
+            Check(fileText.Contains("\"Arabic\"") && fileText.Contains("\"CtrlAltW\""), "settings.json stores enum names");
+
+            var loaded = AppSettings.LoadFrom(settingsFile);
+            Check(loaded.Hotkey == HotkeyPreset.CtrlAltW &&
+                  loaded.FavoriteOperations.Single() == "image.to.webp" &&
+                  loaded.Language == UiLanguage.Arabic, "settings.json file round trip");
+
+            File.WriteAllText(settingsFile, "{ not valid json");
+            var fallback = AppSettings.LoadFrom(settingsFile);
+            Check(fallback.Language == UiLanguage.System && fallback.Hotkey == new AppSettings().Hotkey,
+                "corrupt settings.json falls back to defaults");
+
+            File.WriteAllText(settingsFile, "{\"Language\":\"Czech\",\"Hotkey\":\"CtrlAltW\"}");
+            var migratedFile = AppSettings.LoadFrom(settingsFile);
+            Check(migratedFile.Language == UiLanguage.System && migratedFile.Hotkey == HotkeyPreset.CtrlAltW,
+                "legacy settings.json file migration");
+            log.Add("ok settings.json file load/save");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The temp folder is best-effort cleanup.
+            }
+        }
+
         // Old builds wrote null/English/Czech; unknown values must fall back to System without
         // discarding the rest of the file.
         var legacy = new (string Json, UiLanguage Expected)[]
