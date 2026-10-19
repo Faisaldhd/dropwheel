@@ -39,7 +39,8 @@ public class ToolWindowSizerTests
     {
         var size = Compute(4000, 3000);
 
-        Assert.True(size.Width > size.Height);
+        // The preview follows the media; the window adds fixed chrome, so it can still be taller.
+        Assert.True(size.PreviewWidth > size.PreviewHeight);
         Assert.Equal(4.0 / 3.0, size.PreviewWidth / size.PreviewHeight, 3);
     }
 
