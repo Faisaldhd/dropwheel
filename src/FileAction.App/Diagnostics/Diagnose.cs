@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using FileAction.App.Native;
+using FileAction.App.Shell;
 using FileAction.Core;
 
 namespace FileAction.App.Diagnostics;
@@ -66,6 +67,8 @@ internal static class Diagnose
                 : ""));
         if (Loc.IsKey(settingsTitle))
             text.AppendLine("localization: ERROR — settings.title resolved to its raw key");
+        text.AppendLine($"drop folder: {ShellFolders.LastDetection}");
+        text.AppendLine($"drop choice: {ShellFolders.LastDecision}");
         text.AppendLine();
 
         text.AppendLine("Folders (first writable one holds the log)");

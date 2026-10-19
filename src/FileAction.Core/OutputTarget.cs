@@ -83,6 +83,22 @@ public static class OutputTarget
         }
     }
 
+    /// <summary>Probe: can a file be created in this folder right now? Never throws.</summary>
+    public static bool CanWrite(string folder)
+    {
+        var probe = Path.Combine(folder, ".dropwheel-write-probe-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            File.WriteAllText(probe, "x");
+            File.Delete(probe);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Absolute path without a trailing separator, keeping a drive root as "D:\".</summary>
     private static bool TryNormalize(string? path, out string normalized)
     {

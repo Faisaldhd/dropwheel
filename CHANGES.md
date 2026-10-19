@@ -1,4 +1,26 @@
-# DropWheel 2.2.2 — CHANGES
+# DropWheel 2.2.3 — CHANGES
+
+## 2.2.3
+
+### English
+
+- **The folder you drag onto is honoured in tabbed File Explorer.** Windows 11 lists every tab of one
+  Explorer window as a separate shell window that shares the same top-level handle, so 2.2.2 could pick a
+  background tab or no folder at all and save the result next to the source file. The tab window under the
+  cursor is now matched through `IShellBrowser.GetWindow`, and while a drag is in progress the last folder
+  the cursor crossed is remembered and used when the cursor is back over the source (a folder seen before
+  the drag started is never used). Only an existing, writable folder that differs from the source folder is
+  used, and a short notification names the destination. Every detection and decision is written to the log
+  and the last one appears in `--diagnose`.
+
+### العربية
+
+- **يُحترم المجلد الذي تسحب إليه في مستكشف الملفات ذي التبويبات.** يعرض ويندوز 11 كل تبويب في نافذة
+  المستكشف كنافذة غلاف منفصلة تشترك في المقبض الأعلى نفسه، لذا كان 2.2.2 قد يختار تبويبًا غير مرئي أو لا
+  يجد مجلدًا فيحفظ النتيجة بجانب الملف الأصلي. الآن يُطابَق مقبض التبويب تحت المؤشر عبر
+  `IShellBrowser.GetWindow`، ويُتذكَّر آخر مجلد عبره المؤشر أثناء السحب ويُستخدم عند رجوع المؤشر إلى مجلد
+  المصدر (ولا يُستخدم مجلد رُئي قبل بدء السحب). لا يُستخدم إلا مجلد موجود وقابل للكتابة ويختلف عن مجلد
+  المصدر، ويسمّي إشعار قصير وجهة الحفظ. تُكتب كل عملية كشف وقرار في السجل ويظهر آخرها في `--diagnose`.
 
 ## 2.2.2
 

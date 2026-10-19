@@ -41,8 +41,8 @@ internal sealed class WheelWindow : Window
 
     private readonly AppSettings _settings;
     private readonly OperationSource _source;
-    private readonly Action<Operation, IReadOnlyList<FileItem>, string?> _execute;
-    private readonly string? _targetDir;
+    private readonly Action<Operation, IReadOnlyList<FileItem>, DropTargets?> _execute;
+    private readonly DropTargets? _targets;
     private readonly Canvas _canvas = new() { Width = Size, Height = Size };
     private readonly List<Path> _slices = [];
     private readonly List<StackPanel> _labels = [];
@@ -71,8 +71,8 @@ internal sealed class WheelWindow : Window
         IReadOnlyList<FileItem>? items,
         AppSettings settings,
         OperationSource source,
-        Action<Operation, IReadOnlyList<FileItem>, string?> execute,
-        string? targetDir = null)
+        Action<Operation, IReadOnlyList<FileItem>, DropTargets?> execute,
+        DropTargets? targets = null)
     {
         Mode = mode;
         _wheel = wheel;
@@ -80,7 +80,7 @@ internal sealed class WheelWindow : Window
         _settings = settings;
         _source = source;
         _execute = execute;
-        _targetDir = targetDir;
+        _targets = targets;
 
         Title = "DropWheel";
         WindowStyle = WindowStyle.None;
@@ -489,7 +489,7 @@ internal sealed class WheelWindow : Window
         if (_repeat && RunRepeat is not null)
             RunRepeat(items);
         else
-            _execute(op, items, _targetDir);
+            _execute(op, items, _targets);
     }
 
 
