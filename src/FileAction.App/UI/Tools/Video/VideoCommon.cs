@@ -188,7 +188,7 @@ internal static class VideoRunner
                 ct.ThrowIfCancellationRequested();
                 var name = FrameMath.CaptureFileName(item.BaseName, frames[i]);
                 var framePath = Path.Combine(temporary, name);
-                var seconds = FrameMath.TimeOfFrame(frames[i], fps);
+                var seconds = FrameMath.SeekSeconds(frames[i], fps);
                 await ProcessRunner.RunAsync(ffmpeg,
                 [
                     "-hide_banner", "-nostdin", "-y",

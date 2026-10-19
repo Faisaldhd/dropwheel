@@ -774,7 +774,7 @@ internal sealed class VideoRedactView
             var bitmap = await VideoPreview.LoadAsync(
                 _ffmpeg,
                 _item.Path,
-                FrameMath.TimeOfFrame(frame, _info.Fps),
+                FrameMath.SeekSeconds(frame, _info.Fps),
                 T("tool.videoredact.unreadable"),
                 seek.Token).ConfigureAwait(true);
 

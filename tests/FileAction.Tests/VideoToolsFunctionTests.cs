@@ -40,7 +40,7 @@ public class VideoToolsFunctionTests : IClassFixture<VideoToolsFunctionTests.Sam
                 "-hide_banner", "-nostdin", "-y",
                 "-f", "lavfi", "-i", "color=c=gray:s=320x180:d=3:r=30",
                 "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3",
-                "-vf", "drawgrid=w=8:h=8:t=4:c=white",
+                "-vf", "drawgrid=w=8:h=8:t=4:color=white",
                 "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-b:a", "96k",
                 "-shortest",
@@ -65,7 +65,8 @@ public class VideoToolsFunctionTests : IClassFixture<VideoToolsFunctionTests.Sam
     {
         // On CI the tool install step is best-effort; these function tests are required there. Locally
         // a machine without FFmpeg skips them instead of failing unrelated work.
-        if (Environment.GetEnvironmentVariable("CI") is "true" or "1")
+        var ci = Environment.GetEnvironmentVariable("CI");
+        if (string.Equals(ci, "true", StringComparison.OrdinalIgnoreCase) || ci == "1")
             Assert.NotNull(_samples.Ffmpeg);
         else if (_samples.Ffmpeg is null)
             _output.WriteLine("FFmpeg not found; video function tests are skipped locally.");

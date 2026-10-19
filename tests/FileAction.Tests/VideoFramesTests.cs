@@ -65,6 +65,15 @@ public class VideoFramesTests
     }
 
     [Fact]
+    public void Seek_times_sit_half_a_frame_before_the_target()
+    {
+        Assert.Equal(0, FrameMath.SeekSeconds(0, 30), 10);
+        Assert.Equal(0, FrameMath.SeekSeconds(-4, 30), 10);
+        Assert.Equal(2.95, FrameMath.SeekSeconds(89, 30), 10);
+        Assert.Equal(44.5 / 30, FrameMath.SeekSeconds(45, 30), 10);
+    }
+
+    [Fact]
     public void Timecodes_use_hours_minutes_seconds_and_milliseconds()
     {
         Assert.Equal("00:00:00.000", FrameMath.Timecode(0, 30));

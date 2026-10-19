@@ -35,6 +35,14 @@ public static class FrameMath
     /// <summary>The timestamp of a frame index, in seconds.</summary>
     public static double TimeOfFrame(int frame, double fps) => Math.Max(0, frame) / SafeFps(fps);
 
+    /// <summary>
+    /// The input-seek timestamp for a frame: half a frame before it. FFmpeg's input seek starts at the
+    /// first frame at or after the timestamp, so the margin keeps the requested frame (including the very
+    /// last one) from being skipped when the timestamp is rounded to milliseconds.
+    /// </summary>
+    public static double SeekSeconds(int frame, double fps) =>
+        Math.Max(0, (Math.Max(0, frame) - 0.5) / SafeFps(fps));
+
     /// <summary>The frame index shown at <paramref name="seconds"/>, clamped to <paramref name="totalFrames"/>.</summary>
     public static int FrameAt(double seconds, double fps, int totalFrames)
     {

@@ -9,6 +9,7 @@ namespace FileAction.Tests;
 /// hook in both windows, and the state-dependent primary labels. The source scan is deliberately simple
 /// and auditable, in the same spirit as NoCzechTests.
 /// </summary>
+[Collection(nameof(LanguageSwitching))]
 public class VideoToolThemeTests
 {
     private static readonly Regex HardCodedColor = new(@"Color\.From|Colors\.|Brushes\.", RegexOptions.Compiled);
@@ -72,13 +73,22 @@ public class VideoToolThemeTests
     [Fact]
     public void Both_primary_labels_are_localized()
     {
+        var previous = Loc.Current;
+        try
+        {
+            Loc.Current = Language.English;
+            Assert.Equal("Save Frames", Loc.T("tool.videoframes.primary.initial"));
+            Assert.Equal("Save 0 Frames", Loc.T("tool.videoframes.primary.plural", 0));
+            Assert.Equal("Save 1 Frame", Loc.T("tool.videoframes.primary.single", 1));
+            Assert.Equal("Save Redacted Copy", Loc.T("tool.videoredact.primary"));
+        }
+        finally
+        {
+            Loc.Current = previous;
+        }
+
         Assert.Equal("tool.videoframes.primary.initial", VideoFramesTool.Instance.PrimaryLabelKey);
         Assert.Equal("tool.videoredact.primary", VideoRedactTool.Instance.PrimaryLabelKey);
-
-        Assert.Equal("Save Frames", Loc.T("tool.videoframes.primary.initial"));
-        Assert.Equal("Save 0 Frames", Loc.T("tool.videoframes.primary.plural", 0));
-        Assert.Equal("Save 1 Frame", Loc.T("tool.videoframes.primary.single", 1));
-        Assert.Equal("Save Redacted Copy", Loc.T("tool.videoredact.primary"));
 
         foreach (var key in new[]
                  {
