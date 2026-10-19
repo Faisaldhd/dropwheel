@@ -51,13 +51,17 @@ public sealed record VideoCropRequest(
     bool CopyAudio = true,
     int Crf = 23);
 
-/// <summary>A speed request. Speed is clamped to <see cref="VideoEdit.MinSpeed"/>–<see cref="VideoEdit.MaxSpeed"/>.</summary>
+/// <summary>
+/// A speed request. Speed is clamped to <see cref="VideoEdit.MinSpeed"/>–<see cref="VideoEdit.MaxSpeed"/>;
+/// <see cref="Fps"/> is the source frame rate, used to force constant output frames after setpts.
+/// </summary>
 public sealed record VideoSpeedRequest(
     string InputPath,
     string OutputPath,
     double Speed,
     string Container,
     bool HasAudio,
+    double Fps = 30,
     int Crf = 23);
 
 /// <summary>
@@ -265,7 +269,10 @@ public static class VideoEdit
         {
             if (request.HasAudio)
                 args.AddRange(["-map", "0:a?"]);
-            args.AddRange(["-c", "copy", "-avoid_negative_ts", "make_zero"]);
+            // No -avoid_negative_ts: it makes the cut include the pre-roll before the requested start
+            // and the output then lasts start+duration instead of duration. MP4's edit list trims the
+            // pre-keyframe frames while the file still starts at the requested time.
+            args.AddRange(["-c", "copy"]);
         }
         else
         {
@@ -326,20 +333,26 @@ public static class VideoEdit
         ArgumentNullException.ThrowIfNull(request);
         var speed = ClampSpeed(request.Speed);
         var container = OutputContainerFor(request.Container);
-        var setpts = (1 / speed).ToString("0.######", CultureInfo.InvariantCulture) + "*PTS";
+        var fps = double.IsFinite(request.Fps) && request.Fps is >= 1 and <= 240 ? request.Fps : 30;
+        var factor = (1 / speed).ToString("0.######", CultureInfo.InvariantCulture);
+        // fps forces constant-rate output after setpts: without it x264 keeps 62 frames/2.066 s for a
+        // 4 s 30 fps input instead of the expected 60 frames/2 s.
+        var filter = string.Create(
+            CultureInfo.InvariantCulture,
+            $"setpts=(PTS-STARTPTS)*{factor},fps={fps:0.###}");
 
         var args = new List<string>
         {
             "-hide_banner", "-nostdin", "-y",
             "-i", request.InputPath,
-            "-vf", "setpts=" + setpts,
+            "-vf", filter,
             "-map", "0:v:0",
         };
 
         if (request.HasAudio)
         {
             var atempo = string.Join(",", AtempoFactors(speed)
-                .Select(factor => "atempo=" + factor.ToString("0.######", CultureInfo.InvariantCulture)));
+                .Select(part => "atempo=" + part.ToString("0.######", CultureInfo.InvariantCulture)));
             args.AddRange(["-af", atempo, "-map", "0:a:0"]);
         }
         else
