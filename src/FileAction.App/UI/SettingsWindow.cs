@@ -201,13 +201,38 @@ internal sealed class SettingsWindow : Window
         root.Children.Add(Card(T("PDF na obrázky", "PDF to images"), T("Rozlišení v DPI", "Resolution in DPI"),
             Slider(72, 600, _settings.Quality.PdfDpi, v => _settings.Quality.PdfDpi = v, Save), glyph: Glyphs.Page));
 
-        // R-20: company-safe switches. Both default to OFF; IT can lock them with HKLM policies.
+        // R-20/R-31: company-safe switches in one section. Hooks and downloads default to OFF and IT can
+        // lock them with HKLM policies; nothing is registered automatically, every integration is opt-in.
         root.Children.Add(SectionHeader(T("Firemní režim", "Company mode")));
-        root.Children.Add(Card(T("Sledovat myš a klávesnici", "Watch mouse and keyboard"),
+        root.Children.Add(Card(Loc.T("settings.company.autostart.title"),
+            Loc.T("settings.company.autostart.detail"),
+            Toggle(Shell.ShellIntegration.IsAutostartEnabled, v =>
+            {
+                Shell.ShellIntegration.SetAutostart(v);
+                Save();
+            }),
+            glyph: "\uE7E8"));
+        root.Children.Add(Card(Loc.T("settings.company.contextMenu.title"),
+            Loc.T("settings.company.contextMenu.detail"),
+            Toggle(Shell.ShellIntegration.IsContextMenuEnabled, v =>
+            {
+                Shell.ShellIntegration.SetContextMenu(v);
+                Save();
+            }),
+            glyph: "\uE8A7"));
+        root.Children.Add(Card(Loc.T("settings.company.sendTo.title"),
+            Loc.T("settings.company.sendTo.detail"),
+            Toggle(Shell.ShellIntegration.IsSendToEnabled, v =>
+            {
+                Shell.ShellIntegration.SetSendTo(v);
+                Save();
+                Rebuild();
+            }),
+            glyph: "\uE8A7"));
+        root.Children.Add(Card(Loc.T("settings.company.hooks.title"),
             Shell.Policy.HooksDisabled
                 ? T("Zakázáno zásadou správce.", "Disabled by the administrator policy.")
-                : T("Vypnuto = žádné globální hooky. Kolo otevřete z nabídky DropWheel nebo přetažením souboru.",
-                    "Off = no global hooks at all. Open the wheel from the DropWheel menu or by dropping a file."),
+                : Loc.T("settings.company.hooks.detail"),
             Toggle(_settings.WatchGestures && !Shell.Policy.HooksDisabled, v =>
             {
                 _settings.WatchGestures = v;
@@ -215,11 +240,10 @@ internal sealed class SettingsWindow : Window
                 Rebuild();
             }),
             glyph: "\uE7C9"));
-        root.Children.Add(Card(T("Stahovat pomocné nástroje", "Download helper tools"),
+        root.Children.Add(Card(Loc.T("settings.company.downloads.title"),
             Shell.Policy.DownloadsDisabled
                 ? T("Zakázáno zásadou správce.", "Disabled by the administrator policy.")
-                : T("Vypnuto = DropWheel nikdy nic nestahuje a používá jen nástroje, které už v systému jsou.",
-                    "Off = DropWheel never downloads anything and only uses tools already on the machine."),
+                : Loc.T("settings.company.downloads.detail"),
             Toggle(_settings.AutoDownloadTools && !Shell.Policy.DownloadsDisabled, v =>
             {
                 _settings.AutoDownloadTools = v;
@@ -227,41 +251,6 @@ internal sealed class SettingsWindow : Window
                 Rebuild();
             }),
             glyph: "\uE896"));
-
-        // R-20: nothing is registered automatically any more; all integrations are opt-in here.
-        root.Children.Add(Card(T("Spustit s Windows", "Start with Windows"),
-            T("Přidá zástupce do složky Po spuštění. Vypnuto = nic se nepřidá.",
-                "Adds a startup entry. Off = nothing is added."),
-            Toggle(Shell.ShellIntegration.IsAutostartEnabled, v =>
-            {
-                Shell.ShellIntegration.SetAutostart(v);
-                Save();
-            }),
-            glyph: "\uE7E8"));
-        root.Children.Add(Card(T("Nabídka v Průzkumníku", "Explorer context menu"),
-            T("Přidá položku DropWheel do nabídky pravého tlačítka. Vypnuto = nic se nezapisuje.",
-                "Adds a DropWheel entry to the right-click menu. Off = nothing is written."),
-            Toggle(Shell.ShellIntegration.IsContextMenuEnabled, v =>
-            {
-                Shell.ShellIntegration.SetContextMenu(v);
-                Save();
-            }),
-            glyph: "\uE8A7"));
-        root.Children.Add(Card(T("Nabídka Odeslat do", "Send to menu"),
-            T("Přidá zástupce DropWheel do nabídky Odeslat do. Vypnuto = nic se nepřidá.",
-                "Adds a DropWheel shortcut to the Send to menu. Off = nothing is added."),
-            Toggle(Shell.ShellIntegration.IsSendToEnabled, v =>
-            {
-                Apply(() => Shell.ShellIntegration.SetSendTo(v));
-                Rebuild();
-            }),
-            glyph: "\uE8A7"));
-
-        root.Children.Add(SectionHeader(T("Systém", "System")));
-        root.Children.Add(Card(T("Spouštět po přihlášení", "Start when I sign in"), null,
-            Toggle(ShellIntegration.IsAutostartEnabled, v => Apply(() => ShellIntegration.SetAutostart(v))), glyph: "\uE7E8"));
-        root.Children.Add(Card(T("Kontextová nabídka Průzkumníka", "File Explorer context menu"), T("Položka „DropWheel…“ po kliknutí pravým tlačítkem", "A “DropWheel…” item on right-click"),
-            Toggle(ShellIntegration.IsContextMenuEnabled, v => Apply(() => ShellIntegration.SetContextMenu(v))), glyph: "\uE8A7"));
 
         root.Children.Add(SectionHeader(T("Pomocné programy", "Helper programs")));
         root.Children.Add(Card(T("Co zvládá DropWheel sám", "Built in"),
@@ -353,19 +342,6 @@ internal sealed class SettingsWindow : Window
             Save();
         }
         Rebuild();
-    }
-
-    private void Apply(Action action)
-    {
-        try
-        {
-            action();
-            Save();
-        }
-        catch (Exception ex)
-        {
-            Dialogs.Show(this, ex.Message, "DropWheel", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
     }
 
     private Border ToolCard(ExternalTool tool)
