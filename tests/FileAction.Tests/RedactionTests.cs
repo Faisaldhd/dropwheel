@@ -57,9 +57,14 @@ public class RedactionTests
     {
         var box = RedactionBox.FromEdges(40, 50, 10, 20);
 
-        Assert.Equal(10, box.X, 3);
-        Assert.Equal(20, box.Y, 3);
+        // The origin stays where the caller put it; only the size is clamped.
+        Assert.Equal(40, box.X, 3);
+        Assert.Equal(50, box.Y, 3);
+        Assert.Equal(0, box.Width, 3);
+        Assert.Equal(0, box.Height, 3);
         Assert.True(box.IsEmpty);
+
+        Assert.Equal(new RedactionBox(10, 20, 30, 50), RedactionBox.FromEdges(10, 20, 40, 70));
     }
 
     [Fact]
