@@ -165,3 +165,23 @@ and a post-write verification against the app's public key.
   `docs/signing-updates.md` too.
 - `docs/signing.md` (SignPath/Authenticode) is a different topic and was left untouched.
 - No `ci.yml`, `Core/**` or `installer/**` changes were made from this branch.
+
+## Requests from settings-tabs (post-merge CI observation)
+
+1. **The `screenshots` job always fails before the self-test can report (`.github/workflows/ci.yml`,
+   lead-owned).** The job runs `& release/DropWheel/DropWheel.exe --self-test docs/screenshots` and then
+   tests `$LASTEXITCODE`. DropWheel is a GUI-subsystem exe, so `&` returns immediately and
+   `$LASTEXITCODE` is `$null` in that fresh step; `$null -ne 0` is true, so the step throws
+   `--self-test failed with ` before the app can finish. Dispatched run 39241618932 failed exactly this
+   way in ~0.6 s. The same bug was already fixed for `--diagnose` in the package job with
+   `Start-Process -Wait`; the screenshots job needs the same treatment, plus `if: always()` on the
+   "Upload screenshots" step so `docs/screenshots/**/self-test.txt` survives a failure and shows where
+   the self-test actually stopped. Consequence: **no branch has ever runtime-rendered the six-tab
+   SettingsWindow in CI**; build/test only proves it compiles. Once the step waits, the uploaded
+   `self-test.txt`/PNGs will validate the tabs (and the pending R-5 screenshot work).
+
+2. **Per-tab screenshots (`SelfTest.cs` owner).** `SettingsWindow` exposes `internal static int TabCount`
+   (= 6) and `internal void SelectTab(int index)` (0 = General … 5 = About). For per-tab screenshots,
+   `SelfTest.RenderAll` must construct a fresh `SettingsWindow` per index (because `SaveWindow` detaches
+   `window.Content`, so one window cannot be rendered twice), call `SelectTab(i)` and then `SaveWindow`;
+   suggested names `settings-general.png` … `settings-about.png`.
