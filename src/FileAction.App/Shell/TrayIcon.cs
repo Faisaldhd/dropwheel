@@ -48,8 +48,12 @@ internal sealed class TrayIcon : IDisposable
     private readonly Win32.NOTIFYICONDATA _data;
     private readonly IntPtr _icon;
     private readonly List<(MenuItem Item, string Key)> _labels = [];
+    private readonly MenuItem _check;
     private MenuItem? _update;
+    private Separator? _updateSeparator;
     private Version? _updateVersion;
+    private Action? _install;
+    private Action? _checkForUpdates;
     private Action? _balloonClick;
     private bool _syncingPause;
     private bool _disposed;
@@ -62,6 +66,13 @@ internal sealed class TrayIcon : IDisposable
         _pause.Unchecked += (_, _) => OnPause(setPaused, false);
 
         _menu = CreateMenu();
+        // The update group sits above the everyday commands. "Update to version x.y.z" is only added
+        // while a newer release exists; the manual check is always available once the app wires it.
+        _check = Item(T("update.tray.check"), () => _checkForUpdates?.Invoke());
+        _check.IsEnabled = false;
+        _labels.Add((_check, "update.tray.check"));
+        _menu.Items.Add(_check);
+        _menu.Items.Add(MenuSeparator());
         AddItem("tray.clipboardWheel", openClipboard);
         AddItem("tray.settings", openSettings);
         AddItem("tray.emptyShelf", openShelf);
@@ -136,22 +147,57 @@ internal sealed class TrayIcon : IDisposable
         _menu.Items.Add(item);
     }
 
-    /// <summary>Adds "Update to x.y.z" at the top of the menu and announces it once.</summary>
+    /// <summary>Invoked by the "Check for updates" item; the app sets it right after creating the tray.</summary>
+    public Action? CheckForUpdates
+    {
+        get => _checkForUpdates;
+        set
+        {
+            _checkForUpdates = value;
+            _check.IsEnabled = value is not null;
+        }
+    }
+
+    /// <summary>Adds "Update to version x.y.z" at the top of the menu and announces it once.</summary>
     public void OfferUpdate(Version version, Action install)
     {
         _updateVersion = version;
+        _install = install;
         var shown = Bidi.Value(version.ToString());
         var text = T("update.menu", shown);
         if (_update is null)
         {
             _update = new MenuItem { Header = text, FontWeight = FontWeights.Bold };
-            _update.Click += (_, _) => install();
+            _update.Click += (_, _) => _install?.Invoke();
             _menu.Items.Insert(0, _update);
-            _menu.Items.Insert(1, MenuSeparator());
+            _updateSeparator = MenuSeparator();
+            _menu.Items.Insert(1, _updateSeparator);
+        }
+        else
+        {
+            _update.Header = text;
         }
         Show(T("update.available.title"),
             T("update.available.body", shown), false);
         _balloonClick = install;
+    }
+
+    /// <summary>Removes the "Update to version" item and its separator when nothing newer exists.</summary>
+    public void ClearUpdate()
+    {
+        if (_update is not null)
+        {
+            _menu.Items.Remove(_update);
+            _update = null;
+        }
+        if (_updateSeparator is not null)
+        {
+            _menu.Items.Remove(_updateSeparator);
+            _updateSeparator = null;
+        }
+        _updateVersion = null;
+        _install = null;
+        _balloonClick = null;
     }
 
     public void Show(string title, string text, bool error)
