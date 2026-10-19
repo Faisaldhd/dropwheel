@@ -138,20 +138,22 @@ internal sealed class LockSettingsWindow : Window
     private void RefreshStatus()
     {
         var stored = LockRuntime.Vault.Load();
-        if (stored is null)
+        if (!LockRuntime.Settings.RescuerConfigured)
         {
             _status.Text = T("tool.lock.settings.rescuerMissing");
             _status.Foreground = Theme.ProtectBadge;
             return;
         }
-        _status.Text = string.IsNullOrEmpty(stored.Password)
-            ? T("tool.lock.settings.rescuerNoPassword", Bidi.Value(RescuerKey.Format(stored.Key)))
-            : T("tool.lock.settings.rescuerReady", Bidi.Value(RescuerKey.Format(stored.Key)));
+        _status.Text = stored is null || string.IsNullOrEmpty(stored.Password)
+            ? T("tool.lock.settings.rescuerNoPassword")
+            : T("tool.lock.settings.rescuerReady");
         _status.Foreground = Theme.Muted;
     }
 
     private void ChangeRescuerPassword()
     {
+        if (LockRuntime.RequireRescuer(this) is null)
+            return;
         var window = new RescuerSetupWindow(RescuerSetupMode.ResetPassword) { Owner = this };
         if (window.ShowDialog() != true)
             return;
@@ -162,6 +164,8 @@ internal sealed class LockSettingsWindow : Window
 
     private void CreateNewKey()
     {
+        if (LockRuntime.RequireRescuer(this) is null)
+            return;
         var old = LockRuntime.Vault.Load();
         var window = new RescuerSetupWindow(RescuerSetupMode.NewKey) { Owner = this };
         if (window.ShowDialog() != true || window.Result is null)
@@ -182,6 +186,8 @@ internal sealed class LockSettingsWindow : Window
 
     private void UpdateProtectedFiles()
     {
+        if (LockRuntime.RequireRescuer(this) is null)
+            return;
         var folder = PickFolder();
         if (folder is null)
             return;

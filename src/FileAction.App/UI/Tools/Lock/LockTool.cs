@@ -225,12 +225,8 @@ internal sealed class LockProtectView
         rescuerText.Children.Add(_rescuerStatus);
         var setup = Controls.Button(T("tool.lock.rescuer.setup"), () =>
         {
-            var setupWindow = new RescuerSetupWindow(RescuerSetupMode.FirstTime)
-            {
-                Owner = Window.GetWindow(_root),
-            };
-            if (setupWindow.ShowDialog() == true)
-                RefreshRescuer();
+            LockRuntime.RequireRescuer(Window.GetWindow(_root));
+            RefreshRescuer();
         });
         DockPanel.SetDock(setup, Dock.Right);
         rescuerCard.Children.Add(setup);
@@ -315,9 +311,9 @@ internal sealed class LockProtectView
     private void RefreshRescuer()
     {
         var stored = LockRuntime.Vault.Load();
-        _rescuerStatus.Text = stored is null
+        _rescuerStatus.Text = !LockRuntime.Settings.RescuerConfigured
             ? T("tool.lock.rescuer.missing")
-            : string.IsNullOrEmpty(stored.Password)
+            : stored is null || string.IsNullOrEmpty(stored.Password)
                 ? T("tool.lock.rescuer.needsPassword")
                 : T("tool.lock.rescuer.ready");
         _rescuerStatus.Foreground = stored is null || string.IsNullOrEmpty(stored.Password)
@@ -659,10 +655,11 @@ internal sealed class LockUnlockView
         if (Dialogs.Show(owner, T("tool.lock.unlock.resetOffer"), T("tool.lock.rescuer.resetTitle"),
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
-        var window = new RescuerSetupWindow(RescuerSetupMode.ResetPassword) { Owner = owner };
+        var secret = _secret.Text;
+        var knownKey = RescuerKey.TryParse(secret, out var parsed) ? parsed : null;
+        var window = new RescuerSetupWindow(RescuerSetupMode.ResetPassword, knownKey) { Owner = owner };
         if (window.ShowDialog() != true || window.Result is null)
             return;
-        var secret = _secret.Text;
         _ = Task.Run(() =>
         {
             try

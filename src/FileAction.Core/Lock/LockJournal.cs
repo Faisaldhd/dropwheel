@@ -270,8 +270,6 @@ public static class ProtectionPaths
 
     public static string SessionsFolder => Path.Combine(DataFolder, "sessions");
     public static string IconsFolder => Path.Combine(DataFolder, "icons");
-    public static string ProtectionFolder => Path.Combine(DataFolder, "protection");
-    public static string RescuerVaultFile => Path.Combine(ProtectionFolder, "rescuer.dat");
     public static string SettingsFile => Path.Combine(DataFolder, "protection.json");
 }
 
@@ -314,9 +312,12 @@ public sealed class ProtectionSettings
     public int IdleFallbackMinutes { get; set; } = 15;
 
     /// <summary>Remove the container through the Recycle Bin after a verified unlock.</summary>
-    public bool RecycleContainerAfterUnlock { get; set; } = true;
+    public bool RecycleContainerAfterUnlock { get; set; }
 
     public bool AssociationsRegistered { get; set; }
+
+    /// <summary>Non-secret marker: a Rescuer was created, so later sessions ask for the password and key.</summary>
+    public bool RescuerConfigured { get; set; }
 
     public static string DefaultPath => ProtectionPaths.SettingsFile;
 
@@ -355,6 +356,10 @@ public sealed class ProtectionSettings
                         or System.Text.Json.JsonValueKind.False:
                         settings.AssociationsRegistered = property.Value.GetBoolean();
                         break;
+                    case "RescuerConfigured" when property.Value.ValueKind is System.Text.Json.JsonValueKind.True
+                        or System.Text.Json.JsonValueKind.False:
+                        settings.RescuerConfigured = property.Value.GetBoolean();
+                        break;
                 }
             }
         }
@@ -387,6 +392,7 @@ public sealed class ProtectionSettings
             writer.WriteNumber("IdleFallbackMinutes", Math.Clamp(IdleFallbackMinutes, 1, 120));
             writer.WriteBoolean("RecycleContainerAfterUnlock", RecycleContainerAfterUnlock);
             writer.WriteBoolean("AssociationsRegistered", AssociationsRegistered);
+            writer.WriteBoolean("RescuerConfigured", RescuerConfigured);
             writer.WriteEndObject();
             writer.Flush();
             stream.Flush(flushToDisk: true);

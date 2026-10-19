@@ -38,7 +38,7 @@ public static class LockSecrets
     /// </summary>
     public static TimeSpan DelayAfter(int consecutiveFailures)
     {
-        if (consecutiveFailures < 3)
+        if (consecutiveFailures <= 3)
             return TimeSpan.Zero;
         var step = Math.Min(consecutiveFailures - 3, 5);
         return TimeSpan.FromMilliseconds(Math.Min(8000, 400 * (1 << step)));

@@ -11,9 +11,9 @@ using static FileAction.Core.Loc;
 namespace FileAction.App.Shell.Protection;
 
 /// <summary>
-/// One process-wide protection runtime: preferences, the DPAPI Rescuer vault, the lock service, the
-/// session journal and the auto-lock manager. Created lazily, so simply having the tool available costs
-/// nothing until it is used.
+/// One process-wide protection runtime: preferences, the in-memory Rescuer secrets (never written to
+/// disk), the lock service, the session journal and the auto-lock manager. Created lazily, so simply having
+/// the tool available costs nothing until it is used.
 /// </summary>
 internal static class LockRuntime
 {
@@ -35,7 +35,18 @@ internal static class LockRuntime
                 return;
             _initialized = true;
             Settings = ProtectionSettings.Load();
-            Vault = new DpapiRescuerVault();
+            Vault = new InMemoryRescuerVault();
+            // A previous build could have written a DPAPI vault with the Rescuer password and key. Remove
+            // it on first use: the secrets now live only in memory for the session.
+            try
+            {
+                var legacy = Path.Combine(ProtectionPaths.DataFolder, "protection", "rescuer.dat");
+                if (File.Exists(legacy))
+                    File.Delete(legacy);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
             Service = new LockService(LockEnvironment.Default(), new ProtectionHost());
             Journal = new LockJournalStore(ProtectionPaths.SessionsFolder);
             Sessions = new LockSessionManager(Service, Journal, Settings);
@@ -57,8 +68,9 @@ internal static class LockRuntime
     }
 
     /// <summary>
-    /// The Rescuer secrets, running the one-time setup or asking for the password when the vault has the
-    /// key but not the password. Returns null when the user cancels.
+    /// The Rescuer secrets for this session. They live only in memory: the first-ever setup creates the
+    /// password and the one-time key; every later session asks for both once, because neither is written to
+    /// the settings file, the journal or any other file. Returns null when the user cancels.
     /// </summary>
     public static RescuerSecrets? RequireRescuer(Window? owner)
     {
@@ -67,16 +79,21 @@ internal static class LockRuntime
         if (stored is not null && !string.IsNullOrEmpty(stored.Password))
             return stored;
 
-        if (stored is null)
+        if (!Settings.RescuerConfigured)
         {
             var setup = new RescuerSetupWindow(RescuerSetupMode.FirstTime) { Owner = owner };
-            return setup.ShowDialog() == true ? setup.Result : null;
+            if (setup.ShowDialog() != true || setup.Result is null)
+                return null;
+            Vault.Save(setup.Result);
+            Settings.RescuerConfigured = true;
+            Settings.Save();
+            return setup.Result;
         }
 
-        var prompt = new RescuerPasswordWindow(stored.Key) { Owner = owner };
+        var prompt = new RescuerSessionWindow { Owner = owner };
         if (prompt.ShowDialog() != true || string.IsNullOrEmpty(prompt.Password))
             return null;
-        var secrets = new RescuerSecrets(stored.Key, prompt.Password);
+        var secrets = new RescuerSecrets(prompt.RecoveryKey, prompt.Password);
         Vault.Save(secrets);
         return secrets;
     }

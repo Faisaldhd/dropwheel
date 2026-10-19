@@ -106,6 +106,7 @@ public static class LockHeaderRewriter
             using (var destination = ops.CreateNew(temp))
             {
                 LockContainer.ReadHeader(source); // position after the old header
+                destination.Write(LockFormat.BuildPrefix(header.Flags, LockFormat.HeaderLength));
                 destination.Write(header.Serialize());
                 CopyPayload(source, destination, cancellationToken);
                 ops.FlushToDisk(destination);
@@ -164,6 +165,7 @@ public static class LockHeaderRewriter
             using (var destination = ops.CreateNew(rollback))
             {
                 LockContainer.ReadHeader(source);
+                destination.Write(LockFormat.BuildPrefix(original.Flags, LockFormat.HeaderLength));
                 destination.Write(original.Serialize());
                 CopyPayload(source, destination, cancellationToken);
                 ops.FlushToDisk(destination);

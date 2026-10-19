@@ -58,10 +58,12 @@ internal sealed class RescuerSetupWindow : Window
     private bool _allowClose;
     private string _key = string.Empty;
     private string _keyPassword = string.Empty;
+    private readonly string? _knownKey;
 
-    public RescuerSetupWindow(RescuerSetupMode mode)
+    public RescuerSetupWindow(RescuerSetupMode mode, string? knownKey = null)
     {
         _mode = mode;
+        _knownKey = knownKey;
         var title = mode switch
         {
             RescuerSetupMode.FirstTime => T("tool.lock.rescuer.title"),
@@ -497,6 +499,114 @@ internal sealed class RescuerSetupWindow : Window
     }
 }
 
+
+/// <summary>
+/// Asks for the Rescuer password and the recovery key once per session. Neither is stored: the password
+/// wraps new file keys for this run, and the recovery key is needed to create the third slot. On the next
+/// start the user is asked again, so losing the settings file or the device reveals nothing.
+/// </summary>
+internal sealed class RescuerSessionWindow : Window
+{
+    private readonly SecretField _password;
+    private readonly SecretField _key;
+    private readonly TextBlock _error;
+
+    public RescuerSessionWindow()
+    {
+        var body = LockUi.Configure(this, T("tool.lock.rescuer.sessionTitle"), 450, 390);
+        body.Children.Add(new TextBlock
+        {
+            Text = T("tool.lock.rescuer.sessionIntro"),
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12.5,
+            Foreground = Theme.Muted,
+            Margin = new Thickness(0, 0, 0, 10),
+        });
+        body.Children.Add(new TextBlock
+        {
+            Text = T("tool.lock.rescuer.password"),
+            FontSize = 12.5,
+            Foreground = Theme.Text,
+            Margin = new Thickness(0, 0, 0, 5),
+        });
+        _password = new SecretField(T("tool.lock.rescuer.password"));
+        body.Children.Add(_password);
+        body.Children.Add(new TextBlock
+        {
+            Text = T("tool.lock.rescuer.sessionKey"),
+            FontSize = 12.5,
+            Foreground = Theme.Text,
+            Margin = new Thickness(0, 12, 0, 5),
+        });
+        _key = new SecretField(T("tool.lock.rescuer.sessionKey"));
+        body.Children.Add(_key);
+        _error = new TextBlock
+        {
+            FontSize = 11.5,
+            Foreground = Theme.Error,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        body.Children.Add(_error);
+        body.Children.Add(new TextBlock
+        {
+            Text = T("tool.lock.rescuer.sessionNote"),
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 11.5,
+            Foreground = Theme.Muted,
+            Margin = new Thickness(0, 10, 0, 0),
+        });
+
+        var buttons = new DockPanel { Margin = new Thickness(0, 16, 0, 0) };
+        var cancel = Controls.Button(T("tool.lock.cancel"), Close);
+        var ok = Controls.Button(T("tool.lock.rescuer.next"), Continue, primary: true);
+        DockPanel.SetDock(cancel, Dock.Left);
+        DockPanel.SetDock(ok, Dock.Right);
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(ok);
+        body.Children.Add(buttons);
+        Closing += (_, _) =>
+        {
+            _password.HideReveal();
+            _key.HideReveal();
+        };
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape)
+            {
+                Close();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter)
+            {
+                Continue();
+                e.Handled = true;
+            }
+        };
+        Loaded += (_, _) => _password.FocusInput();
+    }
+
+    public string Password => _password.Text;
+
+    public string RecoveryKey { get; private set; } = string.Empty;
+
+    private void Continue()
+    {
+        if (!LockSecrets.IsAcceptablePassword(_password.Text))
+        {
+            _error.Text = T("tool.lock.error.short");
+            return;
+        }
+        if (!RescuerKey.TryParse(_key.Text, out var canonical))
+        {
+            _error.Text = T("tool.lock.rescuer.sessionInvalid");
+            return;
+        }
+        RecoveryKey = canonical;
+        DialogResult = true;
+        Close();
+    }
+}
 /// <summary>Asks for the existing Rescuer password when the vault has the key but not the password.</summary>
 internal sealed class RescuerPasswordWindow : Window
 {

@@ -50,6 +50,9 @@ public static class FolderAppearance
         var ini = "[.ShellClassInfo]\r\nIconResource=" + iconPath + ",0\r\n";
         var bytes = Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes(ini)).ToArray();
         var path = DesktopIniPath(folder);
+        // A Hidden/System file cannot be opened for writing unless its attributes are cleared first.
+        if (File.Exists(path))
+            File.SetAttributes(path, FileAttributes.Normal);
         File.WriteAllBytes(path, bytes);
         File.SetAttributes(path, FileAttributes.Hidden | FileAttributes.System);
         ApplyFolderAttributes(folder);

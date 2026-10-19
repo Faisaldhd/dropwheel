@@ -119,7 +119,7 @@ public static class LockContainer
             throw new LockUnsupportedException($"header length {headerLength}");
 
         var bytes = new byte[headerLength];
-        ReadExactly(source, bytes, allowTruncated: false);
+        ReadExactly(source, bytes, allowTruncated: true);
         var header = LockHeader.Parse(bytes);
         return new LockHeader
         {

@@ -853,7 +853,8 @@ public class LockSafetyTests
             settings.SaveTo(path);
             var text = File.ReadAllText(path);
             Assert.DoesNotContain("password", text, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("rescuer", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("file-password-1", text);
+            Assert.DoesNotContain("rescuer-password-1", text);
             var loaded = ProtectionSettings.LoadFrom(path);
             Assert.False(loaded.AutoLockOnClose);
             Assert.Equal(12, loaded.GraceSeconds);
@@ -972,6 +973,230 @@ public class LockSafetyTests
         Assert.Equal("Lock now", english["tool.lock.panel.lockNow"]);
         Assert.Equal("Encrypt", english["tool.lock.protect"]);
         Assert.Equal("Beta", english["tool.lock.beta"]);
+    }
+    // ------------------------------------------------------------------ end-to-end function proof
+
+    private sealed class ActionProgress(Action<LockProgress> action) : IProgress<LockProgress>
+    {
+        public void Report(LockProgress value) => action(value);
+    }
+
+    public static IEnumerable<object[]> ServiceSizes()
+    {
+        yield return new object[] { 0 };
+        yield return new object[] { 1 };
+        yield return new object[] { LockFormat.ChunkSize - 1 };
+        yield return new object[] { LockFormat.ChunkSize };
+        yield return new object[] { LockFormat.ChunkSize + 1 };
+        yield return new object[] { (2 * LockFormat.ChunkSize) + 17 };
+    }
+
+    [Theory]
+    [MemberData(nameof(ServiceSizes))]
+    public void Service_roundtrip_creates_and_removes_exactly_one_file(int size)
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var file = Path.Combine(directory, "size.bin");
+            var payload = new byte[size];
+            new Random(11 + size).NextBytes(payload);
+            File.WriteAllBytes(file, payload);
+            var expected = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload));
+            var service = NewService();
+
+            var protect = service.Protect(file, directory, Credentials());
+            Assert.True(protect.SourceRemoved);
+            Assert.Single(Directory.GetFileSystemEntries(directory));
+            Assert.True(File.Exists(protect.OutputPath));
+            Assert.False(File.Exists(file));
+            Assert.Empty(Directory.GetFiles(directory, "*.tmp*"));
+
+            var unprotect = service.Unprotect(protect.OutputPath, "file-password-1", recycleContainer: false);
+            Assert.Single(Directory.GetFileSystemEntries(directory));
+            Assert.Equal(file, unprotect.RestoredPath);
+            Assert.False(File.Exists(protect.OutputPath));
+            Assert.Equal(expected, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                File.ReadAllBytes(file))));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void Corrupt_input_leaves_no_output_files()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var file = Path.Combine(directory, "corrupt.bin");
+            var payload = new byte[3 * 4096];
+            new Random(19).NextBytes(payload);
+            File.WriteAllBytes(file, payload);
+            var service = NewService();
+            var container = service.Protect(file, directory, Credentials()).OutputPath;
+
+            using (var stream = new FileStream(container, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                stream.Position = stream.Length / 2;
+                var value = stream.ReadByte();
+                stream.Position--;
+                stream.WriteByte((byte)(value ^ 0xFF));
+                stream.Flush(flushToDisk: true);
+            }
+
+            Assert.ThrowsAny<LockException>(() =>
+                service.Unprotect(container, "file-password-1", recycleContainer: false));
+            Assert.False(File.Exists(file));
+            Assert.True(File.Exists(container));
+            Assert.Empty(Directory.GetFiles(directory, "*.dwrestore*"));
+            Assert.Empty(Directory.GetFiles(directory, "*.tmp*"));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void Read_only_folder_still_roundtrips_without_partial_output()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var folder = Path.Combine(directory, "ReadOnlyFolder");
+            Directory.CreateDirectory(folder);
+            var inner = Path.Combine(folder, "locked.txt");
+            File.WriteAllText(inner, "read only content");
+            File.SetAttributes(inner, FileAttributes.ReadOnly);
+            File.SetAttributes(folder, FileAttributes.Directory | FileAttributes.ReadOnly);
+
+            var service = NewService();
+            var protect = service.Protect(folder, directory, Credentials());
+            Assert.True(File.Exists(protect.OutputPath));
+            Assert.False(Directory.Exists(folder));
+            Assert.Empty(Directory.GetFiles(directory, "*.tmp*"));
+
+            var unprotect = service.Unprotect(protect.OutputPath, "rescuer-password-1", recycleContainer: false);
+            Assert.Equal("read only content", File.ReadAllText(Path.Combine(unprotect.RestoredPath, "locked.txt")));
+            Assert.False(File.Exists(protect.OutputPath));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void Cancel_mid_run_leaves_the_source_and_no_output()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var file = Path.Combine(directory, "cancel.bin");
+            var payload = new byte[(3 * LockFormat.ChunkSize) + 5];
+            new Random(23).NextBytes(payload);
+            File.WriteAllBytes(file, payload);
+            var service = NewService();
+            using var cancellation = new CancellationTokenSource();
+            var progress = new ActionProgress(value =>
+            {
+                if (value.Stage == LockStage.Encrypting && value.Done >= LockFormat.ChunkSize)
+                    cancellation.Cancel();
+            });
+
+            Assert.ThrowsAny<OperationCanceledException>(() =>
+                service.Protect(file, directory, Credentials(), progress: progress,
+                    cancellationToken: cancellation.Token));
+            Assert.True(File.Exists(file));
+            Assert.Equal(payload, File.ReadAllBytes(file));
+            Assert.Empty(Directory.GetFiles(directory, "*.dwenc"));
+            Assert.Empty(Directory.GetFiles(directory, "*.tmp*"));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void No_secret_is_written_under_the_app_data_folder()
+    {
+        var password = "unique-file-password-" + Guid.NewGuid().ToString("N");
+        var rescuer = "unique-rescuer-password-" + Guid.NewGuid().ToString("N");
+        var key = RescuerKey.Generate();
+        var directory = NewDirectory();
+        try
+        {
+            var file = Path.Combine(directory, "secret-scan.txt");
+            File.WriteAllText(file, "content");
+            var service = NewService();
+            var credentials = new LockCredentials
+            {
+                FilePassword = password,
+                RescuerPassword = rescuer,
+                RescuerKey = key,
+                FilePasswordIterations = 1000,
+                RescuerPasswordIterations = 1000,
+                RescuerKeyIterations = 1000,
+            };
+            var container = service.Protect(file, directory, credentials).OutputPath;
+            service.Unprotect(container, password, recycleContainer: false);
+
+            var appData = ProtectionPaths.DataFolder;
+            if (!Directory.Exists(appData))
+                return;
+            foreach (var path in Directory.EnumerateFiles(appData, "*", SearchOption.AllDirectories))
+            {
+                byte[] bytes;
+                try
+                {
+                    bytes = File.ReadAllBytes(path);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    continue;
+                }
+                var text = Encoding.UTF8.GetString(bytes);
+                Assert.DoesNotContain(password, text);
+                Assert.DoesNotContain(rescuer, text);
+                Assert.DoesNotContain(RescuerKey.Format(key), text);
+                Assert.DoesNotContain(key, text);
+            }
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void Recycle_bin_is_off_by_default_and_protection_never_recycles()
+    {
+        Assert.False(new ProtectionSettings().RecycleContainerAfterUnlock);
+        var settings = new ProtectionSettings();
+        Assert.False(settings.RescuerConfigured);
+
+        var directory = NewDirectory();
+        try
+        {
+            var host = new FakeHost();
+            var service = new LockService(new LockEnvironment([], []), host, minimumIterations: 1000,
+                newSlotIterations: 1000);
+            var file = Path.Combine(directory, "no-recycle.txt");
+            WriteFile(file, "x");
+            var container = service.Protect(file, directory, Credentials()).OutputPath;
+            Assert.Empty(host.Removed);
+            service.Unprotect(container, "file-password-1", settings.RecycleContainerAfterUnlock);
+            Assert.Single(host.Removed);
+            Assert.False(host.Removed[0].Recycle);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
     }
     // ------------------------------------------------------------------ helpers
 

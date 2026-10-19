@@ -422,10 +422,9 @@ public sealed class LockService(
             }
 
             var final = UniqueRestored(destinationDirectory, read.Meta.Name, File.Exists, Directory.Exists);
-            File.SetAttributes(staging, FileAttributes.Normal);
-            FolderAppearance.RestoreTimes(staging, read.Meta, directory: false);
-            ApplyFileAttributes(staging, read.Meta.Attributes);
             File.Move(staging, final);
+            FolderAppearance.RestoreTimes(final, read.Meta, directory: false);
+            ApplyFileAttributes(final, read.Meta.Attributes);
             return new ExtractOutcome(final, read, header, dataKey);
         }
         catch
@@ -467,11 +466,10 @@ public sealed class LockService(
 
             // The unlocked folder looks exactly as it did before protection: no badge, original bytes.
             FolderAppearance.Restore(staging, read.Meta.PreviousDesktopIni, read.Meta.PreviousDesktopIniAttributes);
-            FolderAppearance.RestoreFolderAttributes(staging, read.Meta.Attributes);
-            FolderAppearance.RestoreTimes(staging, read.Meta, directory: true);
 
             var final = UniqueRestored(destinationDirectory, read.Meta.Name, File.Exists, Directory.Exists);
             Directory.Move(staging, final);
+            FolderAppearance.RestoreFolderAttributes(final, read.Meta.Attributes);
             FolderAppearance.RestoreTimes(final, read.Meta, directory: true);
             progress?.Report(new LockProgress(LockStage.Done, read.Digest.Length, read.Digest.Length));
             return new ExtractOutcome(final, read, header, dataKey);
