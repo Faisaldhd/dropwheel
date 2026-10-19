@@ -6,5 +6,5 @@ namespace FileAction.App.UI.Tools;
 /// </summary>
 internal interface IToolActionLabel
 {
-    string ApplyLabelKey { get; }
+    string PrimaryLabelKey { get; }
 }

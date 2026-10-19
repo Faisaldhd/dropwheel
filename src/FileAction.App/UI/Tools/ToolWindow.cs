@@ -250,7 +250,7 @@ internal sealed class ToolWindow : Window
     private FrameworkElement BuildBottomBar()
     {
         var reset = Controls.Button(T("tool.window.reset"), () => _content.Reset());
-        var applyLabel = (_content.View as IToolActionLabel)?.ApplyLabelKey ?? _spec.ApplyLabelKey;
+        var applyLabel = (_content.View as IToolActionLabel)?.PrimaryLabelKey ?? _spec.PrimaryLabelKey;
         var apply = Controls.Button(T(applyLabel), () => _ = ApplyAsync(), primary: true);
         _applyButton = apply;
         if (_content.View is IToolActionGate gate)
@@ -267,8 +267,17 @@ internal sealed class ToolWindow : Window
         DockPanel.SetDock(reset, Dock.Left);
         DockPanel.SetDock(apply, Dock.Right);
         bar.Children.Add(reset);
-        bar.Children.Add(apply);
-        return bar;
+        bar.Children.Add(apply);        return bar;
+    }
+
+    /// <summary>
+    /// Changes the primary button's text at runtime, for labels that depend on state
+    /// (e.g. "Save 3 Frames"). Tools call this from their own view; the window never reads tool state.
+    /// </summary>
+    public void SetPrimaryLabel(string text)
+    {
+        if (_applyButton is not null)
+            Controls.SetText(_applyButton, text);
     }
 
     private async Task ApplyAsync()

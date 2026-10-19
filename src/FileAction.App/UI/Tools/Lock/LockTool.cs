@@ -37,7 +37,7 @@ internal sealed class LockTool : IToolWindowSpec
 
     public string TitleKey => "tool.lock.title";
 
-    public string ApplyLabelKey => "tool.lock.protect";
+    public string PrimaryLabelKey => "tool.lock.protect";
 
     public ToolSpecLayout Layout => LockLayout;
 
@@ -82,8 +82,9 @@ internal sealed class LockOperation : Operation, IInteractiveTool
 
     public void Open(IReadOnlyList<FileItem> items, DropTargets? targets)
     {
-        var spec = ToolRegistry.For(items) ?? LockTool.Instance;
-        new ToolWindow(spec, items, targets).Show();
+        // Open this tool by identity: several tools accept the same files, and a first-match lookup
+        // could open another tool's window from the Lock slice.
+        new ToolWindow(LockTool.Instance, items, targets).Show();
     }
 }
 
@@ -112,7 +113,7 @@ internal static class LockOutput
 /// <summary>The protect view: password + confirmation + strength meter, Rescuer status and the warning.</summary>
 internal sealed class ActionGateGrid : Grid, IToolActionGate, IToolActionLabel
 {
-    public string ApplyLabelKey => "tool.lock.protect";
+    public string PrimaryLabelKey => "tool.lock.protect";
 
     private bool _canApply;
 
@@ -494,12 +495,12 @@ internal sealed class LockWarningDialog : Window
 /// </summary>
 internal sealed class ActionLabelGrid : Grid, IToolActionLabel
 {
-    public ActionLabelGrid(string applyLabelKey)
+    public ActionLabelGrid(string primaryLabelKey)
     {
-        ApplyLabelKey = applyLabelKey;
+        PrimaryLabelKey = primaryLabelKey;
     }
 
-    public string ApplyLabelKey { get; }
+    public string PrimaryLabelKey { get; }
 }
 
 internal sealed class LockUnlockView
