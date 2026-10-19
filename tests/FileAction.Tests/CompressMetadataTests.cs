@@ -265,6 +265,35 @@ public class CompressionPlanTests
         Assert.False(Compression.NeedsDuration(MediaKind.Video, CompressionMode.Preset));
         Assert.False(Compression.NeedsDuration(MediaKind.Image, CompressionMode.TargetSize));
     }
+
+    [Fact]
+    public void Defaults_are_the_balanced_preset_with_no_size_goal()
+    {
+        Assert.Equal(CompressionMode.Preset, CompressionDefaults.Mode);
+        Assert.Equal(CompressionPreset.Medium, CompressionDefaults.Preset);
+        Assert.False(CompressionDefaults.TargetSizeEnabled);
+        Assert.False(CompressionDefaults.PercentageEnabled);
+        Assert.Equal(40, CompressionDefaults.PercentageReduction);
+        Assert.Equal(60, CompressionDefaults.KeepPercentage);
+        Assert.Equal(0, CompressionDefaults.KeepOriginalDimensions);
+        Assert.NotEmpty(CompressionDefaults.ImageSizePresets);
+        Assert.DoesNotContain(CompressionDefaults.KeepOriginalDimensions, CompressionDefaults.ImageSizePresets);
+    }
+
+    [Fact]
+    public void Reduction_maps_onto_the_kept_percentage()
+    {
+        Assert.Equal(60, Compression.KeepPercentageFromReduction(40));
+        Assert.Equal(40, Compression.ReductionFromKeepPercentage(60));
+        Assert.Equal(95, Compression.KeepPercentageFromReduction(0));
+        Assert.Equal(5, Compression.KeepPercentageFromReduction(100));
+
+        Assert.True(Compression.TryParseReduction("40", out var reduction));
+        Assert.Equal(40, reduction);
+        Assert.False(Compression.TryParseReduction("4", out _));
+        Assert.False(Compression.TryParseReduction("96", out _));
+        Assert.False(Compression.TryParseReduction("", out _));
+    }
 }
 
 /// <summary>
@@ -522,6 +551,97 @@ public class MetadataModelTests
         Assert.True(MetadataGroups.OrderOf(MetadataGroups.FileKey) < MetadataGroups.OrderOf(MetadataGroups.ExifKey));
         Assert.True(MetadataGroups.OrderOf(MetadataGroups.ChaptersKey) > MetadataGroups.OrderOf(MetadataGroups.FileKey));
     }
+
+    [Fact]
+    public void Editable_keys_map_onto_the_edit()
+    {
+        var edit = new MetadataEdit();
+        edit.Set(MetadataEditKeys.MediaTitle, "Song");
+        Assert.Equal("Song", edit.Title);
+        Assert.Equal("Song", edit.Get(MetadataEditKeys.MediaTitle));
+
+        edit.Remove(MetadataEditKeys.MediaTitle);
+        Assert.Equal(string.Empty, edit.Title);
+        Assert.True(edit.IsRemoved(MetadataEditKeys.MediaTitle));
+        Assert.True(edit.HasEdits);
+
+        edit.Set(MetadataEditKeys.MediaTitle, "Again");
+        Assert.False(edit.IsRemoved(MetadataEditKeys.MediaTitle));
+        Assert.Equal("Again", edit.Get(MetadataEditKeys.MediaTitle));
+
+        Assert.Equal("title", MetadataEditKeys.FfmpegTag(MetadataEditKeys.MediaTitle));
+        Assert.Null(MetadataEditKeys.FfmpegTag(MetadataEditKeys.PdfTitle));
+    }
+
+    [Fact]
+    public void Removed_media_tags_are_written_as_empty_metadata()
+    {
+        var edit = new MetadataEdit();
+        edit.Remove(MetadataEditKeys.MediaTitle);
+        edit.Set(MetadataEditKeys.MediaArtist, "Artist");
+
+        var args = MetadataFfmpeg.TagArgs(edit);
+        Assert.Equal(4, args.Count);
+        Assert.Equal("-metadata", args[0]);
+        Assert.Equal("title=", args[1]);
+        Assert.Equal("artist=Artist", args[3]);
+    }
+
+    [Fact]
+    public void Removing_chapters_drops_the_chapter_track()
+    {
+        var edit = new MetadataEdit();
+        edit.Remove(MetadataEditKeys.Chapters);
+
+        var args = MetadataFfmpeg.EditArgs(edit, "in.mp4", Array.Empty<MetadataChapter>(), null, "out.mp4");
+        Assert.Contains("-map_chapters", args);
+        Assert.Contains("-1", args);
+    }
+
+    [Fact]
+    public void The_probe_seeds_the_editable_rows_and_the_chapter_text()
+    {
+        const string banner =
+            "Input #0, mov,mp4, from 'x.mp4':\n" +
+            "  Duration: 00:00:10.00, start: 0, bitrate: 100 kb/s\n" +
+            "  Chapter #0:0: start 5.000000, end 9.000000\n" +
+            "    Metadata:\n" +
+            "      title           : Intro\n";
+
+        var probe = MetadataFfmpeg.ParseProbe(banner);
+
+        Assert.Contains(probe.Document.Fields, f => f.EditKey == MetadataEditKeys.MediaTitle);
+        Assert.Contains(probe.Document.Fields, f => f.EditKey == MetadataEditKeys.MediaArtist);
+        Assert.Contains(probe.Document.Fields, f => f.EditKey == MetadataEditKeys.MediaAlbum);
+        Assert.Contains(probe.Document.Fields, f => f.EditKey == MetadataEditKeys.Chapters && f.Value == "0:05 Intro");
+    }
+
+    [Fact]
+    public void Editable_rows_come_first_inside_their_group()
+    {
+        var document = new MetadataDocument(MetadataKind.Media,
+        [
+            new MetadataField(MetadataGroups.FileKey, "major_brand", "isom"),
+            new MetadataField(MetadataGroups.FileKey, "title", "Song", MetadataEditKeys.MediaTitle),
+        ]);
+
+        var file = document.Grouped("")[0];
+        Assert.Equal("title", file.Fields[0].Label);
+        Assert.True(file.Fields[0].Editable);
+        Assert.False(file.Fields[1].Editable);
+    }
+
+    [Fact]
+    public void Metadata_defaults_are_an_unfiltered_list_without_removal()
+    {
+        Assert.Equal(string.Empty, MetadataDefaults.Search);
+        Assert.False(MetadataDefaults.RemoveAll);
+        Assert.Equal("tool.metadata.search", MetadataDefaults.SearchKey);
+        Assert.Equal("tool.metadata.removeAll", MetadataDefaults.RemoveAllKey);
+        Assert.Equal("tool.metadata.save", MetadataDefaults.SaveKey);
+        Assert.Equal("tool.metadata.note.removeAll", MetadataDefaults.NoteKey);
+        Assert.Equal("tool.metadata.removeField", MetadataDefaults.RemoveFieldKey);
+    }
 }
 
 /// <summary>
@@ -534,6 +654,28 @@ public class CompressMetadataStringTests
     private static readonly Regex Placeholder = new(@"\{(\d+)\}", RegexOptions.Compiled);
 
     private static readonly string[] Prefixes = ["tool.compress.", "tool.metadata."];
+
+    /// <summary>The strings the UI-fidelity pass fixed; the English text is asserted verbatim.</summary>
+    private static readonly (string Key, string English)[] AddendumKeys =
+    [
+        ("tool.compress.apply", "Compress"),
+        ("tool.compress.originalSize", "Original size: {0}"),
+        ("tool.compress.preset.balanced", "Balanced"),
+        ("tool.compress.preset.strong", "Strong"),
+        ("tool.compress.preset.helper", "Smaller files with less quality loss."),
+        ("tool.compress.imageSize", "Image size"),
+        ("tool.compress.imageSize.keep", "Keep original dimensions"),
+        ("tool.compress.imageSize.entry", "{0} px"),
+        ("tool.compress.options", "Size options"),
+        ("tool.compress.target.toggle", "Compress to target file size"),
+        ("tool.compress.percentage.toggle", "Reduce by percentage"),
+        ("tool.compress.error.percentage", "Enter a reduction from 5 to 95."),
+        ("tool.metadata.search", "Search metadata"),
+        ("tool.metadata.save", "Save"),
+        ("tool.metadata.removeAll", "Remove All"),
+        ("tool.metadata.removeField", "Remove this field"),
+        ("tool.metadata.note.removeAll", "For photos, Remove All also clears hidden camera and processing data. HDR and portrait effects may change."),
+    ];
 
     [Fact]
     public void Both_tables_have_the_same_tool_keys()
@@ -580,6 +722,19 @@ public class CompressMetadataStringTests
             Assert.False(string.IsNullOrWhiteSpace(ar[key]), $"ar: '{key}' is empty");
             Assert.DoesNotContain('\uFFFD', en[key]);
             Assert.DoesNotContain('\uFFFD', ar[key]);
+        }
+    }
+
+    [Fact]
+    public void Addendum_keys_exist_in_both_languages_with_the_fixed_english()
+    {
+        var (en, ar) = LoadTables();
+
+        foreach (var (key, english) in AddendumKeys)
+        {
+            Assert.True(en.ContainsKey(key), $"en.json is missing '{key}'");
+            Assert.True(ar.ContainsKey(key), $"ar.json is missing '{key}'");
+            Assert.Equal(english, en[key]);
         }
     }
 

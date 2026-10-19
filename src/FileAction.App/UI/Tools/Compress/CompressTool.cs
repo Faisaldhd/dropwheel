@@ -29,6 +29,9 @@ internal sealed class CompressTool : IToolWindowSpec
 
     public string TitleKey => "tool.compress.title";
 
+    /// <summary>The bottom-right button of this tool reads "Compress", not the shared "Apply".</summary>
+    public string? PrimaryLabelKey => "tool.compress.apply";
+
     public ToolSpecLayout Layout => Panel;
 
     public bool Applies(IReadOnlyList<FileItem> items) =>

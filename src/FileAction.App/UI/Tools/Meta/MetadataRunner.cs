@@ -73,13 +73,28 @@ internal static class MetadataRunner
             if (image.GetExifProfile() is { } exif)
             {
                 foreach (var value in exif.Values)
-                    fields.Add(new MetadataField(MetadataGroups.ExifKey, value.Tag.ToString(), FormatValue(value.GetValue())));
+                {
+                    var label = value.Tag.ToString();
+                    var editKey = label switch
+                    {
+                        "Make" => MetadataEditKeys.ExifMake,
+                        "Model" => MetadataEditKeys.ExifModel,
+                        _ => null,
+                    };
+                    fields.Add(new MetadataField(MetadataGroups.ExifKey, label, FormatValue(value.GetValue()), editKey));
+                }
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             warnings.Add(ex.Message);
         }
+
+        // Camera and location stay editable even when the photo has no such tag yet.
+        EnsureEditable(fields, MetadataGroups.ExifKey, "Make", MetadataEditKeys.ExifMake);
+        EnsureEditable(fields, MetadataGroups.ExifKey, "Model", MetadataEditKeys.ExifModel);
+        EnsureEditable(fields, MetadataGroups.ExifKey, "Latitude", MetadataEditKeys.ExifLatitude);
+        EnsureEditable(fields, MetadataGroups.ExifKey, "Longitude", MetadataEditKeys.ExifLongitude);
 
         try
         {
@@ -144,7 +159,10 @@ internal static class MetadataRunner
             if (edit.RemoveAll)
                 image.Strip();
             else
+            {
+                RemoveCameraTags(image, edit);
                 WriteCamera(image, edit);
+            }
 
             ct.ThrowIfCancellationRequested();
             image.Write(tmp, ImageBackend.ToMagickFormat(format));
@@ -178,6 +196,31 @@ internal static class MetadataRunner
         {
             profile.SetValue(ExifTag.GPSLongitudeRef, longitude >= 0 ? "E" : "W");
             profile.SetValue(ExifTag.GPSLongitude, ToRationals(Math.Abs(longitude)));
+        }
+
+        image.SetProfile(profile);
+    }
+
+    /// <summary>Deletes the tags the user removed with the per-field button.</summary>
+    private static void RemoveCameraTags(MagickImage image, MetadataEdit edit)
+    {
+        if (edit.RemovedFields.Count == 0 || image.GetExifProfile() is not { } profile)
+            return;
+
+        if (edit.IsRemoved(MetadataEditKeys.ExifMake))
+            profile.RemoveValue(ExifTag.Make);
+        if (edit.IsRemoved(MetadataEditKeys.ExifModel))
+            profile.RemoveValue(ExifTag.Model);
+        if (edit.IsRemoved(MetadataEditKeys.ExifLatitude))
+        {
+            profile.RemoveValue(ExifTag.GPSLatitude);
+            profile.RemoveValue(ExifTag.GPSLatitudeRef);
+        }
+
+        if (edit.IsRemoved(MetadataEditKeys.ExifLongitude))
+        {
+            profile.RemoveValue(ExifTag.GPSLongitude);
+            profile.RemoveValue(ExifTag.GPSLongitudeRef);
         }
 
         image.SetProfile(profile);
@@ -256,21 +299,27 @@ internal static class MetadataRunner
         using var document = OpenPdf(item.Path, PdfDocumentOpenMode.Import);
         var info = document.Info;
 
-        Add("title", info.Title);
-        Add("author", info.Author);
-        Add("subject", info.Subject);
-        Add("keywords", info.Keywords);
-        Add("creator", info.Creator);
-        Add("producer", info.Producer);
+        Add("title", info.Title, MetadataEditKeys.PdfTitle);
+        Add("author", info.Author, MetadataEditKeys.PdfAuthor);
+        Add("subject", info.Subject, MetadataEditKeys.PdfSubject);
+        Add("keywords", info.Keywords, MetadataEditKeys.PdfKeywords);
+        Add("creator", info.Creator, null);
+        Add("producer", info.Producer, null);
         fields.Add(new MetadataField(MetadataGroups.PdfKey, "pages", document.PageCount.ToString(CultureInfo.InvariantCulture)));
         fields.Add(new MetadataField(MetadataGroups.PdfKey, "size", Compression.FormatSize(LengthOf(item.Path))));
 
+        // The four info fields stay editable even when the file does not set them yet.
+        EnsureEditable(fields, MetadataGroups.PdfKey, "title", MetadataEditKeys.PdfTitle);
+        EnsureEditable(fields, MetadataGroups.PdfKey, "author", MetadataEditKeys.PdfAuthor);
+        EnsureEditable(fields, MetadataGroups.PdfKey, "subject", MetadataEditKeys.PdfSubject);
+        EnsureEditable(fields, MetadataGroups.PdfKey, "keywords", MetadataEditKeys.PdfKeywords);
+
         return new MetadataRead(new MetadataDocument(MetadataKind.Pdf, fields), 0);
 
-        void Add(string label, string? value)
+        void Add(string label, string? value, string? editKey)
         {
             if (!string.IsNullOrWhiteSpace(value))
-                fields.Add(new MetadataField(MetadataGroups.PdfKey, label, value));
+                fields.Add(new MetadataField(MetadataGroups.PdfKey, label, value, editKey));
         }
     }
 
@@ -305,6 +354,16 @@ internal static class MetadataRunner
                     info.Subject = edit.Subject.Trim();
                 if (!string.IsNullOrWhiteSpace(edit.Keywords))
                     info.Keywords = edit.Keywords.Trim();
+
+                // The per-field remove button empties exactly that info entry.
+                if (edit.IsRemoved(MetadataEditKeys.PdfTitle))
+                    info.Title = string.Empty;
+                if (edit.IsRemoved(MetadataEditKeys.PdfAuthor))
+                    info.Author = string.Empty;
+                if (edit.IsRemoved(MetadataEditKeys.PdfSubject))
+                    info.Subject = string.Empty;
+                if (edit.IsRemoved(MetadataEditKeys.PdfKeywords))
+                    info.Keywords = string.Empty;
             }
 
             document.Options.CompressContentStreams = true;
@@ -325,6 +384,14 @@ internal static class MetadataRunner
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /// <summary>Adds an editable row for a tag the file does not have yet, so it can still be written.</summary>
+    private static void EnsureEditable(List<MetadataField> fields, string groupKey, string label, string editKey)
+    {
+        if (fields.Any(field => string.Equals(field.EditKey, editKey, StringComparison.Ordinal)))
+            return;
+        fields.Add(new MetadataField(groupKey, label, string.Empty, editKey));
+    }
 
     private static long LengthOf(string path)
     {

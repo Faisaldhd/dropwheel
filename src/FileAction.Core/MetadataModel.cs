@@ -95,8 +95,52 @@ public static class MetadataGroups
     }
 }
 
-/// <summary>One row of the metadata list: a technical label, its value and the group it belongs to.</summary>
-public sealed record MetadataField(string GroupKey, string Label, string Value);
+/// <summary>One row of the metadata list: a technical label, its value, the group it belongs to, and — for
+/// the tags this tool can write — the stable <paramref name="EditKey"/> the editor binds to.</summary>
+public sealed record MetadataField(string GroupKey, string Label, string Value, string? EditKey = null)
+{
+    /// <summary>True when the row gets an editable box and a per-field remove button.</summary>
+    public bool Editable => EditKey is not null;
+}
+
+/// <summary>
+/// The stable keys the editable rows use. They are not localized: the window resolves the label with
+/// <see cref="MetadataGroups"/>-style localization keys, and the runner maps the key to an EXIF tag,
+/// an FFmpeg tag name or a PDF info field.
+/// </summary>
+public static class MetadataEditKeys
+{
+    public const string ExifMake = "exif.make";
+    public const string ExifModel = "exif.model";
+    public const string ExifLatitude = "exif.latitude";
+    public const string ExifLongitude = "exif.longitude";
+    public const string MediaTitle = "media.title";
+    public const string MediaArtist = "media.artist";
+    public const string MediaAlbum = "media.album";
+    public const string PdfTitle = "pdf.title";
+    public const string PdfAuthor = "pdf.author";
+    public const string PdfSubject = "pdf.subject";
+    public const string PdfKeywords = "pdf.keywords";
+    public const string Chapters = "chapters";
+
+    /// <summary>The FFmpeg metadata name for a media tag key, or null when the key is not a media tag.</summary>
+    public static string? FfmpegTag(string key) => key switch
+    {
+        MediaTitle => "title",
+        MediaArtist => "artist",
+        MediaAlbum => "album",
+        _ => null,
+    };
+
+    /// <summary>The edit key for an FFmpeg metadata tag name, or null for tags the tool cannot write.</summary>
+    public static string? MediaKeyForTag(string tag) => tag switch
+    {
+        "title" => MediaTitle,
+        "artist" => MediaArtist,
+        "album" => MediaAlbum,
+        _ => null,
+    };
+}
 
 /// <summary>Which metadata kind a file's format belongs to.</summary>
 public static class MetadataModel
@@ -150,12 +194,13 @@ public sealed class MetadataDocument
             .ToList();
     }
 
-    /// <summary>Search plus grouping, in display order; empty groups are left out.</summary>
+    /// <summary>Search plus grouping, in display order; empty groups are left out. Editable rows come first
+    /// inside their group, so the values a user can change are always at the top of the section.</summary>
     public IReadOnlyList<MetadataGroupSlice> Grouped(string? query) =>
         Search(query)
             .GroupBy(f => f.GroupKey, StringComparer.Ordinal)
             .OrderBy(g => MetadataGroups.OrderOf(g.Key))
-            .Select(g => new MetadataGroupSlice(g.Key, g.ToList()))
+            .Select(g => new MetadataGroupSlice(g.Key, g.OrderByDescending(f => f.Editable).ToList()))
             .ToList();
 }
 
@@ -163,6 +208,21 @@ public sealed class MetadataDocument
 public readonly record struct MetadataChapter(int StartMs, string Title)
 {
     public double StartSeconds => StartMs / 1000.0;
+}
+
+/// <summary>
+/// The defaults the metadata window opens with: no search filter, nothing marked for removal, and the
+/// keys of the fixed labels the footer shows (they are asserted in the string tests).
+/// </summary>
+public static class MetadataDefaults
+{
+    public const string Search = "";
+    public const bool RemoveAll = false;
+    public const string SearchKey = "tool.metadata.search";
+    public const string RemoveAllKey = "tool.metadata.removeAll";
+    public const string SaveKey = "tool.metadata.save";
+    public const string NoteKey = "tool.metadata.note.removeAll";
+    public const string RemoveFieldKey = "tool.metadata.removeField";
 }
 
 /// <summary>
@@ -186,9 +246,84 @@ public sealed class MetadataEdit
     /// <summary>Writes a copy without any metadata instead of the values above.</summary>
     public bool RemoveAll { get; set; }
 
+    /// <summary>Keys whose tag the user removed with the per-field button; they are deleted on save.</summary>
+    public ISet<string> RemovedFields { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>The current value of one editable row.</summary>
+    public string Get(string key) => key switch
+    {
+        MetadataEditKeys.ExifMake => CameraMake,
+        MetadataEditKeys.ExifModel => CameraModel,
+        MetadataEditKeys.ExifLatitude => Latitude,
+        MetadataEditKeys.ExifLongitude => Longitude,
+        MetadataEditKeys.MediaTitle or MetadataEditKeys.PdfTitle => Title,
+        MetadataEditKeys.MediaArtist => Artist,
+        MetadataEditKeys.MediaAlbum => Album,
+        MetadataEditKeys.PdfAuthor => Author,
+        MetadataEditKeys.PdfSubject => Subject,
+        MetadataEditKeys.PdfKeywords => Keywords,
+        MetadataEditKeys.Chapters => ChapterText,
+        _ => string.Empty,
+    };
+
+    /// <summary>Writes one editable row; an empty value clears it when the file is saved.</summary>
+    public void Set(string key, string? value)
+    {
+        var text = value ?? string.Empty;
+        RemovedFields.Remove(key);
+        switch (key)
+        {
+            case MetadataEditKeys.ExifMake:
+                CameraMake = text;
+                break;
+            case MetadataEditKeys.ExifModel:
+                CameraModel = text;
+                break;
+            case MetadataEditKeys.ExifLatitude:
+                Latitude = text;
+                break;
+            case MetadataEditKeys.ExifLongitude:
+                Longitude = text;
+                break;
+            case MetadataEditKeys.MediaTitle:
+            case MetadataEditKeys.PdfTitle:
+                Title = text;
+                break;
+            case MetadataEditKeys.MediaArtist:
+                Artist = text;
+                break;
+            case MetadataEditKeys.MediaAlbum:
+                Album = text;
+                break;
+            case MetadataEditKeys.PdfAuthor:
+                Author = text;
+                break;
+            case MetadataEditKeys.PdfSubject:
+                Subject = text;
+                break;
+            case MetadataEditKeys.PdfKeywords:
+                Keywords = text;
+                break;
+            case MetadataEditKeys.Chapters:
+                ChapterText = text;
+                break;
+        }
+    }
+
+    /// <summary>Deletes one editable tag: the value is cleared and the writer removes the tag.</summary>
+    public void Remove(string key)
+    {
+        Set(key, string.Empty);
+        RemovedFields.Add(key);
+    }
+
+    /// <summary>True when the user explicitly removed this tag (as opposed to leaving it empty).</summary>
+    public bool IsRemoved(string key) => RemovedFields.Contains(key);
+
     /// <summary>True when at least one editable value (or the remove switch) would change the file.</summary>
     public bool HasEdits =>
         RemoveAll
+        || RemovedFields.Count > 0
         || !string.IsNullOrWhiteSpace(Title)
         || !string.IsNullOrWhiteSpace(Artist)
         || !string.IsNullOrWhiteSpace(Album)
@@ -403,23 +538,25 @@ public static class MetadataFfmpeg
     private static readonly Regex FpsRegex = new(@"(\d+(?:\.\d+)?)\s*fps", RegexOptions.Compiled);
     private static readonly Regex HertzRegex = new(@"(\d+)\s*Hz", RegexOptions.Compiled);
     private static readonly Regex ChannelsRegex = new(@"\b(mono|stereo)\b", RegexOptions.Compiled);
+    private static readonly Regex ChapterStartRegex = new(@"Chapter #\d+:\d+:\s*start\s+(\d+(?:\.\d+)?)", RegexOptions.Compiled);
 
-    /// <summary>The editable tags as <c>-metadata key=value</c> pairs; empty values are left alone.</summary>
+    /// <summary>The editable tags as <c>-metadata key=value</c> pairs; empty values are left alone and a
+    /// tag the user removed is written as an empty value so FFmpeg drops it.</summary>
     public static IReadOnlyList<string> TagArgs(MetadataEdit edit)
     {
         ArgumentNullException.ThrowIfNull(edit);
         var args = new List<string>();
-        Add("title", edit.Title);
-        Add("artist", edit.Artist);
-        Add("album", edit.Album);
+        Add("title", edit.Title, edit.IsRemoved(MetadataEditKeys.MediaTitle));
+        Add("artist", edit.Artist, edit.IsRemoved(MetadataEditKeys.MediaArtist));
+        Add("album", edit.Album, edit.IsRemoved(MetadataEditKeys.MediaAlbum));
         return args;
 
-        void Add(string key, string? value)
+        void Add(string key, string? value, bool removed)
         {
-            if (string.IsNullOrWhiteSpace(value))
+            if (!removed && string.IsNullOrWhiteSpace(value))
                 return;
             args.Add("-metadata");
-            args.Add($"{key}={value.Trim()}");
+            args.Add($"{key}={(removed ? string.Empty : value!.Trim())}");
         }
     }
 
@@ -478,6 +615,8 @@ public static class MetadataFfmpeg
             args.AddRange(TagArgs(edit));
             if (hasChapters)
                 args.AddRange(["-map_chapters", "1"]);
+            else if (edit.IsRemoved(MetadataEditKeys.Chapters))
+                args.AddRange(["-map_chapters", "-1"]);
         }
 
         args.AddRange(["-c", "copy", outputPath]);
@@ -492,6 +631,7 @@ public static class MetadataFfmpeg
     public static MediaProbe ParseProbe(string? text)
     {
         var fields = new List<MetadataField>();
+        var chapters = new List<MetadataChapter>();
         var duration = 0.0;
         var width = 0;
         var height = 0;
@@ -547,6 +687,11 @@ public static class MetadataFfmpeg
                 inMetadata = false;
                 group = MetadataGroups.ChaptersKey;
                 fields.Add(new MetadataField(group, "chapter", trimmed));
+                if (ChapterStartRegex.Match(trimmed) is { Success: true } start)
+                {
+                    var seconds = double.Parse(start.Groups[1].Value, CultureInfo.InvariantCulture);
+                    chapters.Add(new MetadataChapter((int)Math.Round(seconds * 1000), string.Empty));
+                }
                 continue;
             }
 
@@ -582,10 +727,42 @@ public static class MetadataFfmpeg
             var value = trimmed[(colon + 1)..].Trim();
             if (key.Length == 0 || value.Length == 0)
                 continue;
-            fields.Add(new MetadataField(group, key, value));
+
+            var editKey = group == MetadataGroups.FileKey ? MetadataEditKeys.MediaKeyForTag(key) : null;
+            fields.Add(new MetadataField(group, key, value, editKey));
+            if (group == MetadataGroups.ChaptersKey && key == "title")
+            {
+                // The chapter's title follows its "Chapter #…: start …" line.
+                for (var i = chapters.Count - 1; i >= 0; i--)
+                {
+                    if (chapters[i].Title.Length == 0)
+                    {
+                        chapters[i] = chapters[i] with { Title = value };
+                        break;
+                    }
+                }
+            }
         }
 
+        // The editable rows exist even when the file has no such tag yet, so a missing title can be added.
+        EnsureTag(fields, "title", MetadataEditKeys.MediaTitle);
+        EnsureTag(fields, "artist", MetadataEditKeys.MediaArtist);
+        EnsureTag(fields, "album", MetadataEditKeys.MediaAlbum);
+
+        var namedChapters = chapters.Where(c => c.Title.Length > 0).ToList();
+        fields.Add(new MetadataField(MetadataGroups.ChaptersKey, "chapters",
+            namedChapters.Count > 0 ? MetadataValidation.ChaptersToText(namedChapters) : string.Empty,
+            MetadataEditKeys.Chapters));
+
         return new MediaProbe(new MetadataDocument(MetadataKind.Media, fields), duration, width, height);
+    }
+
+    /// <summary>Adds an editable row for a tag the file does not have yet.</summary>
+    private static void EnsureTag(List<MetadataField> fields, string label, string editKey)
+    {
+        if (fields.Any(field => string.Equals(field.EditKey, editKey, StringComparison.Ordinal)))
+            return;
+        fields.Add(new MetadataField(MetadataGroups.FileKey, label, string.Empty, editKey));
     }
 
     /// <summary>The codec part of a "Stream #…: Video: h264 …, yuv420p…" line.</summary>

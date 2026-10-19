@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -10,10 +11,10 @@ using static FileAction.Core.Loc;
 namespace FileAction.App.UI.Tools.Compress;
 
 /// <summary>
-/// The compress window content: the mode chips (target size / percentage / preset), the value that goes
-/// with the chosen mode, the optional maximum long side for images, and the estimate of the result. The
-/// estimate and the hint update as the user types, and the work runs asynchronously so Apply can be
-/// cancelled from the same window.
+/// The compress window content: the Balanced / Strong preset, an optional image-size dropdown, the
+/// "Compress to target file size" and "Reduce by percentage" options (each one reveals its field), and the
+/// estimate of the result. The estimate and hint follow the fields as the user types, and the work runs
+/// asynchronously so it can be cancelled from the same window.
 /// </summary>
 internal sealed class CompressView
 {
@@ -26,14 +27,11 @@ internal sealed class CompressView
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private readonly TextBox _targetBox = ToolControls.Box();
-    private readonly TextBox _percentageBox = ToolControls.Box("60", 66);
-    private readonly TextBox _resizeBox = ToolControls.Box();
-    private readonly StackPanel _targetPanel = new() { Margin = new Thickness(0, 10, 0, 0) };
-    private readonly StackPanel _percentagePanel = new() { Margin = new Thickness(0, 10, 0, 0) };
-    private readonly StackPanel _presetPanel = new() { Margin = new Thickness(0, 10, 0, 0) };
+    private readonly TextBox _reductionBox = ToolControls.Box(CompressionDefaults.PercentageReduction.ToString(CultureInfo.InvariantCulture), 66);
+    private readonly StackPanel _targetPanel = new() { Margin = new Thickness(0, 8, 0, 0) };
+    private readonly StackPanel _reductionPanel = new() { Margin = new Thickness(0, 8, 0, 0) };
     private readonly TextBlock _targetHint = ToolControls.Label(string.Empty);
     private readonly TextBlock _percentageLabel = ToolControls.Label(string.Empty);
-    private readonly TextBlock _resizeHint = ToolControls.Label(string.Empty);
     private readonly TextBlock _estimateValue = new();
     private readonly TextBlock _estimateDetail = ToolControls.Label(string.Empty);
     private readonly TextBlock _hint = ToolControls.Label(string.Empty);
@@ -42,11 +40,15 @@ internal sealed class CompressView
     private readonly Border _cancel;
     private readonly TextBlock _title = new();
     private readonly TextBlock _meta = ToolControls.Label(string.Empty, 11.5);
+    private readonly ComboBox _sizeBox = new();
+    private TextBlock? _sizeHint;
 
-    private Action<CompressionMode>? _selectMode;
     private Action<CompressionPreset>? _selectPreset;
-    private CompressionMode _mode = CompressionMode.Preset;
-    private CompressionPreset _preset = CompressionPreset.Medium;
+    private Action<bool>? _selectTarget;
+    private Action<bool>? _selectPercentage;
+    private CompressionPreset _preset = CompressionDefaults.Preset;
+    private bool _targetEnabled = CompressionDefaults.TargetSizeEnabled;
+    private bool _percentageEnabled = CompressionDefaults.PercentageEnabled;
     private CancellationTokenSource? _cts;
     private SourceInfo? _source;
     private bool _running;
@@ -79,12 +81,12 @@ internal sealed class CompressView
         root.Children.Add(body);
         root.Children.Add(status);
 
-        ShowMode();
+        ShowOptions();
         UpdateEstimate();
         return new ToolContent(root, Reset, ApplyAsync, _ready.Task, ActivateAsync);
     }
 
-    /// <summary>Shows the probed size, dimensions and duration once the file has been read.</summary>
+    /// <summary>Shows the original size and fills the target box with half of it.</summary>
     public async Task ActivateAsync()
     {
         try
@@ -94,9 +96,7 @@ internal sealed class CompressView
             if (source.Bytes > 0)
             {
                 _targetBox.Text = Compression.FormatMegabytes(Compression.MegabytesFromBytes(source.Bytes) / 2);
-                // One technical line: the format and the size stay a single left-to-right run in Arabic.
-                var kindLabel = _kind == MediaKind.Pdf ? "PDF" : Formats.Display(_format);
-                _meta.Text = Bidi.Value($"{kindLabel} · {Compression.FormatSize(source.Bytes)}");
+                _meta.Text = T("tool.compress.originalSize", Bidi.Value(Compression.FormatSize(source.Bytes)));
             }
             else
             {
@@ -138,33 +138,60 @@ internal sealed class CompressView
     {
         var panel = new StackPanel();
 
-        var (modeChips, selectMode) = ToolControls.Chips<CompressionMode>(
+        // Preset: Balanced / Strong with the fixed helper line.
+        var (presetChips, selectPreset) = ToolControls.Chips<CompressionPreset>(
         [
-            (T("tool.compress.mode.target"), CompressionMode.TargetSize),
-            (T("tool.compress.mode.percentage"), CompressionMode.Percentage),
-            (T("tool.compress.mode.preset"), CompressionMode.Preset),
-        ], _mode, mode =>
+            (T("tool.compress.preset.balanced"), CompressionPreset.Medium),
+            (T("tool.compress.preset.strong"), CompressionPreset.Low),
+        ], _preset, preset =>
         {
-            _mode = mode;
-            ShowMode();
+            _preset = preset;
             UpdateEstimate();
         });
-        _selectMode = selectMode;
+        _selectPreset = selectPreset;
 
-        var modeContent = new StackPanel();
-        modeContent.Children.Add(modeChips);
-        modeContent.Children.Add(_targetPanel);
-        modeContent.Children.Add(_percentagePanel);
-        modeContent.Children.Add(_presetPanel);
-        panel.Children.Add(ToolControls.Section(T("tool.compress.mode"), modeContent));
+        var presetContent = new StackPanel();
+        presetContent.Children.Add(presetChips);
+        var helper = ToolControls.Label(T("tool.compress.preset.helper"), 11.5);
+        helper.Margin = new Thickness(2, 8, 2, 0);
+        helper.Opacity = 0.85;
+        presetContent.Children.Add(helper);
+        panel.Children.Add(ToolControls.Section(T("tool.compress.mode.preset"), presetContent));
 
-        BuildTargetPanel();
-        BuildPercentagePanel();
-        BuildPresetPanel();
-
+        // Image size: keep the original dimensions or cap the long side.
         if (_kind == MediaKind.Image)
-            panel.Children.Add(ToolControls.Section(T("tool.compress.resize"), BuildResizeRow(), hint: null));
+        {
+            var sizeContent = new StackPanel();
+            var sizeRow = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+            BuildSizeBox();
+            sizeRow.Children.Add(_sizeBox);
+            var sourceSize = ToolControls.Label(string.Empty, 11.5);
+            sourceSize.VerticalAlignment = VerticalAlignment.Center;
+            sourceSize.Margin = new Thickness(10, 0, 0, 0);
+            sizeRow.Children.Add(sourceSize);
+            sizeContent.Children.Add(sizeRow);
+            panel.Children.Add(ToolControls.Section(T("tool.compress.imageSize"), sizeContent));
+            _sizeHint = sourceSize;
+        }
 
+        // Options: target size and percentage reduction each reveal their field.
+        var options = new StackPanel();
+        var (targetRow, selectTarget) = ToolControls.CheckBox(T("tool.compress.target.toggle"), _targetEnabled, OnTargetToggled);
+        _selectTarget = selectTarget;
+        BuildTargetPanel();
+        options.Children.Add(targetRow);
+        options.Children.Add(_targetPanel);
+
+        var (percentageRow, selectPercentage) = ToolControls.CheckBox(T("tool.compress.percentage.toggle"), _percentageEnabled, OnPercentageToggled);
+        _selectPercentage = selectPercentage;
+        var percentageHolder = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
+        percentageHolder.Children.Add(percentageRow);
+        BuildReductionPanel();
+        percentageHolder.Children.Add(_reductionPanel);
+        options.Children.Add(percentageHolder);
+        panel.Children.Add(ToolControls.Section(T("tool.compress.options"), options));
+
+        // Estimate.
         var estimate = new StackPanel();
         estimate.Children.Add(ToolControls.Label(T("tool.compress.estimate"), 11.5));
         _estimateValue.FontSize = 20;
@@ -175,13 +202,7 @@ internal sealed class CompressView
         _estimateDetail.Margin = new Thickness(0, 2, 0, 0);
         estimate.Children.Add(_estimateValue);
         estimate.Children.Add(_estimateDetail);
-        var estimateCard = new Border { Margin = new Thickness(0, 8, 0, 0), Child = estimate };
-        estimateCard.Background = Theme.Card;
-        estimateCard.BorderBrush = Theme.PanelBorder;
-        estimateCard.BorderThickness = new Thickness(1);
-        estimateCard.CornerRadius = new CornerRadius(10);
-        estimateCard.Padding = new Thickness(12, 10, 12, 10);
-        panel.Children.Add(estimateCard);
+        panel.Children.Add(ToolControls.Card(estimate));
 
         _hint.FontSize = 11.5;
         _hint.Margin = new Thickness(2, 10, 2, 4);
@@ -195,57 +216,62 @@ internal sealed class CompressView
         };
     }
 
+    private void BuildSizeBox()
+    {
+        _sizeBox.FontSize = 12.5;
+        _sizeBox.MinWidth = 210;
+        _sizeBox.Padding = new Thickness(8, 4, 8, 4);
+        _sizeBox.Background = Theme.Card;
+        _sizeBox.Foreground = Theme.Text;
+        _sizeBox.BorderBrush = Theme.PanelBorder;
+        _sizeBox.VerticalContentAlignment = VerticalAlignment.Center;
+
+        _sizeBox.Items.Add(new ComboBoxItem
+        {
+            Content = T("tool.compress.imageSize.keep"),
+            Tag = CompressionDefaults.KeepOriginalDimensions,
+        });
+        foreach (var longSide in CompressionDefaults.ImageSizePresets)
+        {
+            _sizeBox.Items.Add(new ComboBoxItem
+            {
+                Content = T("tool.compress.imageSize.entry", longSide.ToString(CultureInfo.InvariantCulture)),
+                Tag = longSide,
+            });
+        }
+
+        _sizeBox.SelectedIndex = 0;
+        _sizeBox.SelectionChanged += (_, _) => UpdateEstimate();
+    }
+
     private void BuildTargetPanel()
     {
         var row = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
         _targetBox.TextChanged += (_, _) => UpdateEstimate();
         row.Children.Add(_targetBox);
+        var megabytes = ToolControls.Label("MB", 12.5);
+        megabytes.VerticalAlignment = VerticalAlignment.Center;
+        megabytes.Margin = new Thickness(8, 0, 0, 0);
+        row.Children.Add(megabytes);
         _targetHint.VerticalAlignment = VerticalAlignment.Center;
-        _targetHint.Margin = new Thickness(10, 0, 0, 0);
+        _targetHint.Margin = new Thickness(12, 0, 0, 0);
         row.Children.Add(_targetHint);
         _targetPanel.Children.Add(row);
     }
 
-    private void BuildPercentagePanel()
+    private void BuildReductionPanel()
     {
         var row = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
-        _percentageBox.TextChanged += (_, _) => UpdateEstimate();
-        row.Children.Add(_percentageBox);
-        var percent = ToolControls.Label("%", 13);
+        _reductionBox.TextChanged += (_, _) => UpdateEstimate();
+        row.Children.Add(_reductionBox);
+        var percent = ToolControls.Label("%", 12.5);
         percent.VerticalAlignment = VerticalAlignment.Center;
         percent.Margin = new Thickness(8, 0, 0, 0);
         row.Children.Add(percent);
         _percentageLabel.VerticalAlignment = VerticalAlignment.Center;
         _percentageLabel.Margin = new Thickness(12, 0, 0, 0);
         row.Children.Add(_percentageLabel);
-        _percentagePanel.Children.Add(row);
-    }
-
-    private void BuildPresetPanel()
-    {
-        var (presetChips, selectPreset) = ToolControls.Chips<CompressionPreset>(
-        [
-            (T("tool.compress.preset.high"), CompressionPreset.High),
-            (T("tool.compress.preset.medium"), CompressionPreset.Medium),
-            (T("tool.compress.preset.low"), CompressionPreset.Low),
-        ], _preset, preset =>
-        {
-            _preset = preset;
-            UpdateEstimate();
-        });
-        _selectPreset = selectPreset;
-        _presetPanel.Children.Add(presetChips);
-    }
-
-    private FrameworkElement BuildResizeRow()
-    {
-        var row = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
-        _resizeBox.TextChanged += (_, _) => UpdateEstimate();
-        row.Children.Add(_resizeBox);
-        _resizeHint.VerticalAlignment = VerticalAlignment.Center;
-        _resizeHint.Margin = new Thickness(10, 0, 0, 0);
-        row.Children.Add(_resizeHint);
-        return row;
+        _reductionPanel.Children.Add(row);
     }
 
     private FrameworkElement BuildStatus()
@@ -266,11 +292,36 @@ internal sealed class CompressView
         return row;
     }
 
-    private void ShowMode()
+    private void OnTargetToggled(bool on)
     {
-        _targetPanel.Visibility = _mode == CompressionMode.TargetSize ? Visibility.Visible : Visibility.Collapsed;
-        _percentagePanel.Visibility = _mode == CompressionMode.Percentage ? Visibility.Visible : Visibility.Collapsed;
-        _presetPanel.Visibility = _mode == CompressionMode.Preset ? Visibility.Visible : Visibility.Collapsed;
+        _targetEnabled = on;
+        if (on && _percentageEnabled)
+        {
+            _percentageEnabled = false;
+            _selectPercentage?.Invoke(false);
+        }
+
+        ShowOptions();
+        UpdateEstimate();
+    }
+
+    private void OnPercentageToggled(bool on)
+    {
+        _percentageEnabled = on;
+        if (on && _targetEnabled)
+        {
+            _targetEnabled = false;
+            _selectTarget?.Invoke(false);
+        }
+
+        ShowOptions();
+        UpdateEstimate();
+    }
+
+    private void ShowOptions()
+    {
+        _targetPanel.Visibility = _targetEnabled ? Visibility.Visible : Visibility.Collapsed;
+        _reductionPanel.Visibility = _percentageEnabled ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // ------------------------------------------------------------------ estimate
@@ -285,21 +336,15 @@ internal sealed class CompressView
             return;
         }
 
-        if (_mode == CompressionMode.TargetSize && !Compression.TryParseMegabytes(_targetBox.Text, out _))
+        if (_targetEnabled && !Compression.TryParseMegabytes(_targetBox.Text, out _))
         {
             ShowProblem(T("tool.compress.error.target"));
             return;
         }
 
-        if (_mode == CompressionMode.Percentage && !Compression.TryParsePercentage(_percentageBox.Text, out _))
+        if (_percentageEnabled && !Compression.TryParseReduction(_reductionBox.Text, out _))
         {
             ShowProblem(T("tool.compress.error.percentage"));
-            return;
-        }
-
-        if (_kind == MediaKind.Image && !Compression.TryParseLongSide(_resizeBox.Text, out _))
-        {
-            ShowProblem(T("tool.compress.error.resize"));
             return;
         }
 
@@ -333,14 +378,20 @@ internal sealed class CompressView
     {
         _targetHint.Text = T("tool.compress.target.hint", Bidi.Value(Compression.FormatSize(source.Bytes)));
 
-        var percentage = Compression.TryParsePercentage(_percentageBox.Text, out var percent) ? percent : 60;
-        _percentageLabel.Text = T("tool.compress.percentage", Bidi.Value($"{percentage}%"));
+        var reduction = Compression.TryParseReduction(_reductionBox.Text, out var percent)
+            ? percent
+            : CompressionDefaults.PercentageReduction;
+        var keep = Compression.KeepPercentageFromReduction(reduction);
+        _percentageLabel.Text = T("tool.compress.percentage", Bidi.Value($"{keep}%"));
 
-        _resizeHint.Text = source.Width > 0 && source.Height > 0
-            ? T("tool.compress.resize.hint", Bidi.Value(Compression.FormatPixels(source.Width, source.Height)))
-            : T("tool.compress.resize.hint.none");
+        if (_sizeHint is not null)
+        {
+            _sizeHint.Text = source.Width > 0 && source.Height > 0
+                ? Bidi.Value(Compression.FormatPixels(source.Width, source.Height))
+                : string.Empty;
+        }
 
-        _hint.Text = Compression.NeedsDuration(_kind, _mode) && source.Duration <= 0
+        _hint.Text = Compression.NeedsDuration(_kind, Mode) && source.Duration <= 0
             ? T("tool.compress.hint.duration")
             : _kind switch
             {
@@ -352,15 +403,25 @@ internal sealed class CompressView
             };
     }
 
+    private CompressionMode Mode =>
+        _targetEnabled ? CompressionMode.TargetSize
+        : _percentageEnabled ? CompressionMode.Percentage
+        : CompressionMode.Preset;
+
+    private int SelectedLongSide() =>
+        _sizeBox.SelectedItem is ComboBoxItem { Tag: int value } ? value : CompressionDefaults.KeepOriginalDimensions;
+
     private CompressionPlan PlanFor(SourceInfo source) =>
         Compression.Plan(BuildRequest(), source.Bytes, source.Width, source.Height, source.Duration);
 
     private CompressionRequest BuildRequest()
     {
         var target = Compression.TryParseMegabytes(_targetBox.Text, out var megabytes) ? megabytes : 1.0;
-        var percentage = Compression.TryParsePercentage(_percentageBox.Text, out var percent) ? percent : 60;
-        var longSide = Compression.TryParseLongSide(_resizeBox.Text, out var side) ? side : 0;
-        return new CompressionRequest(_kind, _format, _mode, target, percentage, _preset, longSide);
+        var reduction = Compression.TryParseReduction(_reductionBox.Text, out var percent)
+            ? percent
+            : CompressionDefaults.PercentageReduction;
+        return new CompressionRequest(_kind, _format, Mode, target,
+            Compression.KeepPercentageFromReduction(reduction), _preset, SelectedLongSide());
     }
 
     // ------------------------------------------------------------------ actions
@@ -368,16 +429,18 @@ internal sealed class CompressView
     private void Reset()
     {
         _cts?.Cancel();
-        _mode = CompressionMode.Preset;
-        _preset = CompressionPreset.Medium;
-        _selectMode?.Invoke(CompressionMode.Preset);
-        _selectPreset?.Invoke(CompressionPreset.Medium);
-        _percentageBox.Text = "60";
-        _resizeBox.Text = string.Empty;
+        _preset = CompressionDefaults.Preset;
+        _targetEnabled = CompressionDefaults.TargetSizeEnabled;
+        _percentageEnabled = CompressionDefaults.PercentageEnabled;
+        _selectPreset?.Invoke(CompressionDefaults.Preset);
+        _selectTarget?.Invoke(false);
+        _selectPercentage?.Invoke(false);
+        _sizeBox.SelectedIndex = 0;
+        _reductionBox.Text = CompressionDefaults.PercentageReduction.ToString(CultureInfo.InvariantCulture);
         _targetBox.Text = _source is { Bytes: > 0 } source
             ? Compression.FormatMegabytes(Compression.MegabytesFromBytes(source.Bytes) / 2)
             : string.Empty;
-        ShowMode();
+        ShowOptions();
         UpdateEstimate();
     }
 
@@ -390,13 +453,11 @@ internal sealed class CompressView
         if (_kind == MediaKind.None || source.Bytes <= 0)
             throw new ConversionException(T("tool.compress.error.unsupported"));
 
-        if (_mode == CompressionMode.TargetSize && !Compression.TryParseMegabytes(_targetBox.Text, out _))
+        if (_targetEnabled && !Compression.TryParseMegabytes(_targetBox.Text, out _))
             throw new ConversionException(T("tool.compress.error.target"));
-        if (_mode == CompressionMode.Percentage && !Compression.TryParsePercentage(_percentageBox.Text, out _))
+        if (_percentageEnabled && !Compression.TryParseReduction(_reductionBox.Text, out _))
             throw new ConversionException(T("tool.compress.error.percentage"));
-        if (_kind == MediaKind.Image && !Compression.TryParseLongSide(_resizeBox.Text, out _))
-            throw new ConversionException(T("tool.compress.error.resize"));
-        if (Compression.NeedsDuration(_kind, _mode) && source.Duration <= 0)
+        if (Compression.NeedsDuration(_kind, Mode) && source.Duration <= 0)
             throw new ConversionException(T("tool.compress.error.duration"));
 
         var plan = PlanFor(source);

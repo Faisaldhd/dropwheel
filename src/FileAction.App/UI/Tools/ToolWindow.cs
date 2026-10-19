@@ -243,7 +243,7 @@ internal sealed class ToolWindow : Window
     private FrameworkElement BuildBottomBar()
     {
         var reset = Controls.Button(T("tool.window.reset"), () => _content.Reset());
-        var apply = Controls.Button(T("tool.window.apply"), () => _ = ApplyAsync(), primary: true);
+        var apply = Controls.Button(T(_spec.PrimaryLabelKey ?? "tool.window.apply"), () => _ = ApplyAsync(), primary: true);
         _applyButton = apply;
 
         var bar = new DockPanel { Margin = new Thickness(18, 8, 18, 18), LastChildFill = false };

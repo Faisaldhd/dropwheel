@@ -74,6 +74,68 @@ internal static class ToolControls
     }
 
     /// <summary>
+    /// A checkbox row: a small square that fills with the accent colour and shows a tick when on, plus its
+    /// label. Returns the row and a setter, so Reset can put the box back without firing the callback.
+    /// </summary>
+    public static (FrameworkElement Element, Action<bool> Set) CheckBox(string label, bool value, Action<bool>? changed = null)
+    {
+        var tick = new TextBlock
+        {
+            Text = "\uE73E",
+            FontFamily = Theme.Icons,
+            FontSize = 10,
+            Foreground = Theme.TextOnAccent,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+        };
+        var box = new Border
+        {
+            Width = 18,
+            Height = 18,
+            CornerRadius = new CornerRadius(4),
+            BorderThickness = new Thickness(1),
+            Child = tick,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var text = Controls.Text(label, 12.5);
+        text.VerticalAlignment = VerticalAlignment.Center;
+        text.Margin = new Thickness(8, 0, 0, 0);
+
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+        };
+        row.Children.Add(box);
+        row.Children.Add(text);
+
+        var on = value;
+        void Paint(bool state)
+        {
+            box.Background = state ? Theme.AccentGradient : Brushes.Transparent;
+            box.BorderBrush = state ? Brushes.Transparent : Theme.Muted;
+            tick.Visibility = state ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        void Set(bool state)
+        {
+            on = state;
+            Paint(on);
+        }
+
+        Paint(on);
+        row.MouseLeftButtonUp += (_, _) =>
+        {
+            on = !on;
+            Paint(on);
+            changed?.Invoke(on);
+        };
+        return (row, Set);
+    }
+
+    /// <summary>
     /// A row of mutually exclusive pills on a track. Returns the element and the function that selects a
     /// value again, so Reset can repaint the chips without rebuilding the view.
     /// </summary>

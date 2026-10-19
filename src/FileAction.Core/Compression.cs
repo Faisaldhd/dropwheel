@@ -540,6 +540,36 @@ public static class Compression
         return true;
     }
 
+    /// <summary>Smallest percentage reduction the window accepts.</summary>
+    public const int MinReduction = 5;
+
+    /// <summary>Largest percentage reduction the window accepts (some size has to remain).</summary>
+    public const int MaxReduction = 95;
+
+    public static int ClampReduction(int reduction) => Math.Clamp(reduction, MinReduction, MaxReduction);
+
+    /// <summary>"Reduce by 40 %" keeps 60 % of the source size.</summary>
+    public static int KeepPercentageFromReduction(int reduction) => 100 - ClampReduction(reduction);
+
+    /// <summary>The reduction that corresponds to keeping <paramref name="keepPercentage"/> of the size.</summary>
+    public static int ReductionFromKeepPercentage(int keepPercentage) => 100 - ClampPercentage(keepPercentage);
+
+    /// <summary>Parses the percentage-reduction box; false when it is not a whole number from 5 to 95.</summary>
+    public static bool TryParseReduction(string? text, out int reduction)
+    {
+        reduction = 0;
+        var raw = (text ?? string.Empty).Trim();
+        if (raw.Length == 0)
+            return false;
+        if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            && !int.TryParse(raw, NumberStyles.Integer, CultureInfo.CurrentCulture, out value))
+            return false;
+        if (value < MinReduction || value > MaxReduction)
+            return false;
+        reduction = value;
+        return true;
+    }
+
     /// <summary>Parses a maximum-long-side box value; empty means "keep the source size".</summary>
     public static bool TryParseLongSide(string? text, out int longSide)
     {
@@ -592,4 +622,32 @@ public static class Compression
         var value = Math.Clamp(scale, 0, 1);
         return (Math.Max(1, (int)Math.Round(width * value)), Math.Max(1, (int)Math.Round(height * value)));
     }
+}
+
+/// <summary>The values the compress window opens with: the Balanced preset and no explicit size goal.</summary>
+public static class CompressionDefaults
+{
+    /// <summary>The preset the segmented control starts on (Balanced).</summary>
+    public static CompressionPreset Preset => CompressionPreset.Medium;
+
+    /// <summary>No size goal until the user turns one on.</summary>
+    public static CompressionMode Mode => CompressionMode.Preset;
+
+    /// <summary>The target-size checkbox starts off; its field stays hidden.</summary>
+    public const bool TargetSizeEnabled = false;
+
+    /// <summary>The percentage-reduction checkbox starts off.</summary>
+    public const bool PercentageEnabled = false;
+
+    /// <summary>"Reduce by 40 %" is the value the percentage box opens with.</summary>
+    public const int PercentageReduction = 40;
+
+    /// <summary>The image-size dropdown value that means "keep the original dimensions".</summary>
+    public const int KeepOriginalDimensions = 0;
+
+    /// <summary>The long-side entries of the image-size dropdown, in pixels.</summary>
+    public static readonly int[] ImageSizePresets = [2560, 1920, 1280, 1024, 640];
+
+    /// <summary>Keep this share of the source when the reduction box opens.</summary>
+    public static int KeepPercentage => Compression.KeepPercentageFromReduction(PercentageReduction);
 }

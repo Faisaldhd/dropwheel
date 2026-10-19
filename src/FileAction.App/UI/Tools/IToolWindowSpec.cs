@@ -19,6 +19,12 @@ internal interface IToolWindowSpec
     /// <summary>Localization key for the window title.</summary>
     string TitleKey { get; }
 
+    /// <summary>
+    /// Localization key of the bottom-right primary button; null keeps the shared "Apply". Additive, so a
+    /// tool registers no label and nothing else changes.
+    /// </summary>
+    string? PrimaryLabelKey => null;
+
     /// <summary>Chrome height/width and preview min/max (see <see cref="ToolSizes"/>).</summary>
     ToolSpecLayout Layout { get; }
 
