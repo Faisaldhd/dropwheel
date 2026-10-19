@@ -33,4 +33,8 @@
     <ProjectReference Include="..\..\src\FileAction.App\FileAction.App.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The WPF SDK implicit usings do not include System.IO (the tests use File/Path/DirectoryInfo). -->
+    <Using Include="System.IO" />
+  </ItemGroup>
 </Project>
