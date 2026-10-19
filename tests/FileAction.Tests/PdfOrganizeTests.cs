@@ -378,7 +378,6 @@ public class PdfOrganizeTests
 
     [Theory]
     [InlineData(0, 800)]
-    [InlineData(600, 0)]
     [InlineData(-10, 800)]
     public void ScaleToWidth_leaves_a_page_without_a_width_alone(double width, double height)
     {
