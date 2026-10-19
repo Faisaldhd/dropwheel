@@ -46,6 +46,7 @@ public class CompressMetadataFunctionTests
             Assert.True(File.Exists(output), $"missing {output}");
             Assert.Equal("photo Compressed.jpg", Path.GetFileName(output));
             var outputBytes = new FileInfo(output).Length;
+            _output.WriteLine($"source {sourceBytes} bytes, output {outputBytes} bytes");
             Assert.True(outputBytes < sourceBytes * 0.8,
                 $"expected a much smaller copy, {outputBytes} vs source {sourceBytes}");
 
@@ -107,7 +108,10 @@ public class CompressMetadataFunctionTests
 
             var target = Compression.BytesFromMegabytes(targetMegabytes);
             var outputBytes = new FileInfo(output).Length;
-            Assert.InRange(outputBytes, (long)(target * 0.8), (long)(target * 1.2));
+            _output.WriteLine($"target {target} bytes, output {outputBytes} bytes");
+            // A short clip carries muxer and AAC frame overhead, so the target is held to 12 % rather than
+            // the encoder's own few-percent average.
+            Assert.InRange(outputBytes, (long)(target * 0.88), (long)(target * 1.12));
 
             var outputDuration = await FfmpegBackend.ProbeDurationAsync(ffmpeg, output, CancellationToken.None);
             Assert.NotNull(outputDuration);
@@ -164,6 +168,7 @@ public class CompressMetadataFunctionTests
 
             Assert.True(File.Exists(output), $"missing {output}");
             Assert.Equal("tone Compressed.mp3", Path.GetFileName(output));
+            _output.WriteLine($"source {sourceBytes} bytes, output {new FileInfo(output).Length} bytes");
             Assert.True(new FileInfo(output).Length < sourceBytes * 0.8,
                 $"expected a smaller audio file, {new FileInfo(output).Length} vs {sourceBytes}");
 
@@ -258,6 +263,7 @@ public class CompressMetadataFunctionTests
                 pdf.Save(source);
             }
 
+            var before = Hash(source);
             var edit = new MetadataEdit
             {
                 Title = "New title",
@@ -276,6 +282,7 @@ public class CompressMetadataFunctionTests
             Assert.Equal("Quarterly report", reread.Info.Subject);
             Assert.Equal("k1, k2", reread.Info.Keywords);
             Assert.Equal(1, reread.PageCount);
+            Assert.Equal(before, Hash(source));
         }
         finally
         {
@@ -299,8 +306,9 @@ public class CompressMetadataFunctionTests
                 new CompressionRequest(MediaKind.Image, "jpg", CompressionMode.Preset, 1.0, 50, CompressionPreset.Medium, 0),
                 8, 0, 0, 0);
 
-            await Assert.ThrowsAnyAsync<Exception>(() =>
+            var error = await Assert.ThrowsAnyAsync<Exception>(() =>
                 CompressRunner.ImageAsync(new FileItem(source), plan, dir, CancellationToken.None, new Progress<double>()));
+            Assert.False(string.IsNullOrWhiteSpace(error.Message));
 
             Assert.Empty(Directory.GetFiles(dir, "*.part.*"));
             Assert.Single(Directory.GetFiles(dir));
