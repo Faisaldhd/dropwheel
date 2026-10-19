@@ -27,7 +27,7 @@ public class VideoFramesTests
     {
         Assert.Equal("clip frame 00123.png", FrameMath.CaptureFileName("clip", 123));
         Assert.Equal("clip frame 00000.png", FrameMath.CaptureFileName("clip", 0));
-        Assert.Equal("holiday 2025 frame 012345.png", FrameMath.CaptureFileName("holiday 2025", 12345));
+        Assert.Equal("holiday 2025 frame 12345.png", FrameMath.CaptureFileName("holiday 2025", 12345));
         Assert.Equal("clip frames", FrameMath.FramesFolderName("clip"));
     }
 
