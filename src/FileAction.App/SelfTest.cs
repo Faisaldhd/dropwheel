@@ -514,8 +514,11 @@ internal static class SelfTest
             }
             if (node is TextBox box && !string.IsNullOrWhiteSpace(box.Text) && found.Count < limit)
                 found.Add("field:" + box.Text.Trim());
-            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
-                queue.Enqueue(VisualTreeHelper.GetChild(node, i));
+            if (node is Visual or Visual3D)
+            {
+                for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
+                    queue.Enqueue(VisualTreeHelper.GetChild(node, i));
+            }
             foreach (var child in LogicalTreeHelper.GetChildren(node))
                 if (child is DependencyObject dependency)
                     queue.Enqueue(dependency);
