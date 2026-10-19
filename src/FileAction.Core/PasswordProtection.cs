@@ -215,6 +215,112 @@ public readonly record struct PdfPermissionPolicy(bool AllowPrinting, bool Allow
     public static PdfPermissionPolicy AllowAll => new(true, true);
 }
 
+/// <summary>How the two protect password fields compare right now.</summary>
+public enum PasswordMatchStatus
+{
+    /// <summary>Both fields are empty; the inline match line stays hidden.</summary>
+    Empty,
+
+    /// <summary>The two values differ.</summary>
+    Mismatch,
+
+    /// <summary>The values match but are shorter than <see cref="PasswordRules.MinimumLength"/>.</summary>
+    TooShort,
+
+    /// <summary>The values match and the password is acceptable.</summary>
+    Match,
+}
+
+/// <summary>
+/// Pure form state for the Protect window: the two field values, the eye state and whether the primary
+/// button may run. Keeping this out of WPF makes the disable/enable rules unit testable.
+/// </summary>
+public sealed class PasswordFormState
+{
+    public string Password { get; set; } = string.Empty;
+
+    public string Confirmation { get; set; } = string.Empty;
+
+    /// <summary>False at start, after a reset and after the window closes.</summary>
+    public bool Revealed { get; private set; }
+
+    public PasswordMatchStatus MatchStatus
+    {
+        get
+        {
+            if (Password.Length == 0 && Confirmation.Length == 0)
+                return PasswordMatchStatus.Empty;
+            if (!string.Equals(Password, Confirmation, StringComparison.Ordinal))
+                return PasswordMatchStatus.Mismatch;
+            return Password.Length < PasswordRules.MinimumLength
+                ? PasswordMatchStatus.TooShort
+                : PasswordMatchStatus.Match;
+        }
+    }
+
+    /// <summary>True only when both fields match and the password meets the minimum length.</summary>
+    public bool CanSubmit => PasswordRules.Validate(Password, Confirmation, requireConfirmation: true) == PasswordProblem.None;
+
+    public void ToggleReveal() => Revealed = !Revealed;
+
+    public void HideReveal() => Revealed = false;
+
+    public void Reset()
+    {
+        Password = string.Empty;
+        Confirmation = string.Empty;
+        Revealed = false;
+    }
+}
+
+/// <summary>Pure state for the single Unlock password field and its eye toggle.</summary>
+public sealed class PasswordEntryState
+{
+    public string Password { get; set; } = string.Empty;
+
+    public bool Revealed { get; private set; }
+
+    public bool CanSubmit => PasswordRules.ValidateForUnlock(Password) == PasswordProblem.None;
+
+    public void ToggleReveal() => Revealed = !Revealed;
+
+    public void HideReveal() => Revealed = false;
+
+    public void Reset()
+    {
+        Password = string.Empty;
+        Revealed = false;
+    }
+}
+
+/// <summary>The output container the Protect window starts with.</summary>
+public enum ProtectionOutputFormat
+{
+    Zip,
+    Pdf,
+}
+
+/// <summary>
+/// Defaults the Protect window starts from. Pure values so the UI defaults are unit tested without opening
+/// a window.
+/// </summary>
+public static class PasswordProtectionDefaults
+{
+    /// <summary>One PDF starts as PDF; every other selection starts as one ZIP.</summary>
+    public static ProtectionOutputFormat DefaultFormat(int itemCount, bool firstItemIsPdf) =>
+        itemCount == 1 && firstItemIsPdf ? ProtectionOutputFormat.Pdf : ProtectionOutputFormat.Zip;
+
+    public const bool RequirePasswordConfirmation = true;
+
+    /// <summary>Owner permissions start permissive; the user opts into blocking print/copy.</summary>
+    public const bool AllowPrintingByDefault = true;
+
+    public const bool AllowCopyingByDefault = true;
+
+    /// <summary>ZIP entries are AES-256, never a weaker method.</summary>
+    public const int ZipAesKeyBits = 256;
+}
+
 /// <summary>One file or directory that will become an entry in the protected archive.</summary>
 public readonly record struct ProtectedZipEntry(
     string SourcePath,

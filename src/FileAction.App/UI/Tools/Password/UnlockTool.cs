@@ -2,6 +2,8 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Threading;
 using FileAction.Core;
 using static FileAction.Core.Loc;
 
@@ -75,14 +77,24 @@ internal sealed class UnlockView
     private readonly PasswordField _password = new("tool.unlock.show", "tool.unlock.hide");
     private readonly BusyRow _busy;
     private readonly TextBlock _error = PasswordViewParts.Error();
+    private readonly PasswordEntryState _form = new();
+
     private CancellationTokenSource? _cts;
+    private ScrollViewer? _anchor;
+    private Border? _primary;
+    private bool _busyNow;
 
     public UnlockView(FileItem item, DropTargets? targets)
     {
         _item = item;
         _targets = targets;
         _busy = new BusyRow(T("tool.unlock.progress.cancel"), Cancel);
-        _password.Changed += HideError;
+        _password.Changed += () =>
+        {
+            _form.Password = _password.Value;
+            UpdatePrimaryState();
+            HideError();
+        };
     }
 
     public ToolContent Build()
@@ -108,7 +120,16 @@ internal sealed class UnlockView
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Focusable = false,
         };
-        scroll.Loaded += (_, _) => _password.FocusInput();
+        _anchor = scroll;
+        scroll.Loaded += (_, _) =>
+        {
+            _primary = PasswordViewParts.FindPrimaryButton(scroll);
+            PasswordViewParts.ConfigurePrimary(_primary, T("tool.unlock.label"), false);
+            if (Window.GetWindow(scroll) is { } window)
+                window.KeyDown += OnWindowKeyDown;
+            _password.FocusInput();
+            UpdatePrimaryState();
+        };
         scroll.Unloaded += (_, _) =>
         {
             Cancel();
@@ -134,12 +155,32 @@ internal sealed class UnlockView
             () => Task.CompletedTask);
     }
 
+    private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+        e.Handled = true;
+        PasswordViewParts.ClickPrimary(_primary);
+    }
+
+    private void UpdatePrimaryState() =>
+        PasswordViewParts.ConfigurePrimary(
+            _primary,
+            T("tool.unlock.label"),
+            !_busyNow && _form.CanSubmit);
+
+    private void SchedulePrimaryUpdate() => _anchor?.Dispatcher.BeginInvoke(
+        new Action(UpdatePrimaryState),
+        DispatcherPriority.Background);
+
     private void Reset()
     {
         Cancel();
+        _form.Reset();
         _password.Clear();
         _busy.Hide();
         HideError();
+        UpdatePrimaryState();
     }
 
     private void Cancel() => _cts?.Cancel();
@@ -148,7 +189,8 @@ internal sealed class UnlockView
     {
         HideError();
 
-        var password = _password.Value;
+        _form.Password = _password.Value;
+        var password = _form.Password;
         var problem = PasswordRules.ValidateForUnlock(password);
         if (problem != PasswordProblem.None)
         {
@@ -159,6 +201,7 @@ internal sealed class UnlockView
                 ? new object?[] { PasswordRules.MaximumLength }
                 : [];
             ShowError(T(key, arguments));
+            SchedulePrimaryUpdate();
             throw new PasswordProtectionException(PasswordProtectionFailure.InvalidPassword, key, null, arguments);
         }
 
@@ -211,6 +254,7 @@ internal sealed class UnlockView
         finally
         {
             SetBusy(false);
+            SchedulePrimaryUpdate();
             _cts?.Dispose();
             _cts = null;
         }
@@ -218,11 +262,13 @@ internal sealed class UnlockView
 
     private void SetBusy(bool busy)
     {
+        _busyNow = busy;
         _password.SetEnabled(!busy);
         if (busy)
             _busy.Show(indeterminate: _item.Format == "pdf", T("tool.unlock.progress.working"));
         else
             _busy.Hide();
+        UpdatePrimaryState();
     }
 
     private void ShowError(string message)
@@ -260,6 +306,8 @@ internal sealed class UnlockView
 
     public void ClearSecrets()
     {
+        _form.Reset();
         _password.Clear();
+        UpdatePrimaryState();
     }
 }

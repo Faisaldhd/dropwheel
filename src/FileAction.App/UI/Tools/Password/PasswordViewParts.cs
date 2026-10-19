@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using FileAction.Core;
 using static FileAction.Core.Loc;
 
@@ -107,11 +108,32 @@ internal sealed class PasswordField : Grid
             },
         };
         ToolTipService.SetToolTip(_eye, T(_showKey));
+        _eye.Focusable = true;
+        KeyboardNavigation.SetIsTabStop(_eye, true);
         _eye.MouseEnter += (_, _) => _eye.Background = Theme.Hover;
         _eye.MouseLeave += (_, _) => _eye.Background = Brushes.Transparent;
+        _eye.GotKeyboardFocus += (_, _) => _eye.Background = Theme.Hover;
+        _eye.LostKeyboardFocus += (_, _) => _eye.Background = Brushes.Transparent;
         _eye.MouseLeftButtonUp += (_, _) => ToggleVisibility();
+        _eye.KeyDown += (_, e) =>
+        {
+            if (e.Key is Key.Enter or Key.Space)
+            {
+                e.Handled = true;
+                ToggleVisibility();
+            }
+        };
         SetColumn(_eye, 1);
         Children.Add(_eye);
+
+        // A revealed field becomes hidden again as soon as focus leaves it.
+        LostKeyboardFocus += (_, _) => Dispatcher.BeginInvoke(
+            new Action(() =>
+            {
+                if (!IsKeyboardFocusWithin)
+                    Hide();
+            }),
+            DispatcherPriority.Input);
     }
 
     public event Action? Changed;
@@ -125,6 +147,7 @@ internal sealed class PasswordField : Grid
         _masked.Clear();
         _plain.Clear();
         _syncing = false;
+        ResetToHidden();
     }
 
     public void FocusInput()
@@ -142,34 +165,61 @@ internal sealed class PasswordField : Grid
 
     public void SetEnabled(bool enabled)
     {
+        if (!enabled)
+            Hide();
         _masked.IsEnabled = enabled;
         _plain.IsEnabled = enabled;
         _eye.IsHitTestVisible = enabled;
+        _eye.Focusable = enabled;
+        KeyboardNavigation.SetIsTabStop(_eye, enabled);
         Opacity = enabled ? 1 : 0.55;
     }
 
     /// <summary>Switches between the masked and the visible control without losing the caret.</summary>
     public void ToggleVisibility()
     {
-        var value = Value;
-        _showing = !_showing;
-        _syncing = true;
         if (_showing)
-        {
-            _plain.Text = value;
-            _plain.Visibility = Visibility.Visible;
-            _masked.Visibility = Visibility.Collapsed;
-        }
+            Hide();
         else
-        {
-            _masked.Password = value;
-            _masked.Visibility = Visibility.Visible;
-            _plain.Visibility = Visibility.Collapsed;
-        }
-        _syncing = false;
-
-        ToolTipService.SetToolTip(_eye, T(_showing ? _hideKey : _showKey));
+            Show();
         FocusInput();
+    }
+
+    private void Show()
+    {
+        if (_showing)
+            return;
+        _syncing = true;
+        _plain.Text = _masked.Password;
+        _plain.Visibility = Visibility.Visible;
+        _masked.Visibility = Visibility.Collapsed;
+        _showing = true;
+        _syncing = false;
+        ToolTipService.SetToolTip(_eye, T(_hideKey));
+    }
+
+    /// <summary>Hides the reveal and clears the plain mirror; the PasswordBox keeps the value.</summary>
+    private void Hide()
+    {
+        if (!_showing)
+            return;
+
+        _syncing = true;
+        _masked.Password = _plain.Text;
+        _plain.Clear();
+        _plain.Visibility = Visibility.Collapsed;
+        _masked.Visibility = Visibility.Visible;
+        _showing = false;
+        _syncing = false;
+        ToolTipService.SetToolTip(_eye, T(_showKey));
+    }
+
+    private void ResetToHidden()
+    {
+        _showing = false;
+        _masked.Visibility = Visibility.Visible;
+        _plain.Visibility = Visibility.Collapsed;
+        ToolTipService.SetToolTip(_eye, T(_showKey));
     }
 }
 
@@ -391,4 +441,57 @@ internal static class PasswordViewParts
         Visibility = Visibility.Collapsed,
         Margin = new Thickness(0, 8, 0, 0),
     };
+
+    /// <summary>
+    /// Finds the shared ToolWindow's primary button so this tool can label and gate it. The shared record
+    /// carries no caption today; this lookup avoids editing another tool's window while doing so.
+    /// </summary>
+    public static Border? FindPrimaryButton(FrameworkElement anchor)
+    {
+        var window = Window.GetWindow(anchor);
+        if (window is null)
+            return null;
+        return Descendants(window)
+            .OfType<Border>()
+            .FirstOrDefault(IsPrimaryButton);
+    }
+
+    /// <summary>Sets the primary caption and its enabled/disabled look.</summary>
+    public static void ConfigurePrimary(Border? button, string label, bool enabled)
+    {
+        if (button is null)
+            return;
+        Controls.SetText(button, label);
+        button.IsEnabled = enabled;
+        button.Opacity = enabled ? 1 : 0.5;
+    }
+
+    /// <summary>Raises the same click the shared button handles, for Enter-to-submit.</summary>
+    public static void ClickPrimary(Border? button)
+    {
+        if (button is not { IsEnabled: true })
+            return;
+        button.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+        {
+            RoutedEvent = UIElement.MouseLeftButtonUpEvent,
+            Source = button,
+        });
+    }
+
+    private static bool IsPrimaryButton(Border border) =>
+        border.Child is StackPanel { Orientation: Orientation.Horizontal } panel &&
+        panel.Children.OfType<TextBlock>().LastOrDefault() is { } label &&
+        string.Equals(label.Text, T("tool.window.apply"), StringComparison.Ordinal);
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var index = 0; index < count; index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            yield return child;
+            foreach (var descendant in Descendants(child))
+                yield return descendant;
+        }
+    }
 }

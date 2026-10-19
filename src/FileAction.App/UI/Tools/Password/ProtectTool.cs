@@ -3,6 +3,8 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Threading;
 using FileAction.Core;
 using static FileAction.Core.Loc;
 
@@ -90,16 +92,29 @@ internal sealed class ProtectView
     private readonly SwitchRow _blockCopy;
     private readonly BusyRow _busy;
     private readonly TextBlock _error = PasswordViewParts.Error();
+    private readonly PasswordFormState _form = new();
+    private readonly TextBlock _matchStatus = new()
+    {
+        FontSize = 11.5,
+        TextWrapping = TextWrapping.Wrap,
+        Visibility = Visibility.Collapsed,
+        Margin = new Thickness(0, 5, 0, 0),
+    };
 
     private ProtectFormat _format;
     private CancellationTokenSource? _cts;
+    private ScrollViewer? _anchor;
+    private Border? _primary;
+    private bool _busyNow;
 
     public ProtectView(IReadOnlyList<FileItem> items, DropTargets? targets)
     {
         _items = items;
         _targets = targets;
         _canChoosePdf = items.Count == 1 && !items[0].IsDirectory && items[0].Format == "pdf";
-        _defaultFormat = _canChoosePdf ? ProtectFormat.Pdf : ProtectFormat.Zip;
+        _defaultFormat = PasswordProtectionDefaults.DefaultFormat(items.Count, _canChoosePdf) == ProtectionOutputFormat.Pdf
+            ? ProtectFormat.Pdf
+            : ProtectFormat.Zip;
         _format = _defaultFormat;
 
         _zipNote = PasswordViewParts.Note("tool.protect.note.names");
@@ -109,10 +124,19 @@ internal sealed class ProtectView
 
         _password.Changed += () =>
         {
-            _strength.Set(_password.Value);
+            _form.Password = _password.Value;
+            _strength.Set(_form.Password);
+            UpdateMatchStatus();
+            UpdatePrimaryState();
             HideError();
         };
-        _confirm.Changed += HideError;
+        _confirm.Changed += () =>
+        {
+            _form.Confirmation = _confirm.Value;
+            UpdateMatchStatus();
+            UpdatePrimaryState();
+            HideError();
+        };
 
         _pdfOptions.Children.Add(PasswordViewParts.Caption("tool.protect.permissions"));
         _pdfOptions.Children.Add(_blockPrint);
@@ -125,6 +149,13 @@ internal sealed class ProtectView
         var content = new StackPanel { Margin = new Thickness(1, 0, 5, 0) };
         content.Children.Add(PasswordViewParts.Note("tool.protect.intro"));
         content.Children.Add(Summary());
+        content.Children.Add(new TextBlock
+        {
+            Text = T("tool.protect.status.aes"),
+            FontSize = 11.5,
+            Foreground = Theme.Accent,
+            Margin = new Thickness(0, 5, 0, 0),
+        });
 
         if (_canChoosePdf)
         {
@@ -137,6 +168,7 @@ internal sealed class ProtectView
         content.Children.Add(_password);
         content.Children.Add(PasswordViewParts.Caption("tool.protect.confirm"));
         content.Children.Add(_confirm);
+        content.Children.Add(_matchStatus);
         content.Children.Add(PasswordViewParts.Caption("tool.protect.strength"));
         content.Children.Add(_strength);
         content.Children.Add(PasswordViewParts.Note("tool.protect.note.password"));
@@ -153,7 +185,17 @@ internal sealed class ProtectView
             Focusable = false,
         };
 
-        scroll.Loaded += (_, _) => _password.FocusInput();
+        _anchor = scroll;
+        scroll.Loaded += (_, _) =>
+        {
+            _primary = PasswordViewParts.FindPrimaryButton(scroll);
+            PasswordViewParts.ConfigurePrimary(_primary, T("tool.protect.label"), false);
+            if (Window.GetWindow(scroll) is { } window)
+                window.KeyDown += OnWindowKeyDown;
+            _password.FocusInput();
+            UpdateMatchStatus();
+            UpdatePrimaryState();
+        };
         scroll.Unloaded += (_, _) =>
         {
             Cancel();
@@ -218,9 +260,53 @@ internal sealed class ProtectView
         _zipNote.Visibility = pdf ? Visibility.Collapsed : Visibility.Visible;
     }
 
+    private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+        e.Handled = true;
+        PasswordViewParts.ClickPrimary(_primary);
+    }
+
+    private void UpdatePrimaryState() =>
+        PasswordViewParts.ConfigurePrimary(
+            _primary,
+            T("tool.protect.label"),
+            !_busyNow && _form.CanSubmit);
+
+    private void UpdateMatchStatus()
+    {
+        var status = _form.MatchStatus;
+        _matchStatus.Visibility = status == PasswordMatchStatus.Empty ? Visibility.Collapsed : Visibility.Visible;
+        switch (status)
+        {
+            case PasswordMatchStatus.Match:
+                _matchStatus.Text = T("tool.protect.match.yes");
+                _matchStatus.Foreground = Theme.Success;
+                break;
+            case PasswordMatchStatus.Mismatch:
+                _matchStatus.Text = T("tool.protect.match.no");
+                _matchStatus.Foreground = Theme.Error;
+                break;
+            case PasswordMatchStatus.TooShort:
+                _matchStatus.Text = T("tool.protect.hint.minLength", PasswordRules.MinimumLength);
+                _matchStatus.Foreground = Theme.Error;
+                break;
+            default:
+                _matchStatus.Text = string.Empty;
+                break;
+        }
+    }
+
+    /// <summary>Re-applies the gate after the shared window's own finally re-enables its button.</summary>
+    private void SchedulePrimaryUpdate() => _anchor?.Dispatcher.BeginInvoke(
+        new Action(UpdatePrimaryState),
+        DispatcherPriority.Background);
+
     private void Reset()
     {
         Cancel();
+        _form.Reset();
         _password.Clear();
         _confirm.Clear();
         _strength.Set(null);
@@ -228,6 +314,8 @@ internal sealed class ProtectView
         _blockCopy.Set(false);
         _busy.Hide();
         HideError();
+        UpdateMatchStatus();
+        UpdatePrimaryState();
         _format = _defaultFormat;
         if (_canChoosePdf)
             _formatHost.Content = FormatChoices();
@@ -240,7 +328,9 @@ internal sealed class ProtectView
     {
         HideError();
 
-        var password = _password.Value;
+        _form.Password = _password.Value;
+        _form.Confirmation = _confirm.Value;
+        var password = _form.Password;
         var problem = PasswordRules.Validate(password, _confirm.Value, requireConfirmation: true);
         if (problem != PasswordProblem.None)
         {
@@ -251,6 +341,7 @@ internal sealed class ProtectView
                     ? new object?[] { PasswordRules.MaximumLength }
                     : [];
             ShowError(T(key, arguments));
+            SchedulePrimaryUpdate();
             throw new PasswordProtectionException(FailureFor(problem), key, null, arguments);
         }
 
@@ -258,6 +349,7 @@ internal sealed class ProtectView
         {
             var message = T("tool.protect.error.pdfPassword");
             ShowError(message);
+            SchedulePrimaryUpdate();
             throw new PasswordProtectionException(PasswordProtectionFailure.TooLong, "tool.protect.error.pdfPassword");
         }
 
@@ -308,6 +400,7 @@ internal sealed class ProtectView
         finally
         {
             SetBusy(false);
+            SchedulePrimaryUpdate();
             _cts?.Dispose();
             _cts = null;
         }
@@ -323,6 +416,7 @@ internal sealed class ProtectView
 
     private void SetBusy(bool busy)
     {
+        _busyNow = busy;
         _password.SetEnabled(!busy);
         _confirm.SetEnabled(!busy);
         _formatHost.IsEnabled = !busy;
@@ -331,6 +425,7 @@ internal sealed class ProtectView
             _busy.Show(indeterminate: _format == ProtectFormat.Pdf, T("tool.protect.progress.working"));
         else
             _busy.Hide();
+        UpdatePrimaryState();
     }
 
     private void ShowError(string message)
@@ -370,8 +465,11 @@ internal sealed class ProtectView
     /// <summary>Clears the fields when the window closes; nothing is persisted or logged.</summary>
     public void ClearSecrets()
     {
+        _form.Reset();
         _password.Clear();
         _confirm.Clear();
         _strength.Set(null);
+        UpdateMatchStatus();
+        UpdatePrimaryState();
     }
 }

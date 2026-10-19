@@ -70,6 +70,60 @@ public class PasswordProtectionTests
     }
 
     [Fact]
+    public void Protect_defaults_suggest_pdf_for_one_pdf_and_zip_otherwise()
+    {
+        Assert.Equal(ProtectionOutputFormat.Pdf, PasswordProtectionDefaults.DefaultFormat(1, firstItemIsPdf: true));
+        Assert.Equal(ProtectionOutputFormat.Zip, PasswordProtectionDefaults.DefaultFormat(1, firstItemIsPdf: false));
+        Assert.Equal(ProtectionOutputFormat.Zip, PasswordProtectionDefaults.DefaultFormat(2, firstItemIsPdf: true));
+        Assert.True(PasswordProtectionDefaults.RequirePasswordConfirmation);
+        Assert.True(PasswordProtectionDefaults.AllowPrintingByDefault);
+        Assert.True(PasswordProtectionDefaults.AllowCopyingByDefault);
+        Assert.Equal(256, PasswordProtectionDefaults.ZipAesKeyBits);
+    }
+
+    [Fact]
+    public void Protect_primary_stays_disabled_until_both_fields_match_and_are_long_enough()
+    {
+        var form = new PasswordFormState();
+        Assert.False(form.CanSubmit);
+        Assert.Equal(PasswordMatchStatus.Empty, form.MatchStatus);
+
+        form.Password = "short";
+        form.Confirmation = "short";
+        Assert.Equal(PasswordMatchStatus.TooShort, form.MatchStatus);
+        Assert.False(form.CanSubmit);
+
+        form.Password = "long enough";
+        form.Confirmation = "different";
+        Assert.Equal(PasswordMatchStatus.Mismatch, form.MatchStatus);
+        Assert.False(form.CanSubmit);
+
+        form.Confirmation = "long enough";
+        Assert.Equal(PasswordMatchStatus.Match, form.MatchStatus);
+        Assert.True(form.CanSubmit);
+    }
+
+    [Fact]
+    public void Eye_toggle_state_is_hidden_after_reset_and_close()
+    {
+        var protect = new PasswordFormState { Password = "long enough", Confirmation = "long enough" };
+        protect.ToggleReveal();
+        Assert.True(protect.Revealed);
+        protect.Reset();
+        Assert.False(protect.Revealed);
+        Assert.Equal(string.Empty, protect.Password);
+        Assert.Equal(string.Empty, protect.Confirmation);
+
+        var unlock = new PasswordEntryState { Password = "abc" };
+        unlock.ToggleReveal();
+        Assert.True(unlock.Revealed);
+        Assert.True(unlock.CanSubmit);
+        unlock.Reset();
+        Assert.False(unlock.Revealed);
+        Assert.False(unlock.CanSubmit);
+    }
+
+    [Fact]
     public void Capabilities_do_not_pretend_zip_can_hide_names()
     {
         Assert.Equal(256, PasswordProtectionCapabilities.ZipAesKeyBits);
@@ -258,14 +312,19 @@ public class PasswordProtectionTests
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        Assert.True(newKeys.Length >= 57, $"only {newKeys.Length} protect/unlock keys");
+        Assert.True(newKeys.Length >= 60, $"only {newKeys.Length} protect/unlock keys");
         Assert.Equal(newKeys, ar.Keys
             .Where(key => key.StartsWith("tool.protect.", StringComparison.Ordinal) ||
                           key.StartsWith("tool.unlock.", StringComparison.Ordinal))
             .Order(StringComparer.Ordinal));
+        Assert.Contains("tool.protect.status.aes", newKeys);
+        Assert.Contains("tool.protect.match.yes", newKeys);
+        Assert.Contains("tool.protect.match.no", newKeys);
 
         foreach (var key in newKeys)
         {
+            Assert.True(en.ContainsKey(key), $"en is missing '{key}'");
+            Assert.True(ar.ContainsKey(key), $"ar is missing '{key}'");
             Assert.False(string.IsNullOrWhiteSpace(en[key]), $"en '{key}' is empty");
             Assert.False(string.IsNullOrWhiteSpace(ar[key]), $"ar '{key}' is empty");
             Assert.Equal(Placeholders(en[key]), Placeholders(ar[key]));
