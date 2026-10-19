@@ -136,6 +136,24 @@ public class IntegrationTests : IClassFixture<IntegrationTests.Samples>
                 File.Move(tmp, pptx);
                 Files["pptx"] = pptx;
             }
+
+            // Prefer the owner's real-world fixtures when _local\testdata is present (never in CI): they cover
+            // HEIC/RAR/7z/FLAC, a 50-page PDF and a read-only file that the generated samples cannot.
+            TestData.ApplyFixtures(Dir, Files);
+            if (Files.TryGetValue("readonly", out var readOnlySample))
+                File.SetAttributes(readOnlySample, File.GetAttributes(readOnlySample) | FileAttributes.ReadOnly);
+            if (TestData.FixtureRoot is not null && Files.TryGetValue("pdf", out var fixturePdf))
+            {
+                try
+                {
+                    PdfBackend.ExtractText(fixturePdf, markdown: false);
+                    PdfHasText = true;
+                }
+                catch (ConversionException)
+                {
+                    PdfHasText = false;
+                }
+            }
         }
 
         private void Ffmpeg(params string[] args) =>
@@ -167,7 +185,7 @@ public class IntegrationTests : IClassFixture<IntegrationTests.Samples>
     private static bool IsAbout(ConversionException ex, params string[] needles) =>
         needles.Any(n => ex.Message.Contains(n, StringComparison.OrdinalIgnoreCase));
 
-    public static TheoryData<string> SampleKeys() => new(        "png", "jpg", "svg", "pdf", "md", "html", "txt", "xlsx", "csv", "srt", "folder", "zip", "tgz", "mp4", "avi", "wav", "mp3", "gif", "docx", "pptx");
+    public static TheoryData<string> SampleKeys() => new("png", "jpg", "svg", "pdf", "md", "html", "txt", "xlsx", "csv", "srt", "folder", "zip", "tgz", "mp4", "avi", "wav", "mp3", "gif", "docx", "pptx", "readonly");
 
     [Theory]
     [MemberData(nameof(SampleKeys))]
