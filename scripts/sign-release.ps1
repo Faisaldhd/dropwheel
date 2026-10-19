@@ -157,7 +157,11 @@ function Import-PrivateKey {
     try {
         $key = [System.Security.Cryptography.ECDsa]::Create()
         $read = 0
-        $key.ImportPkcs8PrivateKey($bytes, [ref] $read)
+        try {
+            $key.ImportPkcs8PrivateKey($bytes, [ref] $read)
+        } catch {
+            throw "UPDATE_SIGNING_KEY is not a valid base64 PKCS#8 P-256 private key: $($_.Exception.Message)"
+        }
         if ($read -ne $bytes.Length) {
             throw 'UPDATE_SIGNING_KEY contains data after the PKCS#8 private key.'
         }
@@ -180,7 +184,11 @@ function Import-PublicKey {
     try {
         $key = [System.Security.Cryptography.ECDsa]::Create()
         $read = 0
-        $key.ImportSubjectPublicKeyInfo($bytes, [ref] $read)
+        try {
+            $key.ImportSubjectPublicKeyInfo($bytes, [ref] $read)
+        } catch {
+            throw "The update public key is not a valid base64 SubjectPublicKeyInfo: $($_.Exception.Message)"
+        }
         if ($read -ne $bytes.Length) {
             throw 'The update public key contains data after the SubjectPublicKeyInfo.'
         }

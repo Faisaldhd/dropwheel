@@ -71,6 +71,9 @@ running `.ps1` files locally, so the scripts were **not executed here**. What wa
 
 ### release-clean (owner of `.github/workflows/ci.yml`) - P0 for the first signed release
 
+Neither step below is in `ci.yml` yet; release-clean is adding the signing step and the
+no-secret self-test to the workflow.
+
 1. **Add the signing step to the release job.** The release job currently has no
    `actions/checkout`, so it needs one before the script can read `scripts/` and `UpdateKey.cs`:
 

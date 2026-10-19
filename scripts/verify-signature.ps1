@@ -120,7 +120,11 @@ function Import-PublicKey {
     try {
         $key = [System.Security.Cryptography.ECDsa]::Create()
         $read = 0
-        $key.ImportSubjectPublicKeyInfo($bytes, [ref] $read)
+        try {
+            $key.ImportSubjectPublicKeyInfo($bytes, [ref] $read)
+        } catch {
+            throw "The update public key is not a valid base64 SubjectPublicKeyInfo: $($_.Exception.Message)"
+        }
         if ($read -ne $bytes.Length) {
             throw 'The update public key contains data after the SubjectPublicKeyInfo.'
         }
