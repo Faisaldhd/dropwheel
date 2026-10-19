@@ -39,6 +39,7 @@ internal static class LockRuntime
             Service = new LockService(LockEnvironment.Default(), new ProtectionHost());
             Journal = new LockJournalStore(ProtectionPaths.SessionsFolder);
             Sessions = new LockSessionManager(Service, Journal, Settings);
+            Sessions.Locked += (title, text) => Notifications.Show(title, text);
         }
     }
 

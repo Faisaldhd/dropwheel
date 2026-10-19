@@ -384,7 +384,7 @@ internal sealed class LockProtectView
                     item.Path, directory, credentials, string.IsNullOrEmpty(icon) ? null : icon, progress));
                 outputs.Add(outcome.OutputPath);
                 if (!outcome.SourceRemoved && outcome.LeftoverSource is not null)
-                    notes.Add(T("tool.lock.warn.leftover", Bidi.Value(outcome.LeftoverSource)));
+                    notes.Add(T("tool.protect.warn.leftover", Bidi.Value(outcome.LeftoverSource)));
             }
             catch (Exception ex) when (ex is LockException or IOException or UnauthorizedAccessException
                                            or LockPolicyException or ArgumentException)
@@ -418,7 +418,7 @@ internal sealed class LockWarningDialog : Window
 
     private LockWarningDialog(IReadOnlyList<FileItem> items)
     {
-        var body = LockUi.Configure(this, T("tool.lock.warn.title"), 520, 540);
+        var body = LockUi.Configure(this, T("tool.protect.warn.title"), 520, 540);
         body.Children.Add(new TextBlock
         {
             Text = items.Count == 1 ? Bidi.Value(items[0].Name) : Items(items.Count),
@@ -428,7 +428,7 @@ internal sealed class LockWarningDialog : Window
         });
         body.Children.Add(new TextBlock
         {
-            Text = T("tool.lock.warn.body"),
+            Text = T("tool.protect.warn.body"),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12.5,
             LineHeight = 20,
@@ -439,7 +439,7 @@ internal sealed class LockWarningDialog : Window
         {
             Content = new TextBlock
             {
-                Text = T("tool.lock.warn.checkbox"),
+                Text = T("tool.protect.warn.checkbox"),
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = 12.5,
                 Foreground = Theme.Text,
@@ -452,8 +452,8 @@ internal sealed class LockWarningDialog : Window
         body.Children.Add(_ack);
 
         var buttons = new DockPanel();
-        var cancel = Controls.Button(T("tool.lock.warn.cancel"), Close);
-        _encrypt = Controls.Button(T("tool.lock.warn.protect"), () =>
+        var cancel = Controls.Button(T("tool.protect.warn.cancel"), Close);
+        _encrypt = Controls.Button(T("tool.protect.warn.protect"), () =>
         {
             DialogResult = true;
             Close();
@@ -502,6 +502,7 @@ internal sealed class LockUnlockView
     private readonly TextBlock _error;
     private readonly TextBlock _ladder;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _failures;
 
     public LockUnlockView(FileItem item, DropTargets? targets)
     {
@@ -624,11 +625,17 @@ internal sealed class LockUnlockView
             OfferRescuerReset(owner, kind);
             return null;
         }
+        catch (LockWrongSecretException)
+        {
+            _failures++;
+            var delay = LockSecrets.DelayAfter(_failures);
+            if (delay > TimeSpan.Zero)
+                await Task.Delay(delay);
+            throw new InvalidOperationException(LockRuntime.Describe(new LockWrongSecretException()));
+        }
         catch (Exception ex) when (ex is LockException or IOException or UnauthorizedAccessException
                                        or LockPolicyException)
         {
-            // The shared window keeps itself open and shows the generic message; it never names the
-            // secret that was wrong.
             throw new InvalidOperationException(LockRuntime.Describe(ex));
         }
     }
@@ -636,9 +643,6 @@ internal sealed class LockUnlockView
     private void OfferRescuerReset(Window? owner, LockSecretKind kind)
     {
         if (kind != LockSecretKind.RescuerKey)
-            return;
-        var stored = LockRuntime.Vault.Load();
-        if (stored is not null && !string.IsNullOrEmpty(stored.Password))
             return;
         if (Dialogs.Show(owner, T("tool.lock.unlock.resetOffer"), T("tool.lock.rescuer.resetTitle"),
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)

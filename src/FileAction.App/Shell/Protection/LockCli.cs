@@ -17,6 +17,7 @@ internal sealed class LockOpenWindow : Window
     private readonly string _path;
     private readonly SecretField _secret;
     private readonly TextBlock _error;
+    private int _failures;
 
     public LockOpenWindow(string path)
     {
@@ -101,6 +102,14 @@ internal sealed class LockOpenWindow : Window
         {
             await LockRuntime.Sessions.OpenAsync(_path, _secret.Text);
             Close();
+        }
+        catch (LockWrongSecretException)
+        {
+            _failures++;
+            var delay = LockSecrets.DelayAfter(_failures);
+            if (delay > TimeSpan.Zero)
+                await Task.Delay(delay);
+            _error.Text = LockRuntime.Describe(new LockWrongSecretException());
         }
         catch (Exception ex) when (ex is LockException or IOException or UnauthorizedAccessException
                                        or LockPolicyException or ArgumentException)

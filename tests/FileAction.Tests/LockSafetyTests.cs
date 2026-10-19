@@ -957,17 +957,17 @@ public class LockSafetyTests
         }
 
         // The warning text is fixed by the specification and must not drift.
-        Assert.Equal("سيتم تشفير الملف", arabic["tool.lock.warn.title"]);
-        Assert.Equal("فهمت، أريد التشفير", arabic["tool.lock.warn.checkbox"]);
-        Assert.Equal("تشفير", arabic["tool.lock.warn.protect"]);
-        Assert.Equal("إلغاء", arabic["tool.lock.warn.cancel"]);
-        Assert.Contains("(.dwenc)", arabic["tool.lock.warn.body"]);
-        Assert.Contains("DropWheel", arabic["tool.lock.warn.body"]);
-        Assert.Contains("لا يمكن استرجاع الملف أبداً", arabic["tool.lock.warn.body"]);
-        Assert.Equal("The file will be encrypted", english["tool.lock.warn.title"]);
-        Assert.Equal("I understand; I want to encrypt", english["tool.lock.warn.checkbox"]);
-        Assert.Equal("Encrypt", english["tool.lock.warn.protect"]);
-        Assert.Equal("Cancel", english["tool.lock.warn.cancel"]);
+        Assert.Equal("سيتم تشفير الملف", arabic["tool.protect.warn.title"]);
+        Assert.Equal("فهمت، أريد التشفير", arabic["tool.protect.warn.checkbox"]);
+        Assert.Equal("تشفير", arabic["tool.protect.warn.protect"]);
+        Assert.Equal("إلغاء", arabic["tool.protect.warn.cancel"]);
+        Assert.Contains("(.dwenc)", arabic["tool.protect.warn.body"]);
+        Assert.Contains("DropWheel", arabic["tool.protect.warn.body"]);
+        Assert.Contains("لا يمكن استرجاع الملف أبداً", arabic["tool.protect.warn.body"]);
+        Assert.Equal("The file will be encrypted", english["tool.protect.warn.title"]);
+        Assert.Equal("I understand; I want to encrypt", english["tool.protect.warn.checkbox"]);
+        Assert.Equal("Encrypt", english["tool.protect.warn.protect"]);
+        Assert.Equal("Cancel", english["tool.protect.warn.cancel"]);
         Assert.Equal("Encrypted: AES-256-GCM", english["tool.lock.status"]);
         Assert.Equal("Lock now", english["tool.lock.panel.lockNow"]);
         Assert.Equal("Encrypt", english["tool.lock.protect"]);
