@@ -14,6 +14,7 @@ using FileAction.App.UI.Tools.Image;
 using FileAction.App.Wheel;
 using FileAction.Core;
 using FileAction.Core.Operations;
+using static FileAction.Core.Loc;
 using FileAction.Core.Updates;
 using ImageMagick;
 
@@ -428,25 +429,50 @@ internal static class SelfTest
                 $"raw localization key rendered in {where}: {string.Join(", ", bad.Distinct(StringComparer.Ordinal))}");
     }
 
-    /// <summary>Builds every registered floating tool offscreen, so --self-test covers their layout and strings.</summary>
+    /// <summary>Builds every registered floating tool offscreen and writes the tool screenshot sheet.</summary>
     private static void TestToolWindows(string outDir, List<string> log)
     {
         var directory = Path.Combine(outDir, "tools");
-        Directory.CreateDirectory(directory);
+        var en = Path.Combine(directory, "en");
+        Directory.CreateDirectory(en);
         if (ToolRegistry.All.Count == 0)
             throw new InvalidOperationException("no tool windows registered");
 
-        var sample = Path.Combine(directory, "crop-sample.png");
-        using (var image = new MagickImage(MagickColors.RebeccaPurple, 640, 420))
-            image.Write(sample);
+        var samples = Path.Combine(directory, "samples");
+        Directory.CreateDirectory(samples);
+        var landscape = SampleImage(Path.Combine(samples, "landscape.png"), 1200, 800);
+        var portrait = SampleImage(Path.Combine(samples, "portrait.png"), 800, 1200);
 
-        var item = new FileItem(sample);
-        if (!CropTool.Instance.Applies([item]))
+        if (!CropTool.Instance.Applies([new FileItem(landscape)]))
             throw new InvalidOperationException("the crop tool does not accept a png");
 
-        var window = new ToolWindow(CropTool.Instance, [item], null);
-        Pump(() => window.PrepareAsync(animate: false));
-        SaveWindow(window, Path.Combine(directory, "crop.png"), window.Width, desktop: true);
+        var rows = new List<string>
+        {
+            "| tool id | variant | window DIP | window px (100% DPI) | preview DIP | chrome | primary button | visible controls |",
+            "|---|---|---|---|---|---|---|---|",
+        };
+
+        foreach (var spec in ToolRegistry.All.OrderBy(t => t.Id, StringComparer.Ordinal))
+        {
+            foreach (var (variant, path) in new[] { ("landscape", landscape), ("portrait", portrait) })
+            {
+                if (!spec.Applies([new FileItem(path)]))
+                    continue;
+
+                var window = new ToolWindow(spec, [new FileItem(path)], null);
+                Pump(() => window.PrepareAsync(animate: false));
+                var controls = CollectControls((FrameworkElement)window.Content, 10);
+                using var probe = new MagickImage(path);
+                var size = ToolWindowSizer.Compute(spec.Layout, probe.Width, probe.Height, 1920, 1080, 1.0);
+                var name = spec.Id.Replace("tools.", "", StringComparison.Ordinal);
+                SaveWindow(window, Path.Combine(en, $"{name}-{variant}.png"), window.Width, desktop: true);
+                rows.Add($"| `{spec.Id}` | {variant} | {window.Width:0}x{window.Height:0} | {window.Width:0}x{window.Height:0} | " +
+                         $"{size.PreviewWidth:0}x{size.PreviewHeight:0} | {spec.Layout.ChromeHeight:0} | " +
+                         $"{Escape(T(spec.PrimaryLabelKey))} | {Escape(string.Join(", ", controls))} |");
+            }
+        }
+
+        File.WriteAllLines(Path.Combine(directory, "SIZES.md"), rows);
 
         // The adaptive sizer must keep every media shape inside the work area.
         foreach (var (width, height, name) in new (double, double, string)[]
@@ -460,9 +486,44 @@ internal static class SelfTest
                 throw new InvalidOperationException($"tool sizer does not fit {name}: {size.Width}x{size.Height}");
         }
 
-        log.Add($"ok tools/crop ({ToolRegistry.All.Count} registered)");
+        log.Add($"ok tools/sheet ({ToolRegistry.All.Count} tools, {rows.Count - 2} renders)");
         log.Add("ok tools/sizer (7 shapes fit the work area)");
     }
+
+    private static string SampleImage(string path, int width, int height)
+    {
+        using var image = new MagickImage(MagickColors.RebeccaPurple, (uint)width, (uint)height);
+        image.Write(path);
+        return path;
+    }
+
+    /// <summary>Visible control captions in reading order, bounded: enough for the size sheet.</summary>
+    private static List<string> CollectControls(DependencyObject root, int limit)
+    {
+        var found = new List<string>();
+        var queue = new Queue<DependencyObject>();
+        queue.Enqueue(root);
+        while (queue.Count > 0 && found.Count < limit)
+        {
+            var node = queue.Dequeue();
+            if (node is TextBlock text && !string.IsNullOrWhiteSpace(text.Text) && text.FontSize >= 10)
+            {
+                var value = text.Text.Trim();
+                if (value.Length <= 40 && !found.Contains(value))
+                    found.Add(value);
+            }
+            if (node is TextBox box && !string.IsNullOrWhiteSpace(box.Text) && found.Count < limit)
+                found.Add("field:" + box.Text.Trim());
+            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
+                queue.Enqueue(VisualTreeHelper.GetChild(node, i));
+            foreach (var child in LogicalTreeHelper.GetChildren(node))
+                if (child is DependencyObject dependency)
+                    queue.Enqueue(dependency);
+        }
+        return found;
+    }
+
+    private static string Escape(string value) => value.Replace("|", "\\|", StringComparison.Ordinal);
 
     /// <summary>Runs an async preparation to completion while the self-test keeps the UI thread alive.</summary>
     /// <param name="start">Starts the work. It must be called after the dispatcher context is installed,
@@ -537,3 +598,4 @@ internal static class SelfTest
         encoder.Save(stream);
     }
 }
+
