@@ -104,7 +104,7 @@ english.RemoveSettingsQuestion=Do you also want to remove your DropWheel setting
 ; silently turn the two new defaults on: nothing the user configured is changed by an upgrade.
 Name: "startup"; Description: "{cm:TaskStartWithWindows}"; GroupDescription: "{cm:TasksGroup}"; Flags: checkedonce
 Name: "watch"; Description: "{cm:TaskWatchInput}"; GroupDescription: "{cm:TasksGroup}"; Flags: checkedonce
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:TasksGroup}"
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:TasksGroup}"; Flags: unchecked
 
 [Files]
 ; Everything the self-contained publish produced. build-installer.ps1 has already copied

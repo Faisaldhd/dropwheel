@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 
 namespace FileAction.App.Native;
 
@@ -135,7 +135,8 @@ internal static class WinRt
         }
         finally
         {
-            Marshal.Release(instance);
+            if (instance != 0)
+                Marshal.Release(instance);
         }
     }
 
@@ -158,7 +159,8 @@ internal static class WinRt
         }
         finally
         {
-            Marshal.Release(operation);
+            if (operation != 0)
+                Marshal.Release(operation);
         }
     }
 
@@ -175,6 +177,9 @@ internal static class WinRt
     /// </remarks>
     internal static nint Await(nint operation, CancellationToken cancellationToken = default)
     {
+        if (operation == 0)
+            throw new InvalidOperationException("The WinRT asynchronous operation was null.");
+
         var handler = new WinRtAsyncCompletedHandler();
         nint handlerPointer = 0;
         var registered = false;
@@ -212,6 +217,8 @@ internal static class WinRt
     private static void PollUntilDone(nint operation, CancellationToken cancellationToken)
     {
         var info = QueryInterface(operation, IID_IAsyncInfo);
+        if (info == 0)
+            return;
         try
         {
             var getStatus = Method<GetStatusDelegate>(info, 7);
