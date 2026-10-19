@@ -13,18 +13,18 @@ namespace FileAction.Tests;
 public class AudioToolsTests
 {
     private const string LoudnormLog = """
-        [Parsed_loudnorm_0 @ 000001f449eab840] 
+        [Parsed_loudnorm_0 @ 000001f449eab840]
         {
-        	"input_i" : "-28.35",
-        	"input_tp" : "-27.09",
-        	"input_lra" : "1.90",
-        	"input_thresh" : "-38.50",
-        	"output_i" : "-15.20",
-        	"output_tp" : "-13.52",
-        	"output_lra" : "2.00",
-        	"output_thresh" : "-25.33",
-        	"normalization_type" : "dynamic",
-        	"target_offset" : "-0.80"
+            "input_i" : "-28.35",
+            "input_tp" : "-27.09",
+            "input_lra" : "1.90",
+            "input_thresh" : "-38.50",
+            "output_i" : "-15.20",
+            "output_tp" : "-13.52",
+            "output_lra" : "2.00",
+            "output_thresh" : "-25.33",
+            "normalization_type" : "dynamic",
+            "target_offset" : "-0.80"
         }
         [out#0/null @ 000001f447f8e840] video:0KiB audio:3750KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing
         size=N/A time=00:00:05.00 bitrate=N/A speed=  26x
