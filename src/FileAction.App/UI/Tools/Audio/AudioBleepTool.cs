@@ -1,8 +1,8 @@
-using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using FileAction.Core;
 using FileAction.Core.Backends;
 using static FileAction.Core.Loc;
@@ -10,9 +10,9 @@ using static FileAction.Core.Loc;
 namespace FileAction.App.UI.Tools.Audio;
 
 /// <summary>
-/// "Bleep" on the Tools wheel: mark one or more ranges on the waveform and replace exactly those parts
-/// with a sine tone (1 kHz by default) at a chosen volume. Edges can be dragged on the waveform or nudged
-/// by 10/100 ms, and A/B switches the preview between the original and the replaced audio.
+/// "Bleep" on the Tools wheel: a Bleep layer above the real waveform. Dragging across the layer adds a
+/// section, dragging a clip moves it and dragging either edge resizes it (all clamped to the audio by
+/// <see cref="AudioEffects"/>). "With Bleeps" previews the tone that will replace each section.
 /// Apply writes "&lt;name&gt; Bleeped.ext" next to the source.
 /// </summary>
 internal sealed class AudioBleepTool : IToolWindowSpec
@@ -23,16 +23,16 @@ internal sealed class AudioBleepTool : IToolWindowSpec
 
     public string TitleKey => "tool.audiobleep.title";
 
-    /// <summary>One waveform lane, two tone sliders, the range list and its toolbar.</summary>
+    /// <summary>Header, the two lanes, then the helper/preview/toolbar/tone rows below them.</summary>
     public ToolSpecLayout Layout { get; } = new(
         ChromeWidth: 36,
-        ChromeHeight: 440,
+        ChromeHeight: 390,
         PreviewMinWidth: 320,
-        PreviewMinHeight: 180,
-        PreviewMaxWidth: 680,
-        PreviewMaxHeight: 300,
+        PreviewMinHeight: 150,
+        PreviewMaxWidth: 620,
+        PreviewMaxHeight: 220,
         DefaultPreviewWidth: 560,
-        DefaultPreviewHeight: 240);
+        DefaultPreviewHeight: 170);
 
     public bool Applies(IReadOnlyList<FileItem> items) =>
         items.Count == 1 && !items[0].IsDirectory && Formats.Audio.Contains(items[0].Format);
@@ -48,7 +48,7 @@ internal static class AudioBleepToolRegistration
     internal static void Register() => ToolRegistry.Register(AudioBleepTool.Instance);
 }
 
-/// <summary>The bleep window: waveform with draggable range edges, A/B preview, tone controls, range list.</summary>
+/// <summary>The bleep window: counter header, Bleep layer, audio lane, preview row and tone controls.</summary>
 internal sealed class AudioBleepView
 {
     private readonly FileItem _item;
@@ -56,27 +56,35 @@ internal sealed class AudioBleepView
     private readonly ToolLocator _tools = new();
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _life = new();
-    private readonly WaveformView _waveformView = new();
-    private readonly List<AudioRange> _ranges = [];
+    private readonly WaveformView _audioLane = new();
+    private readonly BleepLaneView _bleepLane = new();
     private readonly StackPanel _controls = new();
+    private readonly StackPanel _previewRow = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
     private readonly Border _placeholder;
+    private readonly TextBlock _count = new();
+    private readonly TextBlock _bleepStart = TimeLabel();
+    private readonly TextBlock _bleepTotal = TimeLabel();
+    private readonly TextBlock _audioStart = TimeLabel();
+    private readonly TextBlock _audioTotal = TimeLabel();
     private readonly TextBlock _outputName = new();
     private readonly TextBlock _status = AudioToolChrome.Status();
-    private StackPanel _rangeList = new();
+    private readonly List<FrameworkElement> _selectionOnly = [];
 
+    private PreviewButton? _originalPreview;
+    private PreviewButton? _bleepedPreview;
     private AudioWaveform? _waveform;
+    private Grid? _root;
+    private double _duration;
     private bool _bleeped;
     private double _toneHz = AudioEffects.DefaultToneHz;
     private int _toneVolume = AudioEffects.DefaultToneVolume;
     private int _stepMs = 100;
-    private int _selected = -1;
 
     public AudioBleepView(FileItem item, DropTargets? targets)
     {
         _item = item;
         _targets = targets;
-        _waveformView.EdgeDragged += OnEdgeDragged;
-        _waveformView.EdgeDragCompleted += RefreshRanges;
+        _bleepLane.Changed += OnModelChanged;
         _placeholder = new Border
         {
             Background = Theme.Card,
@@ -88,21 +96,36 @@ internal sealed class AudioBleepView
     public ToolContent Build()
     {
         var root = new Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var preview = BuildPreview();
+        var header = BuildHeader();
+        var lanes = BuildLanes();
         FillControls();
-        Grid.SetRow(preview, 0);
-        Grid.SetRow(_controls, 1);
-        root.Children.Add(preview);
+        Grid.SetRow(header, 0);
+        Grid.SetRow(lanes, 1);
+        Grid.SetRow(_controls, 2);
+        root.Children.Add(header);
+        root.Children.Add(lanes);
         root.Children.Add(_controls);
 
+        root.Loaded += (_, _) => RetitlePrimaryButton();
+        root.KeyDown += (_, e) =>
+        {
+            if (e.Key is Key.Delete or Key.Back)
+            {
+                _bleepLane.RemoveSelected();
+                e.Handled = true;
+            }
+        };
         root.Unloaded += (_, _) => Cancel();
+
+        _root = root;
         return new ToolContent(root, Reset, ApplyAsync, _ready.Task, ActivateAsync);
     }
 
-    /// <summary>Loads the waveform and marks a first range, so the tool is usable straight away.</summary>
+    /// <summary>Loads the waveform, sizes the lanes and reports the preview size to the adaptive sizer.</summary>
     public async Task ActivateAsync()
     {
         try
@@ -110,13 +133,15 @@ internal sealed class AudioBleepView
             var ffmpeg = _tools.Require(ExternalTool.Ffmpeg);
             var waveform = await AudioWaveform.LoadAsync(ffmpeg, _item.Path, _life.Token);
             _waveform = waveform;
-            _waveformView.Waveform = waveform;
-            _waveformView.Stereo = false;
-            if (_ranges.Count == 0)
-                AddRange();
+            _duration = waveform.Duration;
+            _audioLane.Waveform = waveform;
+            _audioLane.Stereo = false;
+            _bleepLane.Duration = waveform.Duration;
+            _bleepLane.ClipLabel = T("tool.audiobleep.lane.bleep");
             _placeholder.Visibility = Visibility.Collapsed;
-            Paint();
-            _ready.TrySetResult(new MediaSize(680, 260));
+            UpdateTimes();
+            RefreshFromModel();
+            _ready.TrySetResult(new MediaSize(560, 170));
         }
         catch (OperationCanceledException)
         {
@@ -129,27 +154,129 @@ internal sealed class AudioBleepView
         }
     }
 
-    private FrameworkElement BuildPreview()
+    private FrameworkElement BuildHeader()
     {
-        var surface = new Grid { ClipToBounds = true };
-        surface.Children.Add(_waveformView);
-        surface.Children.Add(new Grid { Children = { _placeholder } });
-        return AudioToolChrome.PreviewSurface(surface);
+        _count.FontSize = 13.5;
+        _count.FontWeight = FontWeights.SemiBold;
+        _count.Foreground = Theme.Text;
+        _count.Margin = new Thickness(2, 0, 0, 6);
+        _count.Text = T("tool.audiobleep.count", 0);
+        return _count;
+    }
+
+    /// <summary>Bleep layer above the audio waveform, both with their own start/end time labels.</summary>
+    private FrameworkElement BuildLanes()
+    {
+        var grid = new Grid
+        {
+            // A timeline always runs left to right, in Arabic too; the rest of the window still mirrors.
+            FlowDirection = FlowDirection.LeftToRight,
+        };
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        _bleepLane.MinHeight = 42;
+        _audioLane.MinHeight = 60;
+
+        var bleepTitle = LaneTitle(T("tool.audiobleep.lane.bleep"));
+        var audioTitle = LaneTitle(T("tool.audiobleep.lane.audio"));
+        var bleepBorder = LaneSurface(_bleepLane);
+        var audioSurface = new Grid();
+        audioSurface.Children.Add(_audioLane);
+        audioSurface.Children.Add(new Grid { Children = { _placeholder } });
+        var audioBorder = LaneSurface(audioSurface);
+        var bleepTimes = TimeRow(_bleepStart, _bleepTotal);
+        var audioTimes = TimeRow(_audioStart, _audioTotal);
+
+        Place(bleepTitle, 0, 0);
+        Place(bleepBorder, 0, 1);
+        Place(bleepTimes, 1, 1);
+        Place(audioTitle, 2, 0);
+        Place(audioBorder, 2, 1);
+        Place(audioTimes, 3, 1);
+
+        grid.Children.Add(bleepTitle);
+        grid.Children.Add(bleepBorder);
+        grid.Children.Add(bleepTimes);
+        grid.Children.Add(audioTitle);
+        grid.Children.Add(audioBorder);
+        grid.Children.Add(audioTimes);
+        return grid;
+
+        static void Place(FrameworkElement element, int row, int column)
+        {
+            Grid.SetRow(element, row);
+            Grid.SetColumn(element, column);
+        }
+    }
+
+    private static TextBlock LaneTitle(string text) => new()
+    {
+        Text = text,
+        Width = 62,
+        FontSize = 11,
+        Foreground = Theme.Muted,
+        VerticalAlignment = VerticalAlignment.Center,
+        TextWrapping = TextWrapping.NoWrap,
+    };
+
+    private static Border LaneSurface(FrameworkElement content) => new()
+    {
+        Background = Theme.Card,
+        CornerRadius = new CornerRadius(10),
+        Padding = new Thickness(4),
+        Margin = new Thickness(0, 0, 0, 2),
+        ClipToBounds = true,
+        Child = content,
+    };
+
+    private static FrameworkElement TimeRow(TextBlock start, TextBlock total)
+    {
+        var row = new DockPanel { LastChildFill = false, Margin = new Thickness(4, 0, 4, 2) };
+        DockPanel.SetDock(start, Dock.Left);
+        DockPanel.SetDock(total, Dock.Right);
+        row.Children.Add(start);
+        row.Children.Add(total);
+        start.Text = AudioEffects.FormatTimecode(0);
+        total.Text = AudioEffects.FormatTimecode(0);
+        return row;
+    }
+
+    private static TextBlock TimeLabel() => new()
+    {
+        FontSize = 10.5,
+        Foreground = Theme.Muted,
+    };
+
+    private void UpdateTimes()
+    {
+        _bleepStart.Text = Bidi.Value(AudioEffects.FormatTimecode(0));
+        _bleepTotal.Text = Bidi.Value(AudioEffects.FormatTimecode(_duration));
+        _audioStart.Text = Bidi.Value(AudioEffects.FormatTimecode(0));
+        _audioTotal.Text = Bidi.Value(AudioEffects.FormatTimecode(_duration));
     }
 
     private void FillControls()
     {
         _controls.Children.Clear();
+        _selectionOnly.Clear();
 
-        _controls.Children.Add(Choice(T("tool.audiobleep.ab"), Controls.Segmented(
-        [
-            (T("tool.audiobleep.ab.original"), false),
-            (T("tool.audiobleep.ab.bleeped"), true),
-        ], _bleeped, bleeped =>
+        _controls.Children.Add(new TextBlock
         {
-            _bleeped = bleeped;
-            Paint();
-        })));
+            Text = T("tool.audiobleep.help"),
+            FontSize = 12,
+            Foreground = Theme.Muted,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(2, 2, 2, 10),
+        });
+
+        BuildPreviewRow();
+        _controls.Children.Add(_previewRow);
+        _controls.Children.Add(BuildToolbar());
 
         _controls.Children.Add(SliderRow(
             T("tool.audiobleep.tone"),
@@ -159,7 +286,7 @@ internal sealed class AudioBleepView
             value =>
             {
                 _toneHz = value;
-                Paint();
+                RefreshFromModel();
             }));
 
         _controls.Children.Add(SliderRow(
@@ -170,61 +297,36 @@ internal sealed class AudioBleepView
             value =>
             {
                 _toneVolume = value;
-                Paint();
+                RefreshFromModel();
             }));
-
-        _rangeList = new StackPanel();
-        _controls.Children.Add(new ScrollViewer
-        {
-            Content = _rangeList,
-            MaxHeight = 96,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Margin = new Thickness(0, 2, 0, 6),
-        });
-
-        _controls.Children.Add(Toolbar());
 
         _outputName.FontSize = 11.5;
         _outputName.Foreground = Theme.Muted;
         _outputName.TextTrimming = TextTrimming.CharacterEllipsis;
-        _outputName.Margin = new Thickness(0, 8, 0, 0);
+        _outputName.Margin = new Thickness(2, 8, 0, 0);
         _controls.Children.Add(_outputName);
         _controls.Children.Add(_status);
 
-        RefreshRanges();
-        Paint();
+        RefreshFromModel();
     }
 
-    private FrameworkElement Choice(string caption, FrameworkElement control)
+    /// <summary>Two real buttons: the untouched audio, or the audio with the sections replaced by the tone.</summary>
+    private void BuildPreviewRow()
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
-        row.Children.Add(Caption(caption));
-        row.Children.Add(control);
-        return row;
+        _previewRow.Children.Clear();
+
+        _originalPreview = new PreviewButton(T("tool.audiobleep.preview.original"), null, () => SetPreview(false));
+        _bleepedPreview = new PreviewButton(T("tool.audiobleep.preview.bleeped"), Glyphs.Play, () => SetPreview(true));
+        _originalPreview.SetSelected(!_bleeped);
+        _bleepedPreview.SetSelected(_bleeped);
+
+        _previewRow.Children.Add(_originalPreview.Root);
+        _previewRow.Children.Add(_bleepedPreview.Root);
     }
 
-    private FrameworkElement SliderRow(string caption, int value, int min, int max, Action<int> changed)
+    private FrameworkElement BuildToolbar()
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
-        row.Children.Add(Caption(caption));
-        row.Children.Add(Controls.Slider(min, max, value, changed, () => { }));
-        return row;
-    }
-
-    private static TextBlock Caption(string text)
-    {
-        var caption = AudioToolChrome.Caption(text);
-        caption.Width = 104;
-        return caption;
-    }
-
-    private FrameworkElement Toolbar()
-    {
-        var bar = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };
-
-        var add = Controls.Button(T("tool.audiobleep.add"), AddRange, glyph: "\uE710");
-        add.Margin = new Thickness(0, 0, 8, 6);
-        bar.Children.Add(add);
+        var bar = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
 
         var step = Controls.Segmented(
         [
@@ -234,15 +336,17 @@ internal sealed class AudioBleepView
         step.Margin = new Thickness(0, 0, 8, 6);
         step.VerticalAlignment = VerticalAlignment.Center;
         bar.Children.Add(step);
+        _selectionOnly.Add(step);
 
         bar.Children.Add(Nudge(T("tool.audiobleep.start") + " \u2212", start: true, direction: -1));
         bar.Children.Add(Nudge(T("tool.audiobleep.start") + " +", start: true, direction: 1));
         bar.Children.Add(Nudge(T("tool.audiobleep.end") + " \u2212", start: false, direction: -1));
         bar.Children.Add(Nudge(T("tool.audiobleep.end") + " +", start: false, direction: 1));
 
-        var remove = Controls.Button(T("tool.audiobleep.remove"), RemoveSelected);
+        var remove = Controls.Button(T("tool.audiobleep.remove"), () => _bleepLane.RemoveSelected());
         remove.Margin = new Thickness(0, 0, 8, 6);
         bar.Children.Add(remove);
+        _selectionOnly.Add(remove);
         return bar;
     }
 
@@ -250,164 +354,68 @@ internal sealed class AudioBleepView
     {
         var button = Controls.Button(text, () => NudgeSelected(start, direction));
         button.Margin = new Thickness(0, 0, 6, 6);
+        _selectionOnly.Add(button);
         return button;
     }
 
-    private void RefreshRanges()
+    private static FrameworkElement SliderRow(string caption, int value, int min, int max, Action<int> changed)
     {
-        _rangeList.Children.Clear();
-        if (_ranges.Count == 0)
-        {
-            _rangeList.Children.Add(new TextBlock
-            {
-                Text = T("tool.audiobleep.empty"),
-                FontSize = 12,
-                Foreground = Theme.Muted,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(2, 2, 2, 2),
-            });
-            return;
-        }
-
-        for (var i = 0; i < _ranges.Count; i++)
-            _rangeList.Children.Add(RangeRow(i, _ranges[i]));
-    }
-
-    private FrameworkElement RangeRow(int index, AudioRange range)
-    {
-        var selected = index == _selected;
-        var times = Bidi.Value($"{FfmpegBackend.FormatTime(range.Start)} \u2013 {FfmpegBackend.FormatTime(range.End)}");
-        var label = new TextBlock
-        {
-            Text = $"{T("tool.audiobleep.rangeLabel", index + 1)}   {times}",
-            FontSize = 12,
-            Foreground = selected ? Theme.TextOnAccent : Theme.Text,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
-        var close = new TextBlock
-        {
-            Text = "\uE711",
-            FontFamily = Theme.Icons,
-            FontSize = 10,
-            Foreground = selected ? Theme.TextOnAccent : Theme.Muted,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(12, 0, 0, 0),
-            Cursor = Cursors.Hand,
-        };
-        close.MouseLeftButtonUp += (_, e) =>
-        {
-            Remove(index);
-            e.Handled = true;
-        };
-
-        var content = new StackPanel { Orientation = Orientation.Horizontal };
-        content.Children.Add(label);
-        content.Children.Add(close);
-
-        var row = new Border
-        {
-            Background = selected ? Theme.Accent : Theme.Track,
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(10, 5, 10, 5),
-            Margin = new Thickness(0, 0, 0, 4),
-            Cursor = Cursors.Hand,
-            Child = content,
-        };
-        row.MouseLeftButtonUp += (_, _) => Select(index);
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
+        var label = AudioToolChrome.Caption(caption);
+        label.Width = 104;
+        row.Children.Add(label);
+        row.Children.Add(Controls.Slider(min, max, value, changed, () => { }));
         return row;
     }
 
-    /// <summary>Adds a range after the last one, or at the start when there is no room left.</summary>
-    private void AddRange()
+    private void SetPreview(bool bleeped)
     {
-        var duration = _waveform?.Duration ?? 0;
-        if (duration <= AudioEffects.MinRangeSeconds)
-            return;
-
-        var start = _ranges.Count == 0 ? 0 : Math.Min(duration, _ranges[^1].End + 0.1);
-        var end = Math.Min(duration, start + Math.Max(0.5, duration / 10));
-        if (end - start < AudioEffects.MinRangeSeconds)
-        {
-            start = 0;
-            end = Math.Min(duration, Math.Max(0.5, duration / 10));
-        }
-        _ranges.Add(new AudioRange(Math.Round(start, 3), Math.Round(end, 3)));
-        _selected = _ranges.Count - 1;
-        RefreshRanges();
-        Paint();
-    }
-
-    private void Remove(int index)
-    {
-        if (index < 0 || index >= _ranges.Count)
-            return;
-        _ranges.RemoveAt(index);
-        _selected = _ranges.Count == 0 ? -1 : Math.Min(_selected, _ranges.Count - 1);
-        RefreshRanges();
-        Paint();
-    }
-
-    private void RemoveSelected() => Remove(_selected);
-
-    private void Select(int index)
-    {
-        _selected = index;
-        RefreshRanges();
-        Paint();
+        _bleeped = bleeped;
+        _originalPreview?.SetSelected(!bleeped);
+        _bleepedPreview?.SetSelected(bleeped);
+        RefreshFromModel();
     }
 
     private void NudgeSelected(bool start, int direction)
     {
-        if (_selected < 0 || _selected >= _ranges.Count)
+        var index = _bleepLane.Selected;
+        if (index < 0 || index >= _bleepLane.Ranges.Count)
             return;
-        var duration = _waveform?.Duration ?? 0;
+
         var delta = direction * _stepMs / 1000.0;
-        _ranges[_selected] = start
-            ? AudioEffects.NudgeStart(_ranges[_selected], delta, duration)
-            : AudioEffects.NudgeEnd(_ranges[_selected], delta, duration);
-        RefreshRanges();
-        Paint();
+        var range = _bleepLane.Ranges[index];
+        _bleepLane.UpdateSelected(start
+            ? AudioEffects.NudgeStart(range, delta, _duration)
+            : AudioEffects.NudgeEnd(range, delta, _duration));
     }
 
-    /// <summary>Dragging an edge on the waveform updates the range directly, then the list catches up.</summary>
-    private void OnEdgeDragged(int index, bool start, double seconds)
+    /// <summary>Keeps the counter, the audio lane, the output name and the selection-only controls in step.</summary>
+    private void RefreshFromModel()
     {
-        if (index < 0 || index >= _ranges.Count)
-            return;
-        var duration = _waveform?.Duration ?? 0;
-        var range = _ranges[index];
-        _ranges[index] = start
-            ? new AudioRange(
-                Math.Clamp(seconds, 0, Math.Max(0, range.End - AudioEffects.MinRangeSeconds)),
-                range.End)
-            : new AudioRange(
-                range.Start,
-                Math.Clamp(seconds, Math.Min(duration, range.Start + AudioEffects.MinRangeSeconds), Math.Max(0, duration)));
-        Paint();
-    }
-
-    private void Paint()
-    {
-        _waveformView.SetRanges(_ranges);
-        _waveformView.ShowBleep(_bleeped, Math.Clamp(_toneVolume, 0, 100) / 100.0);
+        _count.Text = T("tool.audiobleep.count", _bleepLane.Ranges.Count);
+        _audioLane.SetRanges(_bleepLane.Ranges);
+        _audioLane.ShowBleep(_bleeped, Math.Clamp(_toneVolume, 0, 100) / 100.0);
 
         var format = FfmpegBackend.SafeContainer(_item.Format);
         _outputName.Text = Bidi.Value($"{_item.BaseName} {T("tool.audiobleep.suffix")}.{format}");
+
+        var hasSelection = _bleepLane.Selected >= 0;
+        foreach (var element in _selectionOnly)
+            element.Opacity = hasSelection ? 1 : 0.45;
     }
+
+    private void OnModelChanged() => RefreshFromModel();
 
     private void Reset()
     {
-        _ranges.Clear();
-        _selected = -1;
         _bleeped = false;
         _toneHz = AudioEffects.DefaultToneHz;
         _toneVolume = AudioEffects.DefaultToneVolume;
         _stepMs = 100;
         _status.Text = string.Empty;
+        _bleepLane.SetModel([], -1);
         FillControls();
-        if (_waveform is not null)
-            AddRange();
+        UpdateTimes();
     }
 
     private void ShowProblem(string message)
@@ -424,14 +432,51 @@ internal sealed class AudioBleepView
     }
 
     private void Report(double value) =>
-        _status.Text = ((int)Math.Round(Math.Clamp(value, 0, 1) * 100)).ToString(CultureInfo.InvariantCulture) + " %";
+        _status.Text = ((int)Math.Round(Math.Clamp(value, 0, 1) * 100)).ToString(System.Globalization.CultureInfo.InvariantCulture) + " %";
+
+    /// <summary>
+    /// The Wave A chrome labels its primary button "Apply"; this tool's primary action is "Save Bleeped
+    /// Copy". The framework has no per-tool label hook yet, so the button is found once in the loaded
+    /// window and retitled. If the chrome changes shape it simply keeps its default label.
+    /// </summary>
+    private void RetitlePrimaryButton()
+    {
+        if (_root is null)
+            return;
+        var window = Window.GetWindow(_root);
+        if (window is null)
+            return;
+
+        var apply = T("tool.window.apply");
+        foreach (var border in Descendants(window).OfType<Border>())
+        {
+            if (border.Background is not LinearGradientBrush)
+                continue;
+            if (border.Child is not StackPanel panel || panel.Children.Count == 0)
+                continue;
+            if (panel.Children[^1] is TextBlock label && label.Text == apply)
+                Controls.SetText(border, T("tool.audiobleep.save"));
+        }
+    }
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            yield return child;
+            foreach (var nested in Descendants(child))
+                yield return nested;
+        }
+    }
 
     private async Task<string?> ApplyAsync()
     {
         if (_waveform is null)
             throw new ConversionException(T("tool.audiobleep.error.decode"));
 
-        var ranges = AudioEffects.NormalizeRanges(_ranges, _waveform.Duration);
+        var ranges = AudioEffects.NormalizeRanges(_bleepLane.Ranges, _duration);
         if (ranges.Count == 0)
             throw new ConversionException(T("tool.audiobleep.error.noRanges"));
 
@@ -441,7 +486,7 @@ internal sealed class AudioBleepView
         var args = AudioEffects.BleepArguments(ranges, _toneHz, _toneVolume);
         var codec = FfmpegBackend.CodecArgs(format, new Settings());
         var tools = _tools;
-        var duration = _waveform.Duration;
+        var duration = _duration;
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(_life.Token);
         _status.Text = T("tool.audiobleep.working");
@@ -484,6 +529,61 @@ internal sealed class AudioBleepView
         }
         catch (ObjectDisposedException)
         {
+        }
+    }
+
+    /// <summary>A pill button that shows whether it is the preview currently on screen.</summary>
+    private sealed class PreviewButton
+    {
+        private readonly TextBlock _label;
+        private readonly TextBlock? _icon;
+
+        public PreviewButton(string text, string? glyph, Action click)
+        {
+            _label = new TextBlock
+            {
+                Text = text,
+                FontSize = 12.5,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+
+            var content = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+            if (glyph is not null)
+            {
+                _icon = new TextBlock
+                {
+                    Text = glyph,
+                    FontFamily = Theme.Icons,
+                    FontSize = 11,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 1, 6, 0),
+                };
+                content.Children.Add(_icon);
+            }
+            content.Children.Add(_label);
+
+            Root = new Border
+            {
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(12, 5, 12, 6),
+                Margin = new Thickness(0, 0, 8, 0),
+                Cursor = Cursors.Hand,
+                Child = content,
+            };
+            Root.MouseLeftButtonUp += (_, _) => click();
+        }
+
+        public Border Root { get; }
+
+        public void SetSelected(bool selected)
+        {
+            Root.Background = selected ? Theme.AccentGradient : Theme.Card;
+            Root.BorderBrush = selected ? Brushes.Transparent : Theme.PanelBorder;
+            _label.Foreground = selected ? Theme.TextOnAccent : Theme.Text;
+            _label.FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal;
+            if (_icon is not null)
+                _icon.Foreground = selected ? Theme.TextOnAccent : Theme.Text;
         }
     }
 }

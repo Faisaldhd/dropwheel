@@ -159,6 +159,71 @@ public static class AudioEffects
     }
 
     /// <summary>
+    /// A section created by dragging across the bleep layer: the two times are sorted, clamped to the
+    /// audio and rounded to milliseconds. Null when the drag is shorter than <see cref="MinRangeSeconds"/>
+    /// (a click, not a section) or when the audio has no length yet.
+    /// </summary>
+    public static AudioRange? NewSection(double duration, double from, double to)
+    {
+        if (duration <= 0 || double.IsNaN(from) || double.IsNaN(to))
+            return null;
+
+        var start = Math.Clamp(Math.Min(from, to), 0, duration);
+        var end = Math.Clamp(Math.Max(from, to), 0, duration);
+        return end - start < MinRangeSeconds ? null : new AudioRange(Round3(start), Round3(end));
+    }
+
+    /// <summary>
+    /// Moves a whole section so its start lands on <paramref name="toStart"/>: the length never changes
+    /// and the clip cannot leave the audio (a clip longer than the audio fills it).
+    /// </summary>
+    public static AudioRange MoveSection(AudioRange range, double toStart, double duration)
+    {
+        var limit = Math.Max(0, duration);
+        var length = Math.Min(Math.Max(0, range.Length), limit);
+        var start = Math.Clamp(toStart, 0, Math.Max(0, limit - length));
+        return new AudioRange(Round3(start), Round3(start + length));
+    }
+
+    /// <summary>
+    /// Resizes one edge of a section to <paramref name="to"/>. The start can never pass the end (and the
+    /// other way round), and neither edge leaves the audio.
+    /// </summary>
+    public static AudioRange ResizeSection(AudioRange range, bool startEdge, double to, double duration)
+    {
+        var limit = Math.Max(0, duration);
+        if (startEdge)
+        {
+            var latest = Math.Max(0, Math.Min(limit, range.End - MinRangeSeconds));
+            return range with { Start = Round3(Math.Clamp(to, 0, latest)) };
+        }
+
+        var earliest = Math.Max(0, Math.Min(limit, range.Start + MinRangeSeconds));
+        return range with { End = Round3(Math.Clamp(to, earliest, limit)) };
+    }
+
+    /// <summary>
+    /// "0:00.00" for the bleep layer's ruler; hours are only shown once the audio is that long. Always
+    /// invariant digits, so Arabic shows the same Western numbers as the rest of the technical text.
+    /// </summary>
+    public static string FormatTimecode(double seconds)
+    {
+        var hundredths = (int)Math.Round(Math.Max(0, seconds) * 100, MidpointRounding.AwayFromZero);
+        var hours = hundredths / 360_000;
+        hundredths %= 360_000;
+        var minutes = hundredths / 6_000;
+        hundredths %= 6_000;
+        var whole = hundredths / 100;
+        var fraction = hundredths % 100;
+
+        return hours > 0
+            ? string.Format(CultureInfo.InvariantCulture, "{0}:{1:00}:{2:00}.{3:00}", hours, minutes, whole, fraction)
+            : string.Format(CultureInfo.InvariantCulture, "{0}:{1:00}.{2:00}", minutes, whole, fraction);
+    }
+
+    private static double Round3(double value) => Math.Round(value, 3, MidpointRounding.AwayFromZero);
+
+    /// <summary>
     /// The bleep filtergraph: the source is muted inside every range and a sine tone of
     /// <paramref name="toneHz"/> at <paramref name="volumePercent"/> is added exactly there. Both branches
     /// use the same time expression, so the tone and the hole always line up.

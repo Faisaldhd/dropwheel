@@ -1,7 +1,6 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using FileAction.Core;
 
@@ -10,7 +9,7 @@ namespace FileAction.App.UI.Tools.Audio;
 /// <summary>
 /// A tiny PCM copy of the source, bucketed into peaks so the tool windows can draw a waveform without
 /// decoding the whole file or depending on a second library. FFmpeg (found by <see cref="ToolLocator"/>)
-/// writes 8 kHz stereo s16le into the temp folder; that is quick even for hour-long files.
+/// writes 4 kHz stereo s16le into the temp folder; that is quick even for hour-long files.
 /// </summary>
 internal sealed class AudioWaveform
 {
@@ -96,12 +95,11 @@ internal sealed class AudioWaveform
 }
 
 /// <summary>
-/// Draws the audio envelope. In the channels tool it shows one lane per side (a muted side is dimmed), in
-/// the bleep tool one lane with the replaced ranges, the tone in accent colour and draggable range edges.
+/// Draws the audio envelope: one lane per side in the channels tool, one combined lane under the bleep
+/// layer. The bleep tool paints the replaced ranges here for context; editing lives in the layer above.
 /// </summary>
 internal sealed class WaveformView : FrameworkElement
 {
-    private const double EdgeHitPixels = 7;
     private const double LaneGap = 6;
 
     private static readonly Brush HitBrush = CreateHitBrush();
@@ -110,27 +108,19 @@ internal sealed class WaveformView : FrameworkElement
     private readonly Brush _laneBrush = Theme.Track;
     private readonly Brush _mutedBrush = Theme.Muted;
     private readonly Brush _rangeFill = Theme.AccentSoft;
-    private readonly Pen _edgePen = new(Theme.Accent, 2);
 
     private double _leftGain = 1;
     private double _rightGain = 1;
     private bool _showTone;
     private double _toneAmplitude = AudioEffects.DefaultToneVolume / 100.0;
-    private int _dragIndex = -1;
-    private bool _dragStart;
 
     public AudioWaveform? Waveform { get; set; }
 
     /// <summary>Two lanes (left/right) instead of one combined envelope.</summary>
     public bool Stereo { get; set; }
 
+    /// <summary>Ranges the bleep tool is replacing; drawn as a translucent block for context.</summary>
     public IReadOnlyList<AudioRange> Ranges { get; set; } = [];
-
-    /// <summary>Raised while an edge is dragged: range index, whether it is the start, and the new time.</summary>
-    public event Action<int, bool, double>? EdgeDragged;
-
-    /// <summary>Raised once the mouse is released, so the range list can refresh its times.</summary>
-    public event Action? EdgeDragCompleted;
 
     public void ShowChannels(double leftGain, double rightGain)
     {
@@ -158,7 +148,7 @@ internal sealed class WaveformView : FrameworkElement
     {
         var width = Math.Max(1, ActualWidth);
         var height = Math.Max(1, ActualHeight);
-        // A nearly transparent fill makes the whole surface hit-testable for edge dragging.
+        // A nearly transparent fill keeps the surface hit-testable without covering the lane behind it.
         drawingContext.DrawRectangle(HitBrush, null, new Rect(0, 0, width, height));
 
         var waveform = Waveform;
@@ -185,15 +175,6 @@ internal sealed class WaveformView : FrameworkElement
             var gain = Stereo ? (lane == 0 ? _leftGain : _rightGain) : Math.Max(_leftGain, _rightGain);
             var peaks = Stereo ? (lane == 0 ? waveform.Left : waveform.Right) : waveform.Combined();
             DrawLane(drawingContext, peaks, top, laneHeight, width, duration, gain);
-        }
-
-        if (duration > 0)
-        {
-            foreach (var range in Ranges)
-            {
-                DrawEdge(drawingContext, range.Start / duration, width, height);
-                DrawEdge(drawingContext, range.End / duration, width, height);
-            }
         }
     }
 
@@ -238,103 +219,6 @@ internal sealed class WaveformView : FrameworkElement
                 return true;
         }
         return false;
-    }
-
-    private void DrawEdge(DrawingContext dc, double fraction, double width, double height) =>
-        dc.DrawLine(_edgePen, new Point(Math.Clamp(fraction, 0, 1) * width, 0), new Point(Math.Clamp(fraction, 0, 1) * width, height));
-
-    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
-    {
-        base.OnMouseLeftButtonDown(e);
-        if (Waveform is null || Ranges.Count == 0)
-            return;
-
-        var x = e.GetPosition(this).X;
-        var best = -1;
-        var bestStart = false;
-        var bestDistance = double.MaxValue;
-        for (var i = 0; i < Ranges.Count; i++)
-        {
-            var startDistance = Math.Abs(x - XFor(Ranges[i].Start));
-            if (startDistance <= EdgeHitPixels && startDistance < bestDistance)
-            {
-                best = i;
-                bestStart = true;
-                bestDistance = startDistance;
-            }
-            var endDistance = Math.Abs(x - XFor(Ranges[i].End));
-            if (endDistance <= EdgeHitPixels && endDistance < bestDistance)
-            {
-                best = i;
-                bestStart = false;
-                bestDistance = endDistance;
-            }
-        }
-
-        if (best < 0)
-            return;
-        _dragIndex = best;
-        _dragStart = bestStart;
-        CaptureMouse();
-        e.Handled = true;
-    }
-
-    protected override void OnMouseMove(MouseEventArgs e)
-    {
-        base.OnMouseMove(e);
-        if (Waveform is null)
-            return;
-
-        if (_dragIndex < 0)
-        {
-            Cursor = NearEdge(e.GetPosition(this).X) ? Cursors.SizeWE : null;
-            return;
-        }
-
-        if (e.LeftButton != MouseButtonState.Pressed)
-        {
-            EndDrag();
-            return;
-        }
-        EdgeDragged?.Invoke(_dragIndex, _dragStart, SecondsFor(e.GetPosition(this).X));
-    }
-
-    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
-    {
-        base.OnMouseLeftButtonUp(e);
-        EndDrag();
-    }
-
-    private void EndDrag()
-    {
-        if (_dragIndex < 0)
-            return;
-        _dragIndex = -1;
-        if (IsMouseCaptured)
-            ReleaseMouseCapture();
-        EdgeDragCompleted?.Invoke();
-    }
-
-    private bool NearEdge(double x)
-    {
-        foreach (var range in Ranges)
-        {
-            if (Math.Abs(x - XFor(range.Start)) <= EdgeHitPixels || Math.Abs(x - XFor(range.End)) <= EdgeHitPixels)
-                return true;
-        }
-        return false;
-    }
-
-    private double XFor(double seconds)
-    {
-        var duration = Waveform?.Duration ?? 0;
-        return duration <= 0 ? 0 : Math.Clamp(seconds / duration, 0, 1) * ActualWidth;
-    }
-
-    private double SecondsFor(double x)
-    {
-        var duration = Waveform?.Duration ?? 0;
-        return duration <= 0 ? 0 : Math.Clamp(x / Math.Max(1, ActualWidth), 0, 1) * duration;
     }
 
     private static Brush CreateHitBrush()
