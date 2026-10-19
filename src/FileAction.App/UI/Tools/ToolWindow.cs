@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using FileAction.App.Shell;
 using FileAction.Core;
 using static FileAction.Core.Loc;
@@ -13,8 +14,9 @@ namespace FileAction.App.UI.Tools;
 
 /// <summary>
 /// The shared chrome for floating tools: a borderless, topmost, rounded card with a title bar, a close
-/// button, the tool's own view and a Reset / primary-action bar. The window is centred on the monitor that
-/// holds the cursor and clamps the tool's declared size to the work area.
+/// button, the tool's own view and a Reset / primary-action bar. The size is adaptive: it opens at the
+/// tool's default, then animates to the size computed from the media aspect by
+/// <see cref="ToolWindowSizer"/>, clamped to the work area of the monitor under the cursor.
 /// </summary>
 internal sealed class ToolWindow : Window
 {
@@ -55,12 +57,16 @@ internal sealed class ToolWindow : Window
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out NativePoint point);
 
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr window);
+
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
 
     private readonly IToolWindowSpec _spec;
     private readonly ToolContent _content;
     private Border? _applyButton;
+    private bool _prepared;
 
     public ToolWindow(IToolWindowSpec spec, IReadOnlyList<FileItem> items, DropTargets? targets)
     {
@@ -80,20 +86,78 @@ internal sealed class ToolWindow : Window
         Foreground = Theme.Text;
         FlowDirection = LanguageManager.IsRtl ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
 
-        var (width, height) = ToolLayout.Clamp(
-            spec.Sizes.Width, spec.Sizes.Height, SystemParameters.WorkArea.Width, SystemParameters.WorkArea.Height);
-        Width = width;
-        Height = height;
+        // Open immediately at the tool's default size; the media probe refines it later.
+        var initial = ToolWindowSizer.Compute(
+            spec.Layout, null, null, SystemParameters.WorkArea.Width, SystemParameters.WorkArea.Height, 1.0);
+        Width = initial.Width;
+        Height = initial.Height;
 
         _content = spec.Create(items, targets);
         Content = Build();
         UiSetup.Configure(this);
         SourceInitialized += (_, _) => CenterOnCursorMonitor();
+        Loaded += (_, _) => _ = PrepareAsync(animate: true);
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape)
                 Close();
         };
+    }
+
+    /// <summary>
+    /// Loads the preview and then sizes the window to the media. Also used by --self-test, where the
+    /// window is never shown.
+    /// </summary>
+    public async Task PrepareAsync(bool animate)
+    {
+        if (_prepared)
+            return;
+        _prepared = true;
+
+        try
+        {
+            await _content.Activate();
+        }
+        catch
+        {
+            // The tool shows its own failure inside the preview.
+        }
+
+        var media = await _content.Ready;
+        if (media is not { Width: > 0, Height: > 0 } || !TryGetWorkArea(out var work))
+            return;
+
+        var size = ToolWindowSizer.Compute(_spec.Layout, media.Value.Width, media.Value.Height,
+            work.WidthInPixels, work.HeightInPixels, work.Scale);
+
+        var left = work.Left + (work.Width - size.Width) / 2;
+        var top = work.Top + (work.Height - size.Height) / 2;
+        left = Math.Clamp(left, work.Left, Math.Max(work.Left, work.Left + work.Width - size.Width));
+        top = Math.Clamp(top, work.Top, Math.Max(work.Top, work.Top + work.Height - size.Height));
+
+        if (animate)
+        {
+            Animate(Width, size.Width, WidthProperty);
+            Animate(Height, size.Height, HeightProperty);
+            Animate(Left, left, LeftProperty);
+            Animate(Top, top, TopProperty);
+        }
+        else
+        {
+            Width = size.Width;
+            Height = size.Height;
+            Left = left;
+            Top = top;
+        }
+    }
+
+    private void Animate(double from, double to, DependencyProperty property)
+    {
+        var animation = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(130))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+        };
+        BeginAnimation(property, animation);
     }
 
     private FrameworkElement Build()
@@ -212,25 +276,55 @@ internal sealed class ToolWindow : Window
         }
     }
 
+    private readonly record struct WorkArea(double Left, double Top, double Width, double Height, double Scale)
+    {
+        public double WidthInPixels => Width * Scale;
+        public double HeightInPixels => Height * Scale;
+    }
+
+    /// <summary>The work area of the monitor under the cursor, in DIPs, with its DPI scale.</summary>
+    private bool TryGetWorkArea(out WorkArea area)
+    {
+        area = default;
+        try
+        {
+            var monitor = IntPtr.Zero;
+            if (GetCursorPos(out var cursor))
+                monitor = MonitorFromPoint(cursor, 2 /* MONITOR_DEFAULTTONEAREST */);
+            if (monitor == IntPtr.Zero)
+                return false;
+
+            var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+            if (!GetMonitorInfo(monitor, ref info))
+                return false;
+
+            var handle = new WindowInteropHelper(this).Handle;
+            var scale = handle != IntPtr.Zero ? Math.Max(1.0, GetDpiForWindow(handle) / 96.0) : 1.0;
+            if (scale <= 0)
+                scale = 1.0;
+
+            area = new WorkArea(
+                info.Work.Left / scale,
+                info.Work.Top / scale,
+                (info.Work.Right - info.Work.Left) / scale,
+                (info.Work.Bottom - info.Work.Top) / scale,
+                scale);
+            return area.Width > 0 && area.Height > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private void CenterOnCursorMonitor()
     {
         try
         {
-            if (!GetCursorPos(out var cursor))
+            if (!TryGetWorkArea(out var work))
                 return;
-            var monitor = MonitorFromPoint(cursor, 2 /* MONITOR_DEFAULTTONEAREST */);
-            if (monitor == IntPtr.Zero)
-                return;
-            var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-            if (!GetMonitorInfo(monitor, ref info))
-                return;
-
-            var source = PresentationSource.FromVisual(this);
-            var toDips = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
-            var topLeft = toDips.Transform(new Point(info.Work.Left, info.Work.Top));
-            var bottomRight = toDips.Transform(new Point(info.Work.Right, info.Work.Bottom));
-            Left = topLeft.X + ((bottomRight.X - topLeft.X) - ActualWidth) / 2;
-            Top = topLeft.Y + ((bottomRight.Y - topLeft.Y) - ActualHeight) / 2;
+            Left = work.Left + (work.Width - ActualWidth) / 2;
+            Top = work.Top + (work.Height - ActualHeight) / 2;
             ApplyBackdrop();
         }
         catch

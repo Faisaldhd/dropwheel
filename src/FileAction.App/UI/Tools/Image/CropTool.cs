@@ -15,9 +15,9 @@ using static FileAction.Core.Loc;
 namespace FileAction.App.UI.Tools.Image;
 
 /// <summary>
-/// Crop a single image: the preview shows the picture with a crop rectangle (corner and edge handles,
-/// dimmed outside), aspect-ratio chips, and W/H boxes in original pixels. Apply writes a new file next to
-/// the source (or into the drop folder) and never touches the original.
+/// Crop a single image: the preview shows a downsampled copy with a crop rectangle (corner and edge
+/// handles, dimmed outside), aspect-ratio chips and W/H boxes in original pixels. Apply writes a new file
+/// next to the source (or into the drop folder); the original is only read.
 /// </summary>
 internal sealed class CropTool : IToolWindowSpec
 {
@@ -30,7 +30,7 @@ internal sealed class CropTool : IToolWindowSpec
 
     public string TitleKey => "tool.crop.title";
 
-    public (double Width, double Height) Sizes => ToolSizes.Crop;
+    public ToolSpecLayout Layout => ToolSizes.Crop;
 
     public bool Applies(IReadOnlyList<FileItem> items) =>
         items.Count == 1 && !items[0].IsDirectory && Formats.Contains(items[0].Format);
@@ -49,6 +49,8 @@ internal static class CropToolRegistration
 /// <summary>The crop window content: preview, rectangle handles, ratio chips, width/height boxes.</summary>
 internal sealed class CropView
 {
+    private const int PreviewMaxSide = 2048;
+
     private static readonly (string Key, double? Ratio)[] Ratios =
     [
         ("tool.crop.aspect.free", null),
@@ -61,10 +63,9 @@ internal sealed class CropView
 
     private readonly FileItem _item;
     private readonly DropTargets? _targets;
-    private readonly BitmapSource _bitmap;
-    private readonly int _imageWidth;
-    private readonly int _imageHeight;
-    private readonly Grid _preview = new() { Height = 450, Margin = new Thickness(0, 4, 0, 10) };
+    private readonly Task<(BitmapSource Bitmap, int Width, int Height)> _load;
+    private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly Grid _preview = new() { Margin = new Thickness(0, 4, 0, 10), ClipToBounds = true };
     private readonly Canvas _overlay = new();
     private readonly Border _frame = new() { BorderBrush = Theme.Accent, BorderThickness = new Thickness(2) };
     private readonly List<(CropHandle Handle, Border Element)> _handles = [];
@@ -75,11 +76,15 @@ internal sealed class CropView
     private readonly StackPanel _chipRow = new() { Orientation = System.Windows.Controls.Orientation.Horizontal };
     private readonly TextBox _widthBox = new() { Width = 72 };
     private readonly TextBox _heightBox = new() { Width = 72 };
+    private readonly WpfImage _imageView = new() { Stretch = Stretch.Uniform, IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+    private readonly Border _placeholder;
     private readonly Dictionary<CropHandle, Point> _dragOrigin = [];
     private readonly Dictionary<CropHandle, CropRect> _dragStart = [];
 
     private CropRect _rect;
     private double? _ratio;
+    private int _imageWidth;
+    private int _imageHeight;
     private double _scale = 1;
     private double _originX;
     private double _originY;
@@ -89,16 +94,22 @@ internal sealed class CropView
     {
         _item = item;
         _targets = targets;
-        (_bitmap, _imageWidth, _imageHeight) = Load(item.Path);
-        _rect = CropMath.Full(_imageWidth, _imageHeight);
+        _placeholder = new Border
+        {
+            Background = Theme.Card,
+            CornerRadius = new CornerRadius(10),
+            Child = new ProgressBar { IsIndeterminate = true, Width = 120, Height = 4 },
+        };
+        // Decode on a background thread, downsampled: the window can open immediately.
+        _load = Task.Run(() => Load(item.Path));
     }
 
     public ToolContent Build()
     {
         var root = new Grid();
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var preview = BuildPreview();
         var chips = BuildChips();
@@ -110,13 +121,40 @@ internal sealed class CropView
         root.Children.Add(chips);
         root.Children.Add(boxes);
 
-        Reset();
-        return new ToolContent(root, Reset, ApplyAsync);
+        return new ToolContent(root, Reset, ApplyAsync, _ready.Task, ActivateAsync);
+    }
+
+    /// <summary>Replaces the placeholder with the decoded preview, on the UI thread.</summary>
+    public async Task ActivateAsync()
+    {
+        try
+        {
+            var (bitmap, width, height) = await _load;
+            _imageWidth = width;
+            _imageHeight = height;
+            _imageView.Source = bitmap;
+            _imageView.Visibility = Visibility.Visible;
+            _placeholder.Visibility = Visibility.Collapsed;
+            _rect = CropMath.Full(width, height);
+            SyncBoxes();
+            Layout();
+            _ready.TrySetResult(new MediaSize(width, height));
+        }
+        catch (Exception ex)
+        {
+            _placeholder.Child = new TextBlock
+            {
+                Text = ex.Message,
+                Foreground = Theme.Muted,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(16),
+            };
+            _ready.TrySetResult(null);
+        }
     }
 
     private FrameworkElement BuildPreview()
     {
-        var image = new WpfImage { Source = _bitmap, Stretch = Stretch.Uniform, IsHitTestVisible = false };
         var dim = Brushes.Black;
         foreach (var rect in new[] { _dimTop, _dimBottom, _dimLeft, _dimRight })
         {
@@ -137,6 +175,7 @@ internal sealed class CropView
                 BorderBrush = Theme.TextOnAccent,
                 BorderThickness = new Thickness(1),
                 Cursor = Cursors.SizeAll,
+                Visibility = Visibility.Collapsed,
             };
             element.MouseLeftButtonDown += (s, e) => BeginDrag(handle, (FrameworkElement)s, e);
             element.MouseMove += (_, e) => ContinueDrag(handle, e);
@@ -145,9 +184,11 @@ internal sealed class CropView
             _overlay.Children.Add(element);
         }
 
-        _preview.Children.Add(image);
+        _preview.Children.Add(_imageView);
         _preview.Children.Add(_overlay);
+        _preview.Children.Add(new Grid { Children = { _placeholder } });
         _preview.SizeChanged += (_, _) => Layout();
+
         return new Border
         {
             Background = Theme.Card,
@@ -173,6 +214,8 @@ internal sealed class CropView
             };
             chip.MouseLeftButtonUp += (_, _) =>
             {
+                if (_imageWidth == 0)
+                    return;
                 _ratio = ratio;
                 if (ratio is double value)
                     _rect = CropMath.SnapToRatio(_rect, _imageWidth, _imageHeight, value);
@@ -182,6 +225,7 @@ internal sealed class CropView
             };
             _chipRow.Children.Add(chip);
         }
+        PaintChips();
         return _chipRow;
     }
 
@@ -215,20 +259,20 @@ internal sealed class CropView
     {
         for (var i = 0; i < _chipRow.Children.Count && i < Ratios.Length; i++)
         {
+            if (_chipRow.Children[i] is not Border chip)
+                continue;
             var selected = Equals(Ratios[i].Ratio, _ratio);
-            if (_chipRow.Children[i] is Border chip)
-            {
-                chip.Background = selected ? Theme.Accent : Theme.Track;
-                            if (chip.Child is TextBlock chipText)
-                    chipText.Foreground = selected ? Theme.TextOnAccent : Theme.Text;
-            }
+            chip.Background = selected ? Theme.Accent : Theme.Track;
+            if (chip.Child is TextBlock text)
+                text.Foreground = selected ? Theme.TextOnAccent : Theme.Text;
         }
     }
 
     private void Reset()
     {
         _ratio = null;
-        _rect = CropMath.Full(_imageWidth, _imageHeight);
+        if (_imageWidth > 0)
+            _rect = CropMath.Full(_imageWidth, _imageHeight);
         SyncBoxes();
         Layout();
         PaintChips();
@@ -236,6 +280,8 @@ internal sealed class CropView
 
     private void BeginDrag(CropHandle handle, FrameworkElement element, MouseButtonEventArgs e)
     {
+        if (_imageWidth == 0)
+            return;
         _dragOrigin[handle] = e.GetPosition(_preview);
         _dragStart[handle] = _rect;
         element.CaptureMouse();
@@ -261,7 +307,7 @@ internal sealed class CropView
 
     private void CommitBoxes()
     {
-        if (_syncing)
+        if (_syncing || _imageWidth == 0)
             return;
         if (!int.TryParse(_widthBox.Text, out var width) || !int.TryParse(_heightBox.Text, out var height))
         {
@@ -284,6 +330,9 @@ internal sealed class CropView
 
     private void Layout()
     {
+        if (_imageWidth == 0)
+            return;
+
         var availableWidth = Math.Max(1, _preview.ActualWidth - 12);
         var availableHeight = Math.Max(1, _preview.ActualHeight - 12);
         _scale = Math.Min(availableWidth / _imageWidth, availableHeight / _imageHeight);
@@ -314,6 +363,7 @@ internal sealed class CropView
             var point = HandlePoint(handle, left, top, width, height);
             Canvas.SetLeft(element, point.X - element.Width / 2);
             Canvas.SetTop(element, point.Y - element.Height / 2);
+            element.Visibility = Visibility.Visible;
         }
     }
 
@@ -340,11 +390,12 @@ internal sealed class CropView
 
     private async Task<string?> ApplyAsync()
     {
-        if (!CropTool.Instance.Applies([_item]))
+        if (_imageWidth == 0 || !CropTool.Instance.Applies([_item]))
             return null;
 
         var directory = OutputDirectory();
         var rect = _rect;
+        // Full-resolution work happens on the original file, never on the preview.
         return await Task.Run(() => CropRunner.Apply(_item, rect, directory));
     }
 
@@ -363,16 +414,25 @@ internal sealed class CropView
             ?? Environment.CurrentDirectory;
     }
 
-    /// <summary>Reads the image, applies its EXIF orientation and keeps the pixels for the preview.</summary>
+    /// <summary>
+    /// Reads the image, applies EXIF orientation, keeps the original pixel size for the math and decodes a
+    /// preview of at most 2048 px on the long side.
+    /// </summary>
     private static (BitmapSource Bitmap, int Width, int Height) Load(string path)
     {
         using var image = new MagickImage(path);
         image.AutoOrient();
         var width = (int)image.Width;
         var height = (int)image.Height;
-        var bytes = image.ToByteArray(MagickFormat.Png);
+        var longSide = Math.Max(width, height);
+        if (longSide > PreviewMaxSide)
+        {
+            var scale = (double)PreviewMaxSide / longSide;
+            image.Resize(new MagickGeometry((uint)Math.Max(1, width * scale), (uint)Math.Max(1, height * scale)));
+        }
+
+        using var stream = new MemoryStream(image.ToByteArray(MagickFormat.Png));
         var bitmap = new BitmapImage();
-        using var stream = new MemoryStream(bytes);
         bitmap.BeginInit();
         bitmap.CacheOption = BitmapCacheOption.OnLoad;
         bitmap.StreamSource = stream;

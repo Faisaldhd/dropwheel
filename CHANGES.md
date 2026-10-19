@@ -10,10 +10,19 @@
   adjust the width/height boxes in original-image pixels. Reset restores the whole image and Free.
   **Apply** writes `<name> Cropped.<ext>` next to the source — or into the folder the drop resolved — never
   overwrites the original, keeps the format and applies the EXIF orientation first.
-- **A reusable floating-tool framework.** Tools declare their own size (clamped to 95% of the work-area
-  width and 90% of its height), get a borderless rounded card centred on the monitor under the cursor,
-  draggable by its title, closed with Esc or the round X, with a Reset / primary-action bar. Each tool
-  lives in its own file and registers itself, so adding the next tool never edits a shared file.
+- **A reusable floating-tool framework.** Tools declare their own chrome and preview bounds, get a
+  borderless rounded card centred on the monitor under the cursor, draggable by its title, closed with Esc
+  or the round X, with a Reset / primary-action bar. Each tool lives in its own file and registers itself,
+  so adding the next tool never edits a shared file.
+- **Tool windows adapt to the media.** The window opens at the tool's default size while the file is probed
+  asynchronously (images decode a downsampled preview of at most 2048 px on the long side, with a spinner
+  until it is ready), then animates in ~130 ms to the size that fits the media's aspect ratio inside the
+  tool's preview bounds — portrait is tall and narrow, landscape wide and short, square balanced, and
+  ultra-wide/ultra-tall are clamped so the controls stay usable. The result is clamped to 95% of the
+  work-area width and 90% of its height of the monitor under the cursor, DPI aware; on a small screen the
+  preview shrinks, never the controls. Tiny media is never enlarged beyond 200%. The rules are pure
+  functions in `ToolWindowSizer`, unit tested for portrait, landscape, square, ultra-wide, ultra-tall,
+  tiny, huge and a 1366x768 screen at 125%.
 
 ### العربية
 
@@ -22,10 +31,16 @@
   (حر، 1:1، 16:9، 9:16، 4:3، 3:4) واضبط مربعَي العرض والارتفاع ببكسلات الصورة الأصلية. تعيد «إعادة ضبط»
   الصورة كاملة مع «حر». يكتب **تطبيق** ملفًا باسم `<الاسم> مقصوصة.<الامتداد>` بجانب المصدر أو في المجلد
   الذي حُلّت إليه الإفلاتة، دون استبدال الأصل، مع الحفاظ على الصيغة وتطبيق اتجاه EXIF أولًا.
-- **إطار أدوات عائم قابل لإعادة الاستخدام.** تعلن كل أداة حجمها (مقيّد بـ95% من عرض مساحة العمل و90% من
-  ارتفاعها)، ويظهر إطار مستدير بلا حدود في وسط الشاشة تحت المؤشر، يُسحب من شريطه ويُغلق بـEsc أو بزر X
-  الدائري، مع شريط «إعادة ضبط» وزر الإجراء الأساسي. كل أداة في ملفها وتُسجّل نفسها، فلا تحتاج الأداة
-  التالية إلى تعديل ملف مشترك.
+- **إطار أدوات عائم قابل لإعادة الاستخدام.** تعلن كل أداة هيكلها وحدود المعاينة، ويظهر إطار مستدير بلا حدود
+  في وسط الشاشة تحت المؤشر، يُسحب من شريطه ويُغلق بـEsc أو بزر X الدائري، مع شريط «إعادة ضبط» وزر الإجراء
+  الأساسي. كل أداة في ملفها وتُسجّل نفسها، فلا تحتاج الأداة التالية إلى تعديل ملف مشترك.
+- **تتكيّف نوافذ الأدوات مع الوسائط.** تُفتح النافذة بحجم الأداة الافتراضي بينما تُفحص الوسائط في الخلفية
+  (الصور تُفكّ إلى معاينة مصغّرة بحد 2048 بكسل للضلع الأطول، مع مؤشر انتظار)، ثم تتحرك في نحو 130 مللي ثانية
+  إلى الحجم الذي يناسب نسبة أبعاد الوسائط داخل حدود المعاينة: الطولي طويل وضيق، والعرضي عريض وقصير،
+  والمربع متوازن، والشديد العرض أو الطول يُقيَّد لتبقى عناصر التحكم صالحة. يُقيَّد الناتج بـ95% من عرض مساحة
+  العمل و90% من ارتفاعها لشاشة المؤشر مع مراعاة الـDPI، وعلى الشاشة الصغيرة تُصغَّر المعاينة لا عناصر التحكم،
+  ولا تُكبَّر الوسائط الصغيرة أكثر من 200%. القواعد دوال نقية في `ToolWindowSizer` ومغطاة باختبارات
+  للطولي والعرضي والمربع والشديد عرضًا وطولًا والصغير والضخم وشاشة 1366x768 عند 125%.
 
 ## 2.2.3
 

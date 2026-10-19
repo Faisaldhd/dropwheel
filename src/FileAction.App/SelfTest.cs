@@ -5,6 +5,7 @@ using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
+using System.Windows.Threading;
 using FileAction.App.Actions;
 using FileAction.App.Jobs;
 using FileAction.App.UI;
@@ -444,8 +445,32 @@ internal static class SelfTest
             throw new InvalidOperationException("the crop tool does not accept a png");
 
         var window = new ToolWindow(CropTool.Instance, [item], null);
-        SaveWindow(window, Path.Combine(directory, "crop.png"), ToolSizes.Crop.Width, desktop: true);
+        Pump(window.PrepareAsync(animate: false));
+        SaveWindow(window, Path.Combine(directory, "crop.png"), window.Width, desktop: true);
+
+        // The adaptive sizer must keep every media shape inside the work area.
+        foreach (var (width, height, name) in new (double, double, string)[]
+                 {
+                     (300, 500, "portrait"), (500, 300, "landscape"), (500, 500, "square"),
+                     (5000, 300, "wide"), (300, 5000, "tall"), (32, 32, "tiny"), (12000, 9000, "huge"),
+                 })
+        {
+            var size = ToolWindowSizer.Compute(ToolSizes.Crop, width, height, 1920, 1080, 1.0);
+            if (size.Width > 1920 * 0.95 + 0.01 || size.Height > 1080 * 0.90 + 0.01)
+                throw new InvalidOperationException($"tool sizer does not fit {name}: {size.Width}x{size.Height}");
+        }
+
         log.Add($"ok tools/crop ({ToolRegistry.All.Count} registered)");
+        log.Add("ok tools/sizer (7 shapes fit the work area)");
+    }
+
+    /// <summary>Runs an async preparation to completion while the self-test keeps the UI thread alive.</summary>
+    private static void Pump(Task task)
+    {
+        var frame = new DispatcherFrame();
+        task.ContinueWith(_ => frame.Continue = false, TaskScheduler.FromCurrentSynchronizationContext());
+        Dispatcher.PushFrame(frame);
+        task.GetAwaiter().GetResult();
     }
 
     private static void SaveWindow(Window window, string file, double width, bool desktop = false)
