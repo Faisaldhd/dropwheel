@@ -1,160 +1,205 @@
-# NOTES — 2.2.0 installer (branch `2.2.0-installer`)
+# NOTES - signing (branch `2.2.0-signing`)
 
-Status: **done** for `installer/**` and the two scripts. Branch CI only builds and tests the app,
-so the Inno Setup compile and the smoke test run in the **Package** job (see "CI steps" below).
-No local build, publish, ISCC run or installer run was performed (AGENT_RULES).
+Status: done. Scripts and documentation written; the real update key was **not** generated,
+rotated or copied anywhere.
 
-## What changed
+## Files
 
-| File | Change |
+| File | What it is |
 | --- | --- |
-| `installer/DropWheel.iss` | Rewritten for a **self-contained** win-x64 publish. No .NET detection, no download, no runtime install, no PowerShell helper. New output name, tasks page, upgrade/uninstall rules. |
-| `installer/Arabic.isl` | **New, vendored**: unmodified copy of the Arabic translation that ships with Inno Setup 6.5+ (`Languages\Arabic.isl`, translator: nacer baaziz; header kept for attribution). Source file SHA-256 `D621121EBA68640CC9CB3E1E63593D9B5905C15AB6D1DCFA168DF603F52E0CAD`; UTF-8 without BOM, `LanguageID=$0401`, `RightToLeft=yes`. Git normalises its CRLF line endings on commit (Inno Setup accepts both). |
-| `installer/DropWheel-ar.isl` | **New**: the five installer-only strings in Arabic (tasks group, the two task labels, the app comment, the uninstall question). Kept out of `DropWheel.iss` so the script stays pure ASCII (no BOM question). |
-| `scripts/build-installer.ps1` | **New**: version from the csproj, self-contained trimmed publish, prune, licences, violet wizard BMPs, ISCC, 70 MB assert, size report. |
-| `scripts/test-installer.ps1` | **New**: silent per-user install/uninstall smoke test with the assertions below. CI only; do not run it locally. |
+| `scripts/make-update-key.ps1` | One-time **rotation** helper: generates P-256 in memory, pipes base64 PKCS#8 to `gh secret set UPDATE_SIGNING_KEY` over stdin, prints only public material, clears memory, refuses without `-Rotate`. |
+| `scripts/sign-release.ps1` | Signs assets to `<asset>.sig` (P1363 `r||s`, 64 bytes, base64 ASCII), verifies each `.sig` against the app key, throws before/after a mismatch. `-SelfTest` exercises the same code path with an ephemeral in-memory key. |
+| `scripts/verify-signature.ps1` | Verifies `<file> <sig>`; exit 1 with a clear message on any failure; `-PublicKey` for tests. |
+| `docs/signing-updates.md` | Key history, secret location, exact `.sig`/`SHA256SUMS.txt` formats, CI signing, app verification snippet, rotation runbook, troubleshooting. |
 
-### Installer behaviour
+Not changed: `ci.yml`, `Core/**`, `installer/**`, `UPDATE_SIGNING_KEY`, `UpdateKey.cs`.
 
-- Self-contained publish, so Setup has **no runtime check, no download and no elevation for a runtime**.
-  `DefaultDirName={autopf}\DropWheel`, `PrivilegesRequired=lowest`,
-  `PrivilegesRequiredOverridesAllowed=dialog commandline` (the dialog is kept; `/CURRENTUSER` and
-  `/ALLUSERS` are accepted explicitly — Inno documents `dialog` as implying `commandline`, the value
-  is listed anyway so the updater's switches can never regress),
-  `WizardStyle=modern`, `MinVersion=10.0.17763`, `ArchitecturesAllowed=x64compatible`,
-  `Compression=lzma2/ultra64`, `SolidCompression=yes`, `CloseApplications=yes`,
-  `RestartApplications=no`, `SetupLogging=yes`, `OutputBaseFilename=DropWheel-{#AppVersion}-Setup`.
-- `AppId` unchanged (`{{1AB9CDBE-C50D-484B-96ED-5D575D0806D2}`).
-- Languages: English (`compiler:Default.isl`) and Arabic (`installer\Arabic.isl` + `DropWheel-ar.isl`, RTL).
-- Tasks page: **Start with Windows** (HKCU `Run\DropWheel` = `"<app>\DropWheel.exe" --background`)
-  and **Watch mouse and keyboard** (`DropWheel.exe --set-watch`, hidden) are **checked on a first
-  install**; **desktop shortcut** is unchecked. Start-menu shortcut always. "Launch DropWheel" on
-  the finish page (`skipifsilent`).
-- Upgrades: same AppId, `UsePreviousTasks=yes` (choices are restored, not reset), settings kept.
-  **`ApplyInstallDefaults`**: a *silent* upgrade (`/VERYSILENT`, i.e. the updater) does **not**
-  re-apply the two defaults to an existing install, so it cannot re-enable autostart/watch that the
-  user turned off in Settings. On a first install and in interactive installs the checkboxes decide.
-- Uninstall removes: the HKCU Run value, both Explorer context-menu keys
-  (`HKCU\Software\Classes\*\shell\DropWheel`, `...\Directory\shell\DropWheel`), the Send-to shortcut
-  (`%APPDATA%\Microsoft\Windows\SendTo\DropWheel.lnk`), the Start-menu/desktop shortcuts and the
-  program files. It kills a running `DropWheel.exe` first.
-- Settings (`%APPDATA%\DropWheel` and `%LOCALAPPDATA%\DropWheel`, the latter includes the downloaded
-  `tools\`) are kept: silent uninstalls always keep them, an interactive uninstall asks one Yes/No
-  question (default: keep) and only a Yes deletes both folders. There is no unconditional
-  `[UninstallDelete]` entry: "keep my settings" means keep the helper programs too.
-- `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART` works; the updater's extra `/CLOSEAPPLICATIONS` is the
-  same behaviour as `CloseApplications=yes`.
+## Key fingerprint
 
-### `scripts/build-installer.ps1`
+- Public key in `UpdateKey.cs` (unchanged):
+  `MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEUCQv0in24CEgz0uiGoER/25EFZY5w/x0wvpl9TyRyG8VxFTqv3mKuGBxMwoknk9FBHrj2P9c56kCUU2POE5Glw==`
+- 91-byte SPKI DER, curve `prime256v1` (P-256).
+- **Fingerprint = SHA-256 of the SPKI DER bytes:**
+  `9d6b35c5376d6decceced299829643456c52fee8c0662dd101d62d422f0bce02`
 
-1. Reads `<Version>` from `src/FileAction.App/FileAction.App.csproj` (fails on a missing/invalid value).
-2. Publishes `-c Release -r win-x64 --self-contained true -p:PublishTrimmed=true -p:TrimMode=partial -o release/selfcontained`.
-3. Removes `*.pdb` and `createdump.exe`, copies `LICENSE`, `THIRD-PARTY-NOTICES.md` and `licenses\`
-   next to `DropWheel.exe`, and fails if any of them is missing.
-4. Generates `release\wizard\wizard-large.bmp` (164x314) and `wizard-small.bmp` (55x55) from
-   `branding\DropWheel-1024.png` with System.Drawing (violet gradient + halo + logo). If
-   System.Drawing or the logo is unavailable it warns and lets Inno use its own images.
-5. Finds `ISCC.exe` (Program Files, Program Files (x86), `%LOCALAPPDATA%\Programs`, Chocolatey),
-   requires Inno Setup **6.3+** (`x64compatible`), and runs `ISCC /DAppVersion=<ver>`.
-6. Asserts `release\DropWheel-<ver>-Setup.exe` exists and is **<= 70 MB** (parameter `-MaxSetupMB`),
-   prints publish size/file count and setup size, and adds a size table to `$GITHUB_STEP_SUMMARY`.
+## Signature format (for update-core and release-clean)
 
-## CI steps (exact)
+- `.sig` is ASCII base64 of **ECDSA P-256 / SHA-256 over the complete file bytes**, encoded as
+  **IEEE P1363 fixed-field concatenation `r || s` (32+32 = exactly 64 bytes)**, so the file is
+  always **88 base64 characters**, one line, no newline.
+- This is what `ECDsa.SignData(..., SHA256)` and `ECDsa.VerifyHash(hash, signature)` use **by
+  default** in .NET, and what `UpdateVerifier.VerifyHash` expects. It is **not** an ASN.1/DER
+  signature (DER is 70-72 bytes; `verify-signature.ps1` rejects that length with a clear message).
+- The scripts both check the 64-byte length, so if a future runtime changed the default they
+  would fail loudly instead of shipping an unverifiable `.sig`.
 
-In `.github/workflows/ci.yml`, **package** job, keep `Install Inno Setup` and replace the old
-`Publish (framework-dependent)`, `Strip debug symbols` and `Build installer` steps with:
+## Self-check evidence (no real secret used)
 
-```yaml
-      - name: Build the installer (self-contained, trimmed)
-        shell: pwsh
-        run: ./scripts/build-installer.ps1
+Local constraint: only Windows PowerShell 5.1 is installed (no `pwsh`), and the rules forbid
+running `.ps1` files locally, so the scripts were **not executed here**. What was verified:
 
-      - name: Installer smoke test (silent install + uninstall)
-        shell: pwsh
-        run: ./scripts/test-installer.ps1
+1. **Syntax/AST:** all three scripts parsed with
+   `[System.Management.Automation.Language.Parser]::ParseFile` - 0 errors each,
+   `#Requires -Version 7.0`, expected parameter blocks and functions.
+2. **Same algorithm, inline (PS 5.1 CNG + Node/OpenSSL), no key on disk:**
+   - ephemeral P-256 key generated in memory; PKCS#8 exported/imported, SPKI exported/imported;
+   - signature was **64 bytes -> 88 base64 chars**, one line;
+   - good signature accepted; tampered file rejected; wrong ephemeral key rejected; the
+     **embedded app key** rejected (wrong-key case);
+   - OpenSSL/Node (`dsaEncoding: 'ieee-p1363'`) verified the .NET signature and rejected a
+     tampered file; .NET verified an OpenSSL P1363 signature and rejected tampering;
+   - embedded key imported in Node as `ec` / `prime256v1`, fingerprint matched
+     `9d6b35c5...bce02`.
+3. **.NET 10 runtime check (`dotnet fsi`, SDK 10.0.402; no app build, no project):**
+   - embedded SPKI imported (91 bytes, `KeySize=256`), fingerprint
+     `9d6b35c5376d6decceced299829643456c52fee8c0662dd101d62d422f0bce02`;
+   - ephemeral `ECDsa.Create(nistP256)`: SPKI 91 bytes, PKCS#8 138 bytes;
+     `ImportPkcs8PrivateKey` read all 138 bytes;
+   - `SignData(stream, SHA256)` produced **64 bytes / 88 base64 chars**;
+   - `VerifyHash` accepted the good signature and rejected a tampered hash and the wrong
+     (embedded) key;
+   - confirms the .NET 10 default is IEEE P1363 and that the app's `VerifyHash` path matches the
+     scripts. A 70-byte DER-like signature is 96 base64 chars, which the scripts reject.
+4. **Not covered locally:** actual execution of the `.ps1` files on pwsh 7 (no `pwsh` here; the
+   rules forbid running `.ps1` locally). The underlying .NET 10 APIs above are verified, and the
+   scripts are syntax-clean; the remaining risk is only PowerShell's method binding/execution.
+   The test to run first in CI/on a pwsh 7 machine is:
+   `pwsh ./scripts/sign-release.ps1 -SelfTest` (no secret needed; uses the same import, sign,
+   write, read and verify functions, and asserts tamper/wrong-key failures).
+
+## Requests from signing
+
+### release-clean (owner of `.github/workflows/ci.yml`) - P0 for the first signed release
+
+1. **Add the signing step to the release job.** The release job currently has no
+   `actions/checkout`, so it needs one before the script can read `scripts/` and `UpdateKey.cs`:
+
+   ```yaml
+         - uses: actions/checkout@v4
+
+         - name: Sign release assets
+           shell: pwsh
+           env:
+             UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+           run: |
+             if (-not $env:UPDATE_SIGNING_KEY) { throw "UPDATE_SIGNING_KEY is not available to this job" }
+             $assets = @(Get-ChildItem dist -Recurse -File | Where-Object {
+               $_.Name -like 'DropWheel-*-Setup.exe' -or
+               $_.Name -like 'DropWheel-*-portable-win-x64.zip'
+             } | Select-Object -ExpandProperty FullName)
+             if ($assets.Count -ne 2) { throw "expected 2 release assets, found $($assets.Count)" }
+             ./scripts/sign-release.ps1 -Path $assets
+             $sigs = @(Get-ChildItem dist -Recurse -File -Filter '*.sig')
+             if ($sigs.Count -ne 2) { throw "expected 2 .sig files, found $($sigs.Count)" }
+   ```
+
+   The release step must then upload the two `.sig` files as well: extend the filter in
+   "Create release" with `-like '*.sig'` and change the expected count from 3 to 5. Only the
+   release job gets the secret; fork PRs never receive it.
+
+2. **Add the no-secret self-test to `build-test`** (cheap, runs on every push, exercises the real
+   pwsh 7 code path):
+
+   ```yaml
+         - name: Signing script self-test
+           shell: pwsh
+           run: ./scripts/sign-release.ps1 -SelfTest
+   ```
+
+3. **Asset naming mismatch (P1, blocks the updater).** `UpdateConfig.SetupAssetName` and the
+   spec use `DropWheel-<version>-Setup.exe`, but `installer/DropWheel.iss` emits
+   `DropWheel-Setup-<version>.exe` (and `release.cmd` prints that name). The app will not find
+   the setup in the release until one side changes. Preferred fix (matches `UpdateConfig` and
+   `docs/signing-updates.md`): change `OutputBaseFilename` in `installer/DropWheel.iss` to
+   `DropWheel-{#AppVersion}-Setup` and update the ci.yml filters/artifact names. If the rename is
+   done in the release job instead, **regenerate `SHA256SUMS.txt` after the rename**, otherwise
+   the sums file names the old file and the app's digest check fails.
+
+4. `scripts/sign-release.ps1` defaults to `release/DropWheel-<version>-Setup.exe` and
+   `release/DropWheel-<version>-portable-win-x64.zip`; it accepts explicit `-Path` (the CI
+   snippet passes `dist` paths), so naming only affects the default invocation.
+
+### update-core - rotation safety (P2, not needed for 2.2.0 but needed before any rotation)
+
+`UpdateKey` is a single constant. Because the private key exists only in the secret, rotating it
+destroys the old key, and every installed copy (which embeds the old public key) permanently
+loses automatic updates. `docs/signing-updates.md` documents this honestly. For a staged
+rotation, `UpdateVerifier` would need to trust a list of public keys (old + new), so a transition
+build signed with the old key can carry the new key. Suggested shape:
+
+```csharp
+public static IReadOnlyList<string> TrustedPublicKeyBase64 { get; } = new[] { Current, Next };
 ```
 
-Then these existing steps must follow the new paths/name (all in the same job unless noted):
+and `VerifySignature` accepts a signature that matches any listed key during the transition.
+This is a design decision for the lead/update-core, not something the signing agent can change.
+Otherwise: no rotation without accepting manual reinstall for existing users.
 
-1. **Size report**: publish is now `release/selfcontained` and the setup is
-   `release/DropWheel-$version-Setup.exe` (the script already prints/summarises both; this step can
-   simply be deleted).
-2. **Diagnose report**: `release/DropWheel/DropWheel.exe` no longer exists — use
-   `release/selfcontained/DropWheel.exe`. This is the only runtime check of the *trimmed* build, so
-   consider dropping `continue-on-error: true` for it.
-3. **SHA256SUMS**: the setup glob is now `DropWheel-*-Setup.exe` (was `DropWheel-Setup-*.exe`).
-4. **Upload setup**: `release/DropWheel-*-Setup.exe` (and `release/DropWheel-Setup.exe` when the
-   stable alias below is added).
-5. **Release job**: same glob change for the setup asset (`DropWheel-*-Setup.exe`).
-6. **Stable alias for the website** (requested by update-core): after the build step add
-   `Copy-Item "release/DropWheel-$version-Setup.exe" "release/DropWheel-Setup.exe"` and include it in
-   `SHA256SUMS.txt`, the upload and the release (that makes 3 binaries + `SHA256SUMS.txt`).
-7. The **Portable zip** step is unchanged (it still publishes untrimmed, self-contained, to
-   `portable/DropWheel`) — say so if you want parity with the trimmed installer publish.
+### update-core - verifier confirmation
 
-## Requests from installer
+`UpdateVerifier.VerifySignature` already matches these scripts: PKCS#8/SPKI import, SHA-256 over
+the file bytes, `VerifyHash(hash, signature)` with the **P1363 64-byte** default. No change is
+needed for the format; a unit test that signs with an ephemeral P-256 key and feeds a 64-byte
+`r||s` signature would pin the format (tampered/wrong-key/missing cases are already in the spec).
 
-- **`.github/workflows/ci.yml`** — apply the six edits above. I did not edit it.
-- **`README.md`** (lines ~74/76) and **`README.ar.md`** — the setup asset is
-  `DropWheel-<version>-Setup.exe`, not `DropWheel-Setup-<version>.exe`
-  (`UpdateConfig.SetupAssetName` already expects the new name).
-- **`build.cmd` / `release.cmd`** — stale: they publish framework-dependent to `release\DropWheel`,
-  install/check the .NET runtime and print `DropWheel-Setup-<ver>.exe`. Either delete them or point
-  them at `scripts\build-installer.ps1`; they are not in my ownership.
-- **`CHANGES.md`** — the 2.2.0 section needs a line for "setup is now self-contained (no .NET
-  install), <= 70 MB"; sizes are only known after the first Package run.
-- **update-ui** (`--set-watch`) — contract the installer relies on: read settings, set
-  `WatchGestures = true`, `Save()`, exit 0. It must be handled **before** the
-  `SingleInstance.TryAcquire()` forwarding block in `Program.Main` (like `--unregister`), so it also
-  works when DropWheel is already running. The `[Run]` entry uses `runhidden nowait`, so a switch
-  that starts the UI instead of exiting would leave a stray window after installation.
-- **signing owner** — `docs\signing.md` still describes signing `DropWheel-Setup-<ver>.exe`; the asset
-  name changed (the signing step must pick up `DropWheel-<ver>-Setup.exe` / `DropWheel-Setup.exe`).
-- **`scripts/verify-authenticode.ps1`** — no longer used by the installer (it only existed for the
-  .NET runtime download check). Its owner can delete it.
+## Exact CI step snippet (copy/paste)
 
-## Limits and things to know before merging
+See the YAML in "release-clean - P0" above. It is the canonical step: `actions/checkout@v4`,
+then `scripts/sign-release.ps1 -Path $assets` with `UPDATE_SIGNING_KEY` mapped only on that job,
+then a `.sig` count assertion. If `checkout` truly cannot be added, inline the exact functions
+from `scripts/sign-release.ps1` rather than re-deriving the format; the invariants are
+P-256, SHA-256 over the file bytes, IEEE P1363 `r||s` exactly 64 bytes, ASCII base64 (88 chars),
+and a post-write verification against the app's public key.
 
-- **Inno Setup 6.3+ is required** (`ArchitecturesAllowed=x64compatible`). CI installs the Chocolatey
-  package, which is current 6.7.x; `build-installer.ps1` fails with a clear message below 6.3.
-- **Arabic.isl provenance**: copied from the Inno Setup 6.5+ distribution (same file the compiler
-  ships); it is not modified. All 296 messages of the current `Default.isl` are present (verified).
-  The five DropWheel strings in `DropWheel-ar.isl` are new and should get a native review (installer
-  wording only: "Additional tasks:", "Start with Windows", "Watch mouse and keyboard", the shortcut
-  comment and the uninstall question).
-- **No custom uninstall page**: the Inno Setup 6 uninstaller cannot add wizard pages
-  (`CreateInputOptionPage` is Setup-only), and `CreateCustomForm` changed its signature in 6.6.0
-  (width/height are constructor parameters now), so a form-based checkbox would be written against
-  one compiler version only and cannot be compiled locally. "Remove my settings" is therefore a
-  single Yes/No confirmation (default: keep) instead of a checkbox page. The required semantics are
-  preserved: silent uninstall always keeps the settings (and the helper programs), interactive
-  uninstall asks and defaults to keeping them.
-- **Win-x64 publish is trimmed**: `PublishTrimmed` + `TrimMode=partial` with WPF is not supported by
-  the .NET SDK (the csproj suppresses `NETSDK1196` with `_SuppressWpfTrimError`). Settings JSON is
-  source-generated (`SettingsJson`), which is trim-safe, but the Package job's `--diagnose` run is
-  the first real check of the trimmed app. If it fails, drop `-p:PublishTrimmed=true` in
-  `build-installer.ps1` (one line; the setup will grow past 70 MB, so report before doing that).
-- **Wizard images**: exactly 164x314 and 55x55 as specified. Inno Setup 6.6+ displays them in a
-  202x386 / 58x58 area and scales them (aspect kept), so they are slightly enlarged but not distorted.
-- **Branch CI does not exercise the installer**: the `Package` job runs only on `main`/tags. The
-  first compile of the new `.iss` and the first smoke-test run therefore happen in that job, which is
-  also the only place the setup size and the smoke-test PASS/FAIL exist (`build-installer.ps1` prints
-  the size table and `test-installer.ps1` prints PASS/FAIL with the installer log tail on failure).
-  Run the Package job once via `workflow_dispatch` after merging (or temporarily allow it on the
-  branch) to get those two numbers before tagging.
-- **Uninstall scope**: the Run value, context-menu keys and Send-to shortcut are per-user (HKCU) of
-  the installing user, as the app creates them. An all-users install cleans the installing user's
-  HKCU entries (a different user's entries are not touched, by design).
-- **`--set-watch` is a cross-agent dependency**: with this branch alone the switch does not exist yet,
-  so an install would start the app instead of applying the setting (the installer still completes;
-  `nowait`). Merge `2.2.0-update-ui` (or whatever implements it) with or before this branch.
+## Notes / limitations
 
-## Local verification performed (no build, no installer run)
+- `make-update-key.ps1` is destructive by design and refuses without `-Rotate`; it never writes
+  the private key to disk or stdout. PowerShell strings cannot be provably zeroed, so it avoids
+  ever creating a base64 *string* for the private key (uses `char[]` + `byte[]`, both cleared).
+- `sign-release.ps1` and `verify-signature.ps1` prefer the live `PublicKeyBase64` constant from
+  `src/FileAction.Core/Updates/UpdateKey.cs` when the repo is present; the built-in snapshot is
+  only for a standalone copy. After a real rotation, update the snapshot constants and
+  `docs/signing-updates.md` too.
+- `docs/signing.md` (SignPath/Authenticode) is a different topic and was left untouched.
+- No `ci.yml`, `Core/**` or `installer/**` changes were made from this branch.
 
-- `DropWheel.iss`: pure ASCII (0 bytes > 0x7F), reviewed against the Inno Setup 6.7 docs for every
-  directive used; `Arabic.isl` and `DropWheel-ar.isl` verified UTF-8 without BOM.
-- Both PowerShell scripts: 0 parser errors (`System.Management.Automation.Language.Parser`).
-- Wizard image code executed locally against `branding\DropWheel-1024.png`: produced 164x314 and
-  55x55 24-bit BMPs (valid `BM` header) and the result was inspected visually (violet gradient, logo,
-  halo) — the images are generated at build time, not committed.
-- No `dotnet publish`, no `ISCC`, no setup, no uninstaller and no `DropWheel.exe` was run locally.
+---
+
+# NOTES - tests (branch `2.2.0-tests`)
+
+Status: test files written; branch based on `main` `5003b7e` (update-core `b3eb918`, strings `9b518dc`
+and signing already merged).
+
+## Files added (only new files under `tests/FileAction.Tests/`)
+
+| File | Covers |
+| --- | --- |
+| `UpdateCoreTests.cs` | `SemanticVersion` numeric rules, `ParseSha256Digest`, `Sha256Sums`, `GitHubReleaseClient.ParseLatest`, `UpdateVerifier` (ephemeral P-256), `UpdateService.CheckAsync`/`DownloadAsync` failure paths and cancellation with a fake `HttpMessageHandler`. |
+| `SettingsDefaultsTests.cs` | `new AppSettings()` defaults, `SettingsJson.Default.AppSettings` round-trip, legacy language migration. |
+| `PolicyTests2.cs` | `Policy.ParsePolicyValue` and the hooks/downloads gates (defaults only, no HKLM write). |
+| `SettingsTabsTests.cs` | Six tab keys, one card per toggle key, no Czech text, public static `SettingsWindow.Updates`. |
+| `InstallerSpecTests.cs` | AppId, privileges, languages, two checked tasks, `CloseApplications=yes`, `uninsdeletevalue`, `--set-watch`, `/VERYSILENT`, output name. |
+| `NewStringsTests.cs` | 2.2.0 keys in `en.json`/`ar.json`, key-set parity, placeholder parity, Arabic bidi isolates. |
+
+## Requests from tests
+
+None. No extra package or project reference is needed: xunit 2.9.3 and the BCL
+(`System.Text.Json`, `System.Security.Cryptography`) cover every test.
+
+## Expected CI state on this branch
+
+- **Green** on `main` `5003b7e`: `UpdateCoreTests`, `SettingsDefaultsTests`, `PolicyValueTests2`,
+  `PolicyGateTests2`, `NewStringsTests`.
+- **Red until `2.2.0-settings-tabs` merges (`5a7cd76`)**: `SettingsTabsTests` (six tabs,
+  `settings.general.watch`, `IUpdateService? Updates`). `settings.company.hooks` is deliberately not
+  required: the watch toggle moved to General under `settings.general.watch`.
+- **Red until `2.2.0-installer` merges**: `InstallerSpecTests` needs the edited
+  `installer/DropWheel.iss` plus `scripts/test-installer.ps1` and `scripts/build-installer.ps1`.
+  A missing file fails with its exact path, never a skip.
+
+## Constraints kept
+
+- Offline/deterministic: no GitHub call, no HKLM write, no process/exe launch, no installer execution.
+- Temp files only under `Path.GetTempPath()` and deleted in `Dispose`.
+- No production signing key is used: signature tests generate an ephemeral ECDSA P-256 key in-process.
+- No existing test file, `TestSetup.cs`, `.csproj`, `src/**` or `ci.yml` was modified.
