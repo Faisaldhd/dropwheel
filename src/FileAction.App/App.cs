@@ -7,8 +7,10 @@ using FileAction.App.Input;
 using FileAction.App.Jobs;
 using FileAction.App.Shell;
 using FileAction.App.UI;
+using FileAction.App.Updates;
 using FileAction.App.Wheel;
 using FileAction.Core;
+using FileAction.Core.Updates;
 using static FileAction.Core.Loc;
 
 namespace FileAction.App;
@@ -47,6 +49,11 @@ public static class Program
             return 3;
         }
 
+        // 2.2.0: the update helper (--apply-update) must run before the single-instance check. The running
+        // app starts it as a separate process and exits, so it can never be forwarded to the live instance.
+        if (UpdateApplier.TryRun(args, out var updateExit))
+            return updateExit;
+
         using var instance = SingleInstance.TryAcquire();
         if (instance is null)
         {
@@ -70,6 +77,9 @@ internal sealed class App : Application
     private TrayIcon? _tray;
     private HotkeyListener? _hotkey;
     private HotkeyPreset? _activeHotkey;
+    private UpdateService? _updates;
+    private ThemeMode _theme;
+    private bool _backgroundChecks;
 
     public App(SingleInstance instance, string[] args)
     {
@@ -89,6 +99,16 @@ internal sealed class App : Application
         LanguageManager.Apply(_settings.Language);
         AppLog.Info($"language: {LanguageManager.Current} (preference {LanguageManager.Preference}), rtl={LanguageManager.IsRtl}");
         Theme.Apply(_settings.Theme);
+        _theme = _settings.Theme;
+
+        // 2.2.0: the update checker. It only reads the latest public GitHub release; downloading and
+        // applying always need the user's click in the banner or the tray menu.
+        _updates = new UpdateService(AppVersion(), UpdatePaths.IsPortable);
+        SettingsWindow.Updates = _updates;
+        _updates.UpdateAvailable += OnUpdateAvailable;
+        _updates.StateChanged += OnUpdateStateChanged;
+        AppLog.Info($"update service ready (version {AppVersion().ToString(3)}, " +
+                    $"portable={_updates.IsPortable}, automatic={_settings.CheckForUpdates})");
         _tools = new ToolLocator();
         var jobs = new JobRunner(_settings, _tools);
         SettingsWindow.DownloadTool = tool => jobs.DownloadToolsAsync([tool], ask: false);
@@ -157,11 +177,17 @@ internal sealed class App : Application
             _tray.Show(T("app.running.title"), T("app.running.hint"), false);
         }
         HandleArgs(_args);
+
+        // A successful update restart passes --updated <version>; greet, then keep starting normally.
+        AnnounceUpdatedIfRequested();
+        if (_settings.CheckForUpdates)
+            StartBackgroundChecks();
     }
 
     private TrayIcon CreateTray()
     {
         var tray = new TrayIcon(OpenSettings, () => _controller.OpenForClipboard(), () => ShelfWindow.Open([]), ShowHelp, SetPaused, _settings.Paused, () => Shutdown());
+        tray.CheckForUpdates = () => _ = CheckUpdatesAsync();
         return tray;
     }
 
@@ -189,7 +215,25 @@ internal sealed class App : Application
             WheelEditorWindow.RelocalizeIfOpen();
             ShelfWindow.RelocalizeAll();
             JobsWindow.RelocalizeAll();
+            UpdateBanner.RelocalizeAll();
         }
+
+        if (_theme != _settings.Theme)
+        {
+            // 2.2.0: the theme applies without a restart; the built controls hold brushes from the old
+            // palette, so the settings window is rebuilt with the new one.
+            _theme = _settings.Theme;
+            Theme.Apply(_theme);
+            AppLog.Info($"theme: {_theme}");
+            SettingsWindow.RefreshIfOpen();
+        }
+
+        // 2.2.0: "Check for updates automatically" starts/stops the daily timer immediately. It only
+        // checks; a download still needs a click.
+        if (_settings.CheckForUpdates)
+            StartBackgroundChecks();
+        else
+            StopBackgroundChecks();
 
         // R-20: turning gesture monitoring on/off takes effect immediately (no restart).
         var wantHooks = Policy.HooksAllowed(_settings, _args);
@@ -258,6 +302,145 @@ internal sealed class App : Application
         _settings.Save();
     }
 
+    /// <summary>A background or manual check found a newer release: offer it in the tray (one click installs).</summary>
+    private void OnUpdateAvailable(UpdateInfo info)
+    {
+        AppLog.Info($"update available: {info.Version}");
+        void Offer()
+        {
+            _tray?.OfferUpdate(info.Version, () => _ = InstallUpdateAsync(info));
+        }
+        try
+        {
+            if (Dispatcher.CheckAccess())
+                Offer();
+            else
+                Dispatcher.BeginInvoke((Action)Offer);
+        }
+        catch (InvalidOperationException)
+        {
+            // The dispatcher is shutting down; there is nobody left to offer the update to.
+        }
+    }
+
+    /// <summary>Keeps the tray item in step with the checker: the item exists only while a newer release is known.</summary>
+    private void OnUpdateStateChanged()
+    {
+        if (_updates?.Available is not null)
+            return;
+        try
+        {
+            if (Dispatcher.CheckAccess())
+                _tray?.ClearUpdate();
+            else
+                Dispatcher.BeginInvoke((Action)(() => _tray?.ClearUpdate()));
+        }
+        catch (InvalidOperationException)
+        {
+            // Shutting down.
+        }
+    }
+
+    /// <summary>Tray "Check for updates": one user-initiated check, reported with a balloon.</summary>
+    private async Task CheckUpdatesAsync()
+    {
+        if (_updates is null || _updates.IsChecking || _updates.IsDownloading)
+            return;
+        AppLog.Info("update check requested from the tray");
+        try
+        {
+            var status = await _updates.CheckAsync(true);
+            if (status == UpdateCheckStatus.UpToDate)
+            {
+                _tray?.ClearUpdate();
+                _tray?.Show("DropWheel",
+                    T("update.check.upToDate", Bidi.Value(_updates.CurrentVersion.ToString(3))), false);
+            }
+            else if (status == UpdateCheckStatus.Failed)
+            {
+                var error = _updates.LastError;
+                AppLog.Warn($"update check failed from the tray: {error ?? "no details"}");
+                _tray?.Show(T("update.error.title"), T("update.check.failed", Bidi.Value(error ?? "")), true);
+            }
+            // Available: UpdateAvailable already showed the balloon and added the menu item.
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("update check from the tray failed", ex);
+            _tray?.Show(T("update.error.title"), T("update.error.body", Bidi.Value(ex.Message)), true);
+        }
+    }
+
+    /// <summary>Tray "Update to x.y.z": download, verify and apply; the app exits when the updater takes over.</summary>
+    private async Task InstallUpdateAsync(UpdateInfo info)
+    {
+        if (_updates is null || _updates.IsDownloading)
+            return;
+        AppLog.Info($"installing update {info.Version} from the tray");
+        try
+        {
+            var result = await UpdateApplier.DownloadAndApplyAsync(_updates, info, null, CancellationToken.None);
+            if (result.Success)
+                return; // the app exits for the update
+            var error = string.IsNullOrWhiteSpace(result.Error) ? T("update.error.title") : result.Error;
+            AppLog.Error($"update {info.Version} failed: {result.Error ?? "no details"}");
+            _tray?.Show(T("update.error.title"), T("update.error.body", Bidi.Value(error)), true);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("update download/apply failed", ex);
+            _tray?.Show(T("update.error.title"), T("update.error.body", Bidi.Value(ex.Message)), true);
+        }
+    }
+
+    /// <summary>Starts the 60 s / 24 h background checks; calling it twice is harmless.</summary>
+    private void StartBackgroundChecks()
+    {
+        if (_updates is null || _backgroundChecks)
+            return;
+        _updates.StartBackgroundChecks();
+        _backgroundChecks = true;
+        AppLog.Info("automatic update checks started (first check in 60 s, then every 24 h)");
+    }
+
+    private void StopBackgroundChecks()
+    {
+        if (_updates is null || !_backgroundChecks)
+            return;
+        _updates.Stop();
+        _backgroundChecks = false;
+        AppLog.Info("automatic update checks stopped by the setting");
+    }
+
+    /// <summary>Handles <c>--updated &lt;version&gt;</c> / <c>--updated=&lt;version&gt;</c> left by the update helper.</summary>
+    private void AnnounceUpdatedIfRequested()
+    {
+        const string prefix = "--updated=";
+        string? version = null;
+        var index = Array.IndexOf(_args, "--updated");
+        if (index >= 0 && index + 1 < _args.Length && !_args[index + 1].StartsWith("--", StringComparison.Ordinal))
+        {
+            version = _args[index + 1];
+        }
+        else
+        {
+            var prefixed = _args.FirstOrDefault(a => a.StartsWith(prefix, StringComparison.Ordinal));
+            if (prefixed is not null)
+                version = prefixed[prefix.Length..];
+        }
+        if (string.IsNullOrWhiteSpace(version))
+            return;
+        AppLog.Info($"started after an update to {version}");
+        UpdateApplier.AnnounceUpdated(version);
+    }
+
+    /// <summary>The running build's version as major.minor.build (the assembly revision stays out of the UI).</summary>
+    private static Version AppVersion()
+    {
+        var version = typeof(App).Assembly.GetName().Version ?? new Version(2, 2, 0);
+        return new Version(version.Major, version.Minor, Math.Max(0, version.Build));
+    }
+
     private void ShowHelp()
     {
         var convert = Bidi.Value(AppSettings.KeyName(_settings.ConvertKey));
@@ -291,6 +474,9 @@ internal sealed class App : Application
     {
         _hotkey?.Dispose();
         _input?.Dispose();
+        _updates?.Dispose();
+        _updates = null;
+        SettingsWindow.Updates = null;
         _tray?.Dispose();
         _settings.Save();
         base.OnExit(e);
