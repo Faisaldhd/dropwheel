@@ -43,6 +43,18 @@ public sealed class AppSettings
     /// <summary>Empty = save results next to the original file.</summary>
     public string? OutputDirectory { get; set; }
 
+    /// <summary>
+    /// R-20: company-safe by default. When false no low-level keyboard/mouse hooks are installed at all; the
+    /// wheel opens from the tray, the Explorer context menu or the shelf window.
+    /// </summary>
+    public bool WatchGestures { get; set; }
+
+    /// <summary>
+    /// R-20: company-safe by default. When false DropWheel never downloads a helper tool; it only uses what is
+    /// already on PATH, installed by winget, or chosen by the user.
+    /// </summary>
+    public bool AutoDownloadTools { get; set; }
+
     public bool RevealResult { get; set; }
     public bool Paused { get; set; }
     public bool FirstRunDone { get; set; }

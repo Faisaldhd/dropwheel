@@ -61,6 +61,9 @@ internal sealed class GlobalInput : IDisposable
     /// <summary>True when both low-level hooks are installed.</summary>
     public bool HooksInstalled => _keyboardHook != IntPtr.Zero && _mouseHook != IntPtr.Zero;
 
+    /// <summary>True while the hook thread runs; false once the setting or policy stopped it.</summary>
+    public bool IsRunning => _thread is not null;
+
     /// <summary>The Win32 error of the hook that failed to install, or 0 (for logs and --diagnose).</summary>
     public int HookError { get; private set; }
 

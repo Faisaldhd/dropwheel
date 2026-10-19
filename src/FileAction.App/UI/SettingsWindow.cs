@@ -202,6 +202,33 @@ internal sealed class SettingsWindow : Window
         root.Children.Add(Card(T("PDF na obrázky", "PDF to images"), T("Rozlišení v DPI", "Resolution in DPI"),
             Slider(72, 600, _settings.Quality.PdfDpi, v => _settings.Quality.PdfDpi = v, Save), glyph: Glyphs.Page));
 
+        // R-20: company-safe switches. Both default to OFF; IT can lock them with HKLM policies.
+        root.Children.Add(SectionHeader(T("Firemní režim", "Company mode")));
+        root.Children.Add(Card(T("Sledovat myš a klávesnici", "Watch mouse and keyboard"),
+            Shell.Policy.HooksDisabled
+                ? T("Zakázáno zásadou správce.", "Disabled by the administrator policy.")
+                : T("Vypnuto = žádné globální hooky. Kolo otevřete z nabídky DropWheel nebo přetažením souboru.",
+                    "Off = no global hooks at all. Open the wheel from the DropWheel menu or by dropping a file."),
+            Toggle(_settings.WatchGestures && !Shell.Policy.HooksDisabled, v =>
+            {
+                _settings.WatchGestures = v;
+                Save();
+                Rebuild();
+            }),
+            glyph: "\uE7C9"));
+        root.Children.Add(Card(T("Stahovat pomocné nástroje", "Download helper tools"),
+            Shell.Policy.DownloadsDisabled
+                ? T("Zakázáno zásadou správce.", "Disabled by the administrator policy.")
+                : T("Vypnuto = DropWheel nikdy nic nestahuje a používá jen nástroje, které už v systému jsou.",
+                    "Off = DropWheel never downloads anything and only uses tools already on the machine."),
+            Toggle(_settings.AutoDownloadTools && !Shell.Policy.DownloadsDisabled, v =>
+            {
+                _settings.AutoDownloadTools = v;
+                Save();
+                Rebuild();
+            }),
+            glyph: "\uE896"));
+
         root.Children.Add(SectionHeader(T("Systém", "System")));
         root.Children.Add(Card(T("Spouštět po přihlášení", "Start when I sign in"), null,
             Toggle(ShellIntegration.IsAutostartEnabled, v => Apply(() => ShellIntegration.SetAutostart(v))), glyph: "\uE7E8"));

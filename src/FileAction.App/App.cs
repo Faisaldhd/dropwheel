@@ -94,16 +94,26 @@ internal sealed class App : Application
 
         _input = new GlobalInput(Dispatcher);
         var hooksFailed = false;
-        try
+        var hooksAllowed = Policy.HooksAllowed(_settings, _args);
+        if (hooksAllowed)
         {
-            _input.Start();
-            AppLog.Info($"input hooks installed (keyboard={_input.HooksInstalled}, last Win32 error {_input.HookError})");
+            try
+            {
+                _input.Start();
+                AppLog.Info($"input hooks installed (keyboard={_input.HooksInstalled}, last Win32 error {_input.HookError})");
+            }
+            catch (InvalidOperationException ex)
+            {
+                hooksFailed = true;
+                AppLog.Error($"input hooks failed (Win32 error {_input.HookError})", ex);
+                Dialogs.Show(ex.Message, "DropWheel", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
-        catch (InvalidOperationException ex)
+        else
         {
-            hooksFailed = true;
-            AppLog.Error($"input hooks failed (Win32 error {_input.HookError})", ex);
-            Dialogs.Show(ex.Message, "DropWheel", MessageBoxButton.OK, MessageBoxImage.Warning);
+            // R-20: company-safe default. No SetWindowsHookEx at all unless the user (or IT) allows it.
+            AppLog.Info($"gesture hooks are off (setting={_settings.WatchGestures}, policy={Policy.HooksDisabled}, " +
+                        $"--no-hooks={_args.Contains("--no-hooks")})");
         }
 
         _controller = new WheelController(_settings, _tools, jobs, _input);
@@ -124,6 +134,13 @@ internal sealed class App : Application
             _tray.Show("DropWheel", T(
                 "DropWheel nemůže na tomto PC sledovat myš a klávesnici (může to blokovat bezpečnostní software). Použijte Ctrl+Alt+Mezerník nebo klepněte pravým tlačítkem na DropWheel.",
                 "DropWheel can't watch the mouse and keyboard on this PC (security software may block it). Use Ctrl+Alt+Space or right-click DropWheel."), true);
+        }
+        else if (!hooksAllowed)
+        {
+            // Company-safe default: explain how to use the app without any keyboard/mouse monitoring.
+            _tray.Show("DropWheel", T(
+                "Sledování gest je vypnuté (firemní výchozí nastavení). Kolo otevřete z nabídky DropWheel nebo přetažením souboru. Zapnete ho v Nastavení → Firemní režim.",
+                "Gesture monitoring is off (company-safe default). Open the wheel from the DropWheel menu or by dropping a file. Enable it in Settings → Company mode."), false);
         }
         SettingsWindow.Operations = () => _controller.AllOperations;
         _hotkey = new HotkeyListener(_controller.OnHotkey);
@@ -189,6 +206,28 @@ internal sealed class App : Application
             ShelfWindow.RelocalizeAll();
             JobsWindow.RelocalizeAll();
         }
+
+        // R-20: turning gesture monitoring on/off takes effect immediately (no restart).
+        var wantHooks = Policy.HooksAllowed(_settings, _args);
+        if (wantHooks && !_input.IsRunning)
+        {
+            try
+            {
+                _input.Start();
+                _tray?.Show("DropWheel", T("Sledování gest je zapnuté.", "Gesture monitoring is on."), false);
+            }
+            catch (InvalidOperationException ex)
+            {
+                AppLog.Error("could not start the gesture hooks", ex);
+                Dialogs.Show(ex.Message, "DropWheel", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        else if (!wantHooks && _input.IsRunning)
+        {
+            _input.Dispose();
+            AppLog.Info("gesture hooks stopped by the setting/policy");
+        }
+
         ApplyHotkey();
         if (_tray is not null)
             _tray.Paused = _settings.Paused;

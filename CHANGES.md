@@ -1,4 +1,21 @@
-# DropWheel 2.0.0 — CHANGES
+# DropWheel 2.1.0 — CHANGES
+## 2.1.0
+
+Company-safe release.
+
+- **Keyboard and mouse monitoring is now OFF by default.** With it off, DropWheel installs no global hooks
+  at all; the wheel opens from the tray menu, the Explorer context menu or by dropping files. Turn it on in
+  Settings > Company mode (it applies immediately), or pass `--no-hooks`.
+- **Helper-tool downloads are now OFF by default.** DropWheel only uses FFmpeg/Pandoc found on PATH, installed
+  by winget, or chosen by the user. Tool errors now name the tool, the folder and the OS error instead of
+  blaming the output folder.
+- **IT policy:** `HKLM\SOFTWARE\Policies\DropWheel\DisableHooks=1` and `DisableDownloads=1` lock the two
+  switches machine-wide.
+- Portable zip (self-contained, no admin, no registry) and a tag-triggered GitHub release.
+- New `SECURITY.md` and `--diagnose` report for security reviews; low-integrity start is detected and refused
+  with an explanation.
+- Crash report file + fallback log locations, Arabic and English UI, brand icons.
+
 
 DropWheel is the independent continuation of the MIT-licensed **FileAction** project. This is the first release where
 nothing points back upstream: no update checks, no GitHub links, no automatic merges.

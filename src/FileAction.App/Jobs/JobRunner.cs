@@ -99,6 +99,19 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
     /// <summary>Downloads FFmpeg/Pandoc with a progress card; true when everything is installed.</summary>
     public async Task<bool> DownloadToolsAsync(IReadOnlyList<ExternalTool> missing, bool ask)
     {
+        if (!Policy.DownloadsAllowed(settings))
+        {
+            // R-20: company-safe default. Never download unless the user (or IT) allows it.
+            var blocked = string.Join(" + ", missing.Select(ToolLocator.DisplayName));
+            AppLog.Info($"tool download blocked (auto-downloads off, policy={Policy.DownloadsDisabled})");
+            Dialogs.Show(
+                $"Automatic downloads are off, so {blocked} cannot be downloaded.\n\n" +
+                $"Install it yourself (for example: {ToolLocator.InstallHint(missing[0])}) and DropWheel will find it, " +
+                "or enable downloads in Settings > Company mode.",
+                "DropWheel", MessageBoxButton.OK, MessageBoxImage.Information);
+            return false;
+        }
+
         if (ask)
         {
             var names = string.Join(" + ", missing.Select(t => Bidi.Value(ToolLocator.DisplayName(t))));
