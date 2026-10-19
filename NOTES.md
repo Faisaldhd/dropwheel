@@ -50,8 +50,20 @@ running `.ps1` files locally, so the scripts were **not executed here**. What wa
      tampered file; .NET verified an OpenSSL P1363 signature and rejected tampering;
    - embedded key imported in Node as `ec` / `prime256v1`, fingerprint matched
      `9d6b35c5...bce02`.
-3. **Not covered locally:** actual execution of the `.ps1` files on pwsh 7. The test to run
-   first in CI/on a pwsh 7 machine is:
+3. **.NET 10 runtime check (`dotnet fsi`, SDK 10.0.402; no app build, no project):**
+   - embedded SPKI imported (91 bytes, `KeySize=256`), fingerprint
+     `9d6b35c5376d6decceced299829643456c52fee8c0662dd101d62d422f0bce02`;
+   - ephemeral `ECDsa.Create(nistP256)`: SPKI 91 bytes, PKCS#8 138 bytes;
+     `ImportPkcs8PrivateKey` read all 138 bytes;
+   - `SignData(stream, SHA256)` produced **64 bytes / 88 base64 chars**;
+   - `VerifyHash` accepted the good signature and rejected a tampered hash and the wrong
+     (embedded) key;
+   - confirms the .NET 10 default is IEEE P1363 and that the app's `VerifyHash` path matches the
+     scripts. A 70-byte DER-like signature is 96 base64 chars, which the scripts reject.
+4. **Not covered locally:** actual execution of the `.ps1` files on pwsh 7 (no `pwsh` here; the
+   rules forbid running `.ps1` locally). The underlying .NET 10 APIs above are verified, and the
+   scripts are syntax-clean; the remaining risk is only PowerShell's method binding/execution.
+   The test to run first in CI/on a pwsh 7 machine is:
    `pwsh ./scripts/sign-release.ps1 -SelfTest` (no secret needed; uses the same import, sign,
    write, read and verify functions, and asserts tamper/wrong-key failures).
 
