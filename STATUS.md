@@ -1,6 +1,31 @@
 # STATUS
 
-NOW: R-19 CI live, R-18 crash/log/diagnose landed, R-2 packaging merged (setup 23.35 MB), R-12 merged (en+ar, RTL) — CI: build+57 tests green — next: R-2 interop merge, R-15, R-16
+NOW: R-2 done (setup 19.71 MB, SDK.NET projection gone), R-22/R-16/R-18/R-14/R-17 done — CI build + tests green — next: R-20, R-15 (phase-2 keys), R-5 screenshots
+
+## Session 3 results (CI run 39218574689 and the ones before it)
+- **R-2 complete, measured in CI:** publish **63.1 MB / 40 files** (was 87.6 MB), setup **19.71 MB**
+  (was 23.35 MB; target ≤ 30 MB), `Microsoft.Windows.SDK.NET.dll` **absent**. The app targets
+  `net10.0-windows` and reaches OCR/share through `Native\WinRt*.cs` raw COM; `SupportedOSPlatformVersion`
+  removed (NETSDK1135). The installer still detects/installs the .NET 10 Desktop Runtime and verifies its
+  Authenticode signature.
+- **R-22 done:** prompts moved to `docs\prompts\`, agent worktrees/branches removed, `build.cmd` +
+  `release.cmd` use `..\_local\sdk`, and the installer reads `..\release\DropWheel` (the old
+  `..\..\release` pointed outside the repo and could never have found the CI publish output).
+  Workspace root: `DropWheel\` (repo) + `_local\` (sdk/testdata/old-builds/old-notes) + `README.md`.
+- **R-16 done:** `ToolInstallException` names the tool, folder and OS error (en+ar keys
+  `tool.installFailed` / `tool.installAccessDenied`); the install folder falls back to
+  `%LOCALAPPDATA%\Programs\DropWheel\tools` then TEMP after a write probe; `ToolLocator` searches the
+  fallback; failures are logged and shown on the job card. 3 tests pin the mapping (never blames the
+  output folder).
+- **R-18 verified:** the diagnostics code compiles and CI runs `--diagnose`; that step now waits properly
+  (`Start-Process -Wait`) because a GUI exe does not set `$LASTEXITCODE` under `&`.
+- **R-14/R-17:** `Assets\` carries the reviewer's regenerated icons (9 frames 16–256, bold tray icons);
+  `IconAssetsTests` pins SHA-256 parity with `branding\`, so CI fails on drift.
+- **Fixtures:** `tests\FileAction.Tests\TestData.cs` prefers `_local\testdata\TestFiles` (or
+  `DROPWHEEL_TESTDATA`), copies them into the sample folder, and restores the **read-only** attribute on
+  `read-only.jpg`; CI without `_local` keeps generating samples.
+- CI: <https://github.com/Faisaldhd/dropwheel/actions> — build+test green on `d1d1f5e` (run 39218574689);
+  the package job built the installer and reported the sizes above.
 
 ## CI (R-19) — the only place anything is built or run
 - Workflow: `.github/workflows/ci.yml` on `windows-latest`, triggered by push, PR and `workflow_dispatch`.
