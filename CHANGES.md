@@ -1,4 +1,38 @@
-# DropWheel 2.2.0 — CHANGES
+# DropWheel 2.2.1 — CHANGES
+
+## 2.2.1
+
+### English
+
+- **P0 fix — self-contained 2.2.0 could not load its UI strings.** The trimmed self-contained publish ran
+  `JsonSerializer.Deserialize<Dictionary<string,string>>` on the embedded string tables. Trimming removed the
+  reflection metadata, every lookup fell back to its key, and the installed app showed `settings.title` and
+  other key names. The Settings window could then lay out enormous key strings and appear black. `Loc` now
+  parses the same tables with the trim-safe `JsonDocument`, so English and Arabic load normally in the
+  self-contained build.
+- **Settings can never be a silent black window again.** If building the window throws, DropWheel logs the
+  exception and shows a readable error card instead of an empty black window; a missing header image is
+  non-fatal.
+- **CI now renders the actual shipped build.** The build job publishes the same trimmed, self-contained
+  win-x64 output the installer packages, runs `--self-test` on it, asserts that both string tables loaded
+  (300+ keys) and uploads the log/screenshots. The real update banner is rendered too.
+- `--diagnose` reports the loaded string count and the resolved Settings title.
+- Version 2.2.1; the download page and installer use the new version.
+
+### العربية
+
+- **إصلاح عاجل (P0): نسخة 2.2.0 المكتفية ذاتيًّا لم تكن تحمّل نصوص الواجهة.** كان النشر المقصوص (trimmed)
+  يستخدم `JsonSerializer.Deserialize<Dictionary<string,string>>` لقراءة جداول النصوص المضمَّنة، فيزيل القصّ
+  بيانات الانعكاس ويظهر بدل كل نص اسمُ مفتاحه، مثل `settings.title`. وقد تؤدي المفاتيح الطويلة إلى نافذة
+  إعدادات سوداء. أصبح `Loc` يقرأ الجداول نفسها بـ `JsonDocument` الآمن مع القصّ، فتُحمَّل الإنجليزية والعربية
+  بشكل صحيح في النسخة المكتفية ذاتيًّا.
+- **لن تظهر نافذة إعدادات سوداء صامتة مرة أخرى.** إذا فشل بناء النافذة يسجّل DropWheel الاستثناء ويعرض
+  بطاقة خطأ مقروءة بدل نافذة سوداء فارغة، وفشل صورة العنوان لم يعد قاتلًا.
+- **CI يعرض النسخة المُسلَّمة فعليًّا:** ينشر مهمة البناء نفس مخرجات win-x64 المقصوصة المكتفية ذاتيًّا التي
+  يحزمها المثبّت، ويشغّل عليها `--self-test`، ويتأكد من تحميل جدولي النصوص (أكثر من 300 مفتاح) ويرفع السجل
+  ولقطات الشاشة. ويُعرض شريط التحديث الحقيقي أيضًا.
+- يذكر `--diagnose` عدد النصوص المحمَّلة وعنوان نافذة الإعدادات.
+- الإصدار 2.2.1، وصفحة التنزيل والمثبّت يستخدمان الإصدار الجديد.
 
 ## 2.2.0
 

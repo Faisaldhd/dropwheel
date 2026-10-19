@@ -79,6 +79,13 @@ public static class Loc
     /// <summary>The stored preference, which can still be <see cref="Language.System"/>.</summary>
     public static Language Preferred => _preferred;
 
+    /// <summary>
+    /// Number of strings in the active table. Used by the self-test and <c>--diagnose</c> to catch a trimmed
+    /// build that failed to load the embedded tables (which would otherwise show keys like
+    /// <c>settings.title</c> instead of text).
+    /// </summary>
+    public static int KeyCount => (Current == Language.Arabic ? ArabicTable : EnglishTable).Value.Count;
+
     /// <summary>Arabic for <c>ar-*</c> UI cultures, English everywhere else.</summary>
     public static Language Detect() =>
         CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("ar", StringComparison.OrdinalIgnoreCase)
@@ -195,7 +202,21 @@ public static class Loc
             using var stream = typeof(Loc).Assembly.GetManifestResourceStream(name);
             if (stream is null)
                 throw new InvalidOperationException($"Embedded string table '{name}' was not found.");
-            return JsonSerializer.Deserialize<Dictionary<string, string>>(stream) ?? Empty;
+
+            // JsonDocument is trim-safe. The previous JsonSerializer.Deserialize<Dictionary<string,string>>
+            // call depends on reflection, which a trimmed self-contained publish can disable: every lookup
+            // then fell back to the key (the black 2.2.0 Settings window was titled "settings.title").
+            using var document = JsonDocument.Parse(stream);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                throw new JsonException($"Embedded string table '{name}' is not a JSON object.");
+
+            var table = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (property.Value.ValueKind == JsonValueKind.String)
+                    table[property.Name] = property.Value.GetString() ?? string.Empty;
+            }
+            return table;
         }
         catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException)
         {
