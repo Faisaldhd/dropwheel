@@ -130,6 +130,23 @@ jobs:
             -o release/DropWheel
           if (-not (Test-Path release/DropWheel/DropWheel.exe)) { throw "publish produced no DropWheel.exe" }
 
+      - name: Strip debug symbols from the publish
+        shell: pwsh
+        run: |
+          # <DebugType>none</DebugType> is already set in FileAction.App.csproj, but a publish can still
+          # copy *.pdb from a project reference, and a self-contained runtime brings createdump.exe.
+          # installer/DropWheel.iss packs ..\release\DropWheel\* recursively with no exclude filter, so
+          # these files must be gone before the installer is built (and before anything is zipped).
+          $junk = Get-ChildItem release/DropWheel -Recurse -File -Force |
+            Where-Object { $_.Extension -eq '.pdb' -or $_.Name -eq 'createdump.exe' }
+          if ($junk) {
+            $junk | ForEach-Object { Write-Host "removing $($_.FullName)" }
+            $junk | Remove-Item -Force
+          }
+          $left = Get-ChildItem release/DropWheel -Recurse -File -Force |
+            Where-Object { $_.Extension -eq '.pdb' -or $_.Name -eq 'createdump.exe' }
+          if ($left) { throw "debug files remain in release/DropWheel: $($left.FullName -join ', ')" }
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y
@@ -189,13 +206,6 @@ jobs:
             Write-Warning "setup is $setupMb MB, above the 30 MB target of R-2"
           }
 
-      - name: Portable zip
-        shell: pwsh
-        run: |
-          $version = "${{ steps.version.outputs.version }}"
-          Compress-Archive -Path release/DropWheel/* -DestinationPath "release/DropWheel-portable-$version.zip" -Force
-          Get-Item "release/DropWheel-portable-$version.zip" | Select-Object Name, Length
-
       # R-23: a truly portable build — self-contained, so it runs with no .NET install, no installer,
       # no registry, no admin. Settings stay next to the exe when portable.txt is present.
       - name: Portable zip (self-contained, no admin)
@@ -206,6 +216,30 @@ jobs:
             -c Release -r win-x64 --self-contained true `
             -o portable/DropWheel
           if (-not (Test-Path portable/DropWheel/DropWheel.exe)) { throw "self-contained publish produced no exe" }
+
+          # Neither debug symbols nor the runtime's createdump.exe belong in the portable zip.
+          $junk = Get-ChildItem portable/DropWheel -Recurse -File -Force |
+            Where-Object { $_.Extension -eq '.pdb' -or $_.Name -eq 'createdump.exe' }
+          if ($junk) {
+            $junk | ForEach-Object { Write-Host "removing $($_.FullName)" }
+            $junk | Remove-Item -Force
+          }
+          $left = Get-ChildItem portable/DropWheel -Recurse -File -Force |
+            Where-Object { $_.Extension -eq '.pdb' -or $_.Name -eq 'createdump.exe' }
+          if ($left) { throw "debug files remain in portable/DropWheel: $($left.FullName -join ', ')" }
+
+          # The installer ships LICENSE, THIRD-PARTY-NOTICES.md and the licenses folder; the portable
+          # zip must ship them too, at the root of the zip next to DropWheel.exe.
+          Copy-Item -Path LICENSE -Destination portable/DropWheel -Force
+          Copy-Item -Path THIRD-PARTY-NOTICES.md -Destination portable/DropWheel -Force
+          New-Item -ItemType Directory -Path portable/DropWheel/licenses -Force | Out-Null
+          Copy-Item -Path 'licenses/*' -Destination portable/DropWheel/licenses -Recurse -Force
+          foreach ($required in 'LICENSE', 'THIRD-PARTY-NOTICES.md', 'licenses') {
+            if (-not (Test-Path (Join-Path portable/DropWheel $required))) {
+              throw "portable staging is missing $required"
+            }
+          }
+
           Set-Content portable/DropWheel/portable.txt "DropWheel portable build: settings and downloaded tools stay in this folder."
           Compress-Archive -Path portable/DropWheel/* -DestinationPath "release/DropWheel-$version-portable-win-x64.zip" -Force
           $zip = Get-Item "release/DropWheel-$version-portable-win-x64.zip"
@@ -216,8 +250,13 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $files = Get-ChildItem release -File | Where-Object { $_.Extension -in '.exe', '.zip' }
-          if (-not $files) { throw "no installer or zip to hash" }
+          # Exactly two binary assets remain: the setup exe and the self-contained portable zip.
+          $files = @(Get-ChildItem release -File | Where-Object {
+            $_.Name -like 'DropWheel-Setup-*.exe' -or $_.Name -like 'DropWheel-*-portable-win-x64.zip'
+          })
+          if ($files.Count -ne 2) {
+            throw "expected the setup exe and the self-contained portable zip, found: $($files.Name -join ', ')"
+          }
           $lines = foreach ($file in $files) {
             $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $($file.Name)"
@@ -230,7 +269,7 @@ jobs:
           name: DropWheel-Setup-${{ steps.version.outputs.version }}
           path: |
             release/DropWheel-Setup-*.exe
-            release/*portable*.zip
+            release/DropWheel-*-portable-win-x64.zip
             release/SHA256SUMS.txt
           retention-days: 14
 
@@ -297,7 +336,8 @@ jobs:
 
   release:
     name: GitHub release (tag)
-    # R-24: pushing a vX.Y.Z tag publishes the installer and both portable zips as a GitHub Release.
+    # R-24: pushing a vX.Y.Z tag publishes the installer, the self-contained portable zip and
+    # SHA256SUMS.txt as a GitHub Release.
     if: startsWith(github.ref, 'refs/tags/v')
     needs: package
     runs-on: windows-latest
@@ -314,8 +354,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = $env:GITHUB_REF_NAME
-          $files = Get-ChildItem dist -Recurse -Include *.exe,*.zip,*.txt | Select-Object -ExpandProperty FullName
-          if (-not $files) { throw "no installer or zip found in the uploaded artifacts" }
+          # Three assets only: the setup exe, the self-contained portable zip and SHA256SUMS.txt.
+          # Other downloaded artifacts (test-results, diagnose.txt) are deliberately not released.
+          $files = @(Get-ChildItem dist -Recurse -File | Where-Object {
+            $_.Name -like 'DropWheel-Setup-*.exe' -or
+            $_.Name -like 'DropWheel-*-portable-win-x64.zip' -or
+            $_.Name -eq 'SHA256SUMS.txt'
+          } | Select-Object -ExpandProperty FullName)
+          if ($files.Count -ne 3) {
+            throw "expected setup exe, portable zip and SHA256SUMS.txt, found: $($files -join ', ')"
+          }
           $files | ForEach-Object { Write-Host "release asset: $_" }
           gh release create $tag --repo ${{ github.repository }} --title "DropWheel $tag" --generate-notes @files
           Write-Host "created release $tag"
