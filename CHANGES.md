@@ -1,4 +1,75 @@
-# DropWheel 2.2.2 — CHANGES
+# DropWheel 2.3.0 — CHANGES
+
+## 2.3.0
+
+### English
+
+- **Crop tool (first floating tool).** With a single image selected, the Tools wheel (Ctrl) now offers
+  **Crop**; it opens a floating tool window instead of starting a job. Drag the rectangle by its corner or
+  edge handles, see the area outside it dimmed, pick an aspect ratio (Free, 1:1, 16:9, 9:16, 4:3, 3:4) and
+  adjust the width/height boxes in original-image pixels. Reset restores the whole image and Free.
+  **Apply** writes `<name> Cropped.<ext>` next to the source — or into the folder the drop resolved — never
+  overwrites the original, keeps the format and applies the EXIF orientation first.
+- **A reusable floating-tool framework.** Tools declare their own chrome and preview bounds, get a
+  borderless rounded card centred on the monitor under the cursor, draggable by its title, closed with Esc
+  or the round X, with a Reset / primary-action bar. Each tool lives in its own file and registers itself,
+  so adding the next tool never edits a shared file.
+- **Tool windows adapt to the media.** The window opens at the tool's default size while the file is probed
+  asynchronously (images decode a downsampled preview of at most 2048 px on the long side, with a spinner
+  until it is ready), then animates in ~130 ms to the size that fits the media's aspect ratio inside the
+  tool's preview bounds — portrait is tall and narrow, landscape wide and short, square balanced, and
+  ultra-wide/ultra-tall are clamped so the controls stay usable. The result is clamped to 95% of the
+  work-area width and 90% of its height of the monitor under the cursor, DPI aware; on a small screen the
+  preview shrinks, never the controls. Tiny media is never enlarged beyond 200%. The rules are pure
+  functions in `ToolWindowSizer`, unit tested for portrait, landscape, square, ultra-wide, ultra-tall,
+  tiny, huge and a 1366x768 screen at 125%.
+
+### العربية
+
+- **أداة القصّ (أول أداة عائمة).** عند تحديد صورة واحدة تعرض عجلة الأدوات (Ctrl) خيار **قصّ**، فيُفتح إطار
+  أداة عائم بدل بدء مهمة. اسحب المستطيل من مقابض الزوايا والحواف، والمنطقة خارجه معتمة، واختر نسبة الأبعاد
+  (حر، 1:1، 16:9، 9:16، 4:3، 3:4) واضبط مربعَي العرض والارتفاع ببكسلات الصورة الأصلية. تعيد «إعادة ضبط»
+  الصورة كاملة مع «حر». يكتب **تطبيق** ملفًا باسم `<الاسم> مقصوصة.<الامتداد>` بجانب المصدر أو في المجلد
+  الذي حُلّت إليه الإفلاتة، دون استبدال الأصل، مع الحفاظ على الصيغة وتطبيق اتجاه EXIF أولًا.
+- **إطار أدوات عائم قابل لإعادة الاستخدام.** تعلن كل أداة هيكلها وحدود المعاينة، ويظهر إطار مستدير بلا حدود
+  في وسط الشاشة تحت المؤشر، يُسحب من شريطه ويُغلق بـEsc أو بزر X الدائري، مع شريط «إعادة ضبط» وزر الإجراء
+  الأساسي. كل أداة في ملفها وتُسجّل نفسها، فلا تحتاج الأداة التالية إلى تعديل ملف مشترك.
+- **تتكيّف نوافذ الأدوات مع الوسائط.** تُفتح النافذة بحجم الأداة الافتراضي بينما تُفحص الوسائط في الخلفية
+  (الصور تُفكّ إلى معاينة مصغّرة بحد 2048 بكسل للضلع الأطول، مع مؤشر انتظار)، ثم تتحرك في نحو 130 مللي ثانية
+  إلى الحجم الذي يناسب نسبة أبعاد الوسائط داخل حدود المعاينة: الطولي طويل وضيق، والعرضي عريض وقصير،
+  والمربع متوازن، والشديد العرض أو الطول يُقيَّد لتبقى عناصر التحكم صالحة. يُقيَّد الناتج بـ95% من عرض مساحة
+  العمل و90% من ارتفاعها لشاشة المؤشر مع مراعاة الـDPI، وعلى الشاشة الصغيرة تُصغَّر المعاينة لا عناصر التحكم،
+  ولا تُكبَّر الوسائط الصغيرة أكثر من 200%. القواعد دوال نقية في `ToolWindowSizer` ومغطاة باختبارات
+  للطولي والعرضي والمربع والشديد عرضًا وطولًا والصغير والضخم وشاشة 1366x768 عند 125%.
+
+## 2.2.3
+
+### English
+
+- **The folder you drag onto is honoured in tabbed File Explorer.** Windows 11 lists every tab of one
+  Explorer window as a separate shell window that shares the same top-level handle, so 2.2.2 could pick a
+  background tab or no folder at all and save the result next to the source file. The tab window under the
+  cursor is now matched through `IShellBrowser.GetWindow`, and while a drag is in progress the last folder
+  the cursor crossed is remembered and used when the cursor is back over the source (a folder seen before
+  the drag started is never used). Only an existing, writable folder that differs from the source folder is
+  used, and a short notification names the destination. Every detection and decision is written to the log
+  and the last one appears in `--diagnose`.
+- **The wheel says where the result will go, before you drop.** A label in the middle of the wheel shows
+  "Save to: <folder>" with the full path as its tooltip, "Save next to the file" when no other folder was
+  found, and a warning "Can't save here, will save next to the file" when the folder refuses a write. It
+  updates while the drag continues, following the same remembered-folder rules as the drop itself.
+
+### العربية
+
+- **يُحترم المجلد الذي تسحب إليه في مستكشف الملفات ذي التبويبات.** يعرض ويندوز 11 كل تبويب في نافذة
+  المستكشف كنافذة غلاف منفصلة تشترك في المقبض الأعلى نفسه، لذا كان 2.2.2 قد يختار تبويبًا غير مرئي أو لا
+  يجد مجلدًا فيحفظ النتيجة بجانب الملف الأصلي. الآن يُطابَق مقبض التبويب تحت المؤشر عبر
+  `IShellBrowser.GetWindow`، ويُتذكَّر آخر مجلد عبره المؤشر أثناء السحب ويُستخدم عند رجوع المؤشر إلى مجلد
+  المصدر (ولا يُستخدم مجلد رُئي قبل بدء السحب). لا يُستخدم إلا مجلد موجود وقابل للكتابة ويختلف عن مجلد
+  المصدر، ويسمّي إشعار قصير وجهة الحفظ. تُكتب كل عملية كشف وقرار في السجل ويظهر آخرها في `--diagnose`.
+- **تعرض العجلة وجهة الحفظ قبل الإفلات.** يظهر في وسط العجلة «الحفظ في: <المجلد>» ويحمل المسار الكامل
+  كتلميح، و«الحفظ بجانب الملف» عند عدم العثور على مجلد آخر، وتحذير «لا يمكن الحفظ هنا، سيُحفظ بجانب
+  الملف» عندما يرفض المجلد الكتابة. يتحدّث النص أثناء استمرار السحب وفق قواعد المجلد المتذكَّر نفسها.
 
 ## 2.2.2
 

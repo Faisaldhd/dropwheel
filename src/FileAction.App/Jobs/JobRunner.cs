@@ -16,15 +16,15 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
 
     public void Start(Operation op, IReadOnlyList<FileItem> items) => Start(op, items, null);
 
-    /// <summary>Runs with a per-drop output folder (the folder the wheel was opened over).</summary>
-    public void StartInto(Operation op, IReadOnlyList<FileItem> items, IReadOnlyDictionary<string, string>? parameters, string? outputDir)
-        => Start(op, items, parameters, outputDir);
+    /// <summary>Runs with the folders detected for this drop (under the cursor, plus the remembered one).</summary>
+    public void StartInto(Operation op, IReadOnlyList<FileItem> items, IReadOnlyDictionary<string, string>? parameters, DropTargets? targets)
+        => Start(op, items, parameters, targets);
 
     /// <param name="parameters">Values for the operation's questions; when given (repeat last) no dialog is shown.</param>
     public async void Start(Operation op, IReadOnlyList<FileItem> items, IReadOnlyDictionary<string, string>? parameters)
         => Start(op, items, parameters, null);
 
-    public async void Start(Operation op, IReadOnlyList<FileItem> items, IReadOnlyDictionary<string, string>? parameters, string? outputDir)
+    public async void Start(Operation op, IReadOnlyList<FileItem> items, IReadOnlyDictionary<string, string>? parameters, DropTargets? targets)
     {
         if (op is NeedsToolOperation needs)
         {
@@ -72,19 +72,43 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
             }
         });
         // A folder detected under the cursor receives this drop's results only when it still exists,
-        // is writable and is not the folder the file already lives in. Anything else keeps the 2.2.x
-        // behaviour (next to the source, or the folder chosen in Settings); a folder that exists but
-        // refuses a write says so instead of failing silently.
+        // is writable and is not the folder the file already lives in. In a drag the cursor is usually
+        // back over the source when the wheel opens, so the last folder the cursor crossed while the
+        // drag was running is tried next. Anything else keeps the previous behaviour (next to the
+        // source, or the folder chosen in Settings); a folder that exists but refuses a write says so.
         var sourcePath = items.Count > 0 ? items[0].Path : string.Empty;
-        var detected = OutputTarget.Resolve(sourcePath, outputDir, Directory.Exists, CanWrite);
-        if (detected.Status == OutputTargetStatus.NotWritable)
+        var chosen = OutputTarget.Resolve(sourcePath, targets?.UnderCursor, Directory.Exists, OutputTarget.CanWrite);
+        var usedRemembered = false;
+        if (!chosen.UsesDetectedFolder && !string.IsNullOrWhiteSpace(targets?.Remembered))
+        {
+            var remembered = OutputTarget.Resolve(sourcePath, targets!.Remembered, Directory.Exists, OutputTarget.CanWrite);
+            if (remembered.UsesDetectedFolder)
+            {
+                chosen = remembered;
+                usedRemembered = true;
+            }
+        }
+
+        if (chosen.Status == OutputTargetStatus.NotWritable)
             Notifications.Show(T("app.error.title"), T("error.output.dropFolderFallback"), error: true);
+        if (chosen.Directory is { } destination)
+        {
+            var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(destination));
+            Notifications.Show(T("toast.dropFolder.title"), T("toast.dropFolder", Bidi.Value(string.IsNullOrEmpty(name) ? destination : name)));
+        }
+
+        ShellFolders.NoteDecision(
+            $"source={(OutputTarget.SourceFolder(sourcePath) ?? "(none)")} " +
+            $"cursor={(targets?.UnderCursor ?? "(none)")} remembered={(targets?.Remembered ?? "(none)")} " +
+            $"-> {chosen.Status}{(usedRemembered ? " (remembered)" : string.Empty)} " +
+            $"dir={(chosen.Directory ?? "(next to source)")}");
+
         var context = new OperationContext
         {
             Tools = tools,
             Progress = new Progress<double>(card.Report),
             CancellationToken = cts.Token,
-            OutputDirectory = detected.Directory ??
+            OutputDirectory = chosen.Directory ??
                 (string.IsNullOrWhiteSpace(settings.OutputDirectory) ? null : settings.OutputDirectory),
             Parameters = parameters,
             Settings = settings.Quality,
@@ -194,20 +218,4 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
         ImageMagick.MagickException => T("error.image.process", ex.Message),
         _ => $"{ex.GetType().Name}: {ex.Message}",
     };
-
-    /// <summary>Probe: can a file be created in this folder right now? Never throws.</summary>
-    private static bool CanWrite(string folder)
-    {
-        var probe = Path.Combine(folder, ".dropwheel-write-probe-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            File.WriteAllText(probe, "x");
-            File.Delete(probe);
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
-        {
-            return false;
-        }
-    }
 }

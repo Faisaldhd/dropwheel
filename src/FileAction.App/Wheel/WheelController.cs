@@ -22,6 +22,10 @@ internal sealed class WheelController
     private IReadOnlyList<Operation> _actions;
     private readonly List<string> _pendingPaths = [];
     private readonly DispatcherTimer _argsTimer;
+    private readonly DropFolderMemory _dragMemory = new();
+    private readonly DispatcherTimer _dragTimer;
+    private string? _dragOriginFolder;
+    private string? _wheelSourceFolder;
     private WheelWindow? _wheel;
 
     public WheelController(AppSettings settings, ToolLocator tools, JobRunner jobs, GlobalInput input)
@@ -42,11 +46,23 @@ internal sealed class WheelController
             OpenFor(paths, ExplorerSelection.CursorOrCenter());
         };
 
+        // While a drag is in progress, sample the Explorer folder the cursor crosses about every 150 ms.
+        // The folder under the cursor when the wheel opens is often the source again, so the last folder
+        // the user actually pointed at is the better target for the drop.
+        _dragTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+        _dragTimer.Tick += (_, _) => SampleDrag();
+
         input.IsWheelKey = key => !_settings.Paused && _settings.WheelFor(key) is not null;
         input.ModifierTapped += OnModifierTapped;
         input.LeftButtonUp += () => _wheel?.OnDragEnded();
+        input.LeftButtonUp += () => _dragTimer.Stop();
         input.MouseDown += point =>
         {
+            // Where the drag starts is the source folder, which the label needs to tell "here" from
+            // "next to the file". The file itself is only known after it lands on the wheel.
+            _dragOriginFolder = ShellFolders.FolderAt(point);
+            _dragMemory.BeginDrag();
+            _dragTimer.Start();
             if (_wheel is { IsFinished: false, Mode: WheelMode.Click } wheel && !wheel.Contains(point))
                 wheel.Finish();
         };
@@ -68,8 +84,9 @@ internal sealed class WheelController
         _wheel?.Relocalize();
     }
 
-    /// <summary>The cross-platform catalog plus tools that need Windows itself (OCR).</summary>
-    public static IReadOnlyList<Operation> BuildOperations() => [.. Catalog.Build(), new Ocr.OcrOperation()];
+    /// <summary>The cross-platform catalog plus tools that need Windows itself (OCR) or a window (Crop).</summary>
+    public static IReadOnlyList<Operation> BuildOperations() =>
+        [.. Catalog.Build(), new Ocr.OcrOperation(), new UI.Tools.Image.CropOperation()];
 
     /// <summary>
     /// What fits these items. Conversions that need FFmpeg or Pandoc stay on the wheel even before those are
@@ -112,6 +129,33 @@ internal sealed class WheelController
         var id = _settings.LastOperationId;
         var op = id is null ? null : AllOperations.FirstOrDefault(o => o.Id == id);
         return op is not null && op.AppliesTo(items) && op.IsAvailable(_tools, items) ? op : null;
+    }
+
+    /// <summary>Samples the folder under the cursor while the user is dragging a file.</summary>
+    private void SampleDrag()
+    {
+        if (!_input.IsDragging)
+            return;
+        var folder = ShellFolders.FolderAt(_input.Cursor);
+        _dragMemory.Observe(folder, Directory.Exists, OutputTarget.CanWrite);
+        UpdateDestination(folder);
+    }
+
+    /// <summary>Keeps the wheel's "save to" label in step with the folder the cursor is over.</summary>
+    private void UpdateDestination(string? cursorFolder)
+    {
+        if (_wheel is not { IsFinished: false } wheel)
+            return;
+
+        var label = DropTargetLabels.Choose(
+            _wheelSourceFolder, cursorFolder, _dragMemory.Remembered, Directory.Exists, OutputTarget.CanWrite);
+        var text = label.Kind switch
+        {
+            DropTargetLabelKind.Folder => T("wheel.saveTo", UI.Bidi.Value(label.FolderName ?? string.Empty)),
+            DropTargetLabelKind.Blocked => T("wheel.saveBlocked"),
+            _ => T("wheel.saveNextTo"),
+        };
+        wheel.SetDestination(text, label.Folder, label.Kind == DropTargetLabelKind.Blocked);
     }
 
     private void OnModifierTapped(ModifierKey key)
@@ -175,22 +219,36 @@ internal sealed class WheelController
         Open(WheelMode.Click, WheelKind.Convert, items, at);
     }
 
+    /// <summary>Runs a wheel choice: a floating tool opens its window, everything else becomes a job.</summary>
+    private void RunOperation(Operation op, IReadOnlyList<FileItem> items, DropTargets? targets)
+    {
+        if (op is UI.Tools.IInteractiveTool tool)
+            tool.Open(items, targets);
+        else
+            _jobs.StartInto(op, items, null, targets);
+    }
+
     private void Open(WheelMode mode, WheelKind wheel, IReadOnlyList<FileItem>? items, Win32.POINT at)
     {
         _wheel?.Finish();
         UI.Theme.Refresh();
-        // The folder under the cursor when the wheel opens is the folder the user is dropping onto.
-        // In drag mode the file itself is only known after it lands on the wheel, so the candidate is
-        // captured here and validated against the real item when the operation starts (JobRunner).
-        var targetDir = ShellFolders.FolderAt(at);
+        // The folder under the cursor when the wheel opens, plus the last usable folder seen while the
+        // drag was running. In drag mode the file itself is only known after it lands on the wheel, so
+        // both candidates are validated against the real item when the operation starts (JobRunner).
+        var targets = new DropTargets(ShellFolders.FolderAt(at), _dragMemory.Remembered);
+        // "Next to the file" is the folder that owns the item; in drag mode the source folder is the one
+        // the drag started from (the item itself only arrives with the drop).
+        _wheelSourceFolder = items is { Count: > 0 }
+            ? OutputTarget.SourceFolder(items[0].Path)
+            : _dragOriginFolder;
         var window = new WheelWindow(mode, wheel, items, _settings, Operations,
-            (op, list, outDir) => _jobs.StartInto(op, list, null, outDir), targetDir)
+            (op, list, dropTargets) => RunOperation(op, list, dropTargets), targets)
         {
             LastOperation = LastFor,
-            RunRepeat = targets =>
+            RunRepeat = repeatItems =>
             {
-                if (LastFor(targets) is { } last)
-                    _jobs.StartInto(last, targets, _settings.LastParameters, targetDir);
+                if (LastFor(repeatItems) is { } last)
+                    RunOperation(last, repeatItems, targets);
             },
         };
         window.Closed += (_, _) =>
@@ -199,6 +257,7 @@ internal sealed class WheelController
                 _wheel = null;
         };
         _wheel = window;
+        UpdateDestination(targets.UnderCursor);
         window.ShowAt(at);
     }
 }
