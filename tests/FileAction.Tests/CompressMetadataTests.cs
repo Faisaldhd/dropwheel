@@ -738,6 +738,19 @@ public class CompressMetadataStringTests
         }
     }
 
+    [Fact]
+    public void No_tool_key_looks_like_a_plural_group()
+    {
+        // Loc.PluralBaseKeys treats every "*.other" key as a plural group; a plain label must never
+        // end that way or the localization test that enumerates plural groups fails.
+        var (en, _) = LoadTables();
+        var offenders = en.Keys
+            .Where(key => key.StartsWith("tool.", StringComparison.Ordinal))
+            .Where(key => key.EndsWith(".other", StringComparison.Ordinal))
+            .ToArray();
+        Assert.Empty(offenders);
+    }
+
     private static string[] ToolKeys(Dictionary<string, string> table) =>
         table.Keys
             .Where(key => Prefixes.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal)))

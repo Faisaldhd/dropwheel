@@ -419,7 +419,7 @@
   "tool.metadata.group.xmp": "بيانات XMP",
   "tool.metadata.group.pdf": "معلومات PDF",
   "tool.metadata.group.chapters": "الفصول",
-  "tool.metadata.group.other": "أخرى",
+  "tool.metadata.group.misc": "أخرى",
   "tool.metadata.edit": "تعديل الوسوم",
   "tool.metadata.removeAll": "إزالة الكل",
   "tool.metadata.removeAll.hint": "يكتب نسخة بلا وسوم أو فصول أو بيانات كاميرا.",

@@ -64,7 +64,7 @@ public static class MetadataGroups
     public const string XmpKey = "tool.metadata.group.xmp";
     public const string PdfKey = "tool.metadata.group.pdf";
     public const string ChaptersKey = "tool.metadata.group.chapters";
-    public const string OtherKey = "tool.metadata.group.other";
+    public const string OtherKey = "tool.metadata.group.misc";
 
     /// <summary>Display order: the file first, then the tracks, then the profile blocks, chapters last.</summary>
     private static readonly string[] Order =

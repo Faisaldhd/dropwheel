@@ -419,7 +419,7 @@
   "tool.metadata.group.xmp": "XMP",
   "tool.metadata.group.pdf": "PDF info",
   "tool.metadata.group.chapters": "Chapters",
-  "tool.metadata.group.other": "Other",
+  "tool.metadata.group.misc": "Other",
   "tool.metadata.edit": "Edit tags",
   "tool.metadata.removeAll": "Remove All",
   "tool.metadata.removeAll.hint": "Writes a copy without tags, chapters or camera data.",
