@@ -4,7 +4,7 @@ using FileAction.App.Shell;
 namespace FileAction.Tests;
 
 /// <summary>
-/// R-31 acceptance: a fresh install is company-safe. Global input hooks and helper-tool downloads are
+/// R-20 acceptance: a fresh install is company-safe. Global input hooks and helper-tool downloads are
 /// opt-in, and the command-line <c>--no-hooks</c> switch wins even when the user enabled gestures.
 /// </summary>
 public class CompanyDefaultsTests
