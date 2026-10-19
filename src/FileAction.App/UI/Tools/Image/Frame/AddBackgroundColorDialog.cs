@@ -25,6 +25,10 @@ internal static class AddBackgroundColorDialog
         {
             // An owner that is already closing is not worth failing the dialog for.
         }
+        // CenterOwner without an owner has no meaning; fall back to the screen in that rare case.
+        window.WindowStartupLocation = window.Owner is null
+            ? WindowStartupLocation.CenterScreen
+            : WindowStartupLocation.CenterOwner;
         return window.ShowDialog() == true ? window.Chosen : null;
     }
 }
