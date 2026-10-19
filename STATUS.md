@@ -1,5 +1,78 @@
 # STATUS
 
+NOW: 2.2.0 READY FOR REVIEW — all ten agents merged — main CI 39247825190 green — no v2.2.0 tag
+
+## 2.2.0 — READY FOR REVIEW (19 October 2026)
+
+DropWheel 2.2.0 is feature-complete and green on `main`. **I did not create the `v2.2.0` tag** — that is the
+owner's decision after review. `REVIEW.md` was read but not edited.
+
+### Final evidence
+
+| Check | Evidence |
+|---|---|
+| Code commit | `0173530` (all ten agent branches merged; `STATUS.md` is the only later change) |
+| Main CI — build + test + package + installer smoke + screenshots | [run 39247825190](https://github.com/Faisaldhd/dropwheel/actions/runs/39247825190) — green on `7354ba2`; the final `.iss` uninstall-key merge (`0173530`) is re-validated by the head-commit run on the Actions page |
+| Tests | **192 / 192 passed**, 0 failed, 0 skipped (trx from [run 39245752210](https://github.com/Faisaldhd/dropwheel/actions/runs/39245752210)) |
+| Setup | `DropWheel-2.2.0-Setup.exe` — **42.21 MB** (44,262,876 B), budget 70 MB |
+| Portable zip | `DropWheel-2.2.0-portable-win-x64.zip` — **59.83 MB** (62,731,211 B) |
+| Version | `<Version>2.2.0</Version>` in `src/FileAction.App/FileAction.App.csproj` |
+| Changelog | `CHANGES.md` has a 2.2.0 section in English and Arabic |
+| Release dry run | test tag `v0.0.0-test2` on `6b17d73` → [run 39247356095](https://github.com/Faisaldhd/dropwheel/actions/runs/39247356095) — exactly 6 assets (below); release and tag deleted afterwards |
+| Old releases cleaned | v2.1.0 and v2.1.1 each now carry only their self-contained portable zip + `SHA256SUMS.txt`; old framework-dependent setup/zip and `diagnose.txt` are gone |
+| Download page | <https://faisaldhd.github.io/dropwheel/> — HTTP 200, GitHub Actions Pages deploy, EN/AR, refreshed CI screenshots |
+| v2.2.0 tag | **not created** (owner review required) |
+
+### Release dry run — exactly six assets (v0.0.0-test2, deleted)
+
+| Asset | Size |
+|---|---|
+| `DropWheel-2.2.0-portable-win-x64.zip` | 62,731,211 B |
+| `DropWheel-2.2.0-portable-win-x64.zip.sig` | 88 B (base64 P-1363, 64-byte ECDSA P-256) |
+| `DropWheel-2.2.0-Setup.exe` | 44,262,876 B |
+| `DropWheel-2.2.0-Setup.exe.sig` | 88 B |
+| `DropWheel-Setup.exe` (byte-identical stable alias) | 44,262,876 B |
+| `SHA256SUMS.txt` | 484 B, covers the five other assets |
+
+The release job verified every `.sig` against the embedded `UpdateKey.PublicKeyBase64` before upload
+(fingerprint `9d6b35c5376d6decceced299829643456c52fee8c0662dd101d62d422f0bce02`).
+
+### Per-agent evidence
+
+| Agent | Branch / commit | CI | Result |
+|---|---|---|---|
+| release-clean | `2.2.0-release-clean` / `ee45c4e` | [39241050455](https://github.com/Faisaldhd/dropwheel/actions/runs/39241050455); dry run [39241072682](https://github.com/Faisaldhd/dropwheel/actions/runs/39241072682) | six-asset tag release job; old v2.1.0/v2.1.1 assets cleaned and sums regenerated |
+| installer | `2.2.0-installer` / `bbae592` (+ `03060cf`) | [39243664937](https://github.com/Faisaldhd/dropwheel/actions/runs/39243664937) | self-contained Inno setup 42.21 MB; EN+AR RTL wizard; silent per-user install/uninstall smoke test in main CI |
+| update-core | `2.2.0-update-core` / `b3eb918` | [39237764334](https://github.com/Faisaldhd/dropwheel/actions/runs/39237764334) | anonymous GitHub client, numeric SemVer, one-at-a-time download, dual SHA-256 + ECDSA verification |
+| update-apply | `2.2.0-update-apply` / `390500e` | [39242036836](https://github.com/Faisaldhd/dropwheel/actions/runs/39242036836) | setup silent apply and portable folder replace/relaunch, settings kept, PE check + rollback; helper CI script |
+| update-ui | `2.2.0-update-ui` / `bff4d55` | [39241246631](https://github.com/Faisaldhd/dropwheel/actions/runs/39241246631) | violet banner, tray item/balloon, check button, progress/cancel, app wiring |
+| settings-tabs | `2.2.0-settings-tabs` / `77ba7f7` | [39241135558](https://github.com/Faisaldhd/dropwheel/actions/runs/39241135558) | General / Wheels / Quality / Integration / Updates / About; every toggle once; AppThemeMode alias |
+| signing | `2.2.0-signing` / `c54d110` | [39241634480](https://github.com/Faisaldhd/dropwheel/actions/runs/39241634480) | key tooling, P-1363 sign/verify scripts, docs; real key untouched |
+| download-page | `2.2.0-download-page` / `867f13a` | [39242692949](https://github.com/Faisaldhd/dropwheel/actions/runs/39242692949) | one EN/AR page, RTL, dark violet, no trackers/fonts, real CI screenshots; Pages deploy |
+| strings | `2.2.0-strings` / `9b518dc` | [39238353781](https://github.com/Faisaldhd/dropwheel/actions/runs/39238353781) | **346 / 346** keys in en+ar, 57 new each, placeholder/parity checks pass |
+| tests | `2.2.0-tests` / `e2015c9` | [39242248118](https://github.com/Faisaldhd/dropwheel/actions/runs/39242248118) (expected red pre-merge) | six new files: update-core, settings defaults, policy, six tabs, installer spec, new strings — 192/192 on main |
+
+Lead integration commits: `bedad4b` (package job), `b535f4c` (installer spec), `af1fd8d` (WinRT/OCR/desktop
+task), `6b17d73` (checked-task count), `86fafcd` (CI screenshots), `b2be1c0` (README), `7354ba2`
+(build/release scripts).
+
+### Known limitations / review notes
+
+- **No `v2.2.0` tag yet.** The Pages button targets
+  `https://github.com/Faisaldhd/dropwheel/releases/latest/download/DropWheel-Setup.exe`, which only exists
+  after the owner tags `v2.2.0`; the old v2.1.x setups were intentionally removed. The `v0.0.0-test2` dry
+  run proved the alias and the six-asset set.
+- Authenticode signing is still pending (SignPath); auto-update signatures are ECDSA P-256 and independent
+  of Authenticode.
+- The uninstaller asks a default-keep Yes/No question (“Remove my settings…”) rather than a checkbox, because
+  Inno Setup 6 uninstallers cannot host wizard pages; silent uninstall always keeps settings and tools.
+- Arabic installer strings (vendored `Arabic.isl` + five custom messages) should get a native review; the
+  app’s Arabic tables already pass the 346-key parity/placeholder tests.
+- `--self-test` renders 70 screenshots in four language/theme folders; the English `settings.png`,
+  `wheel-actions.png` and `jobs.png` were copied into `docs/site/assets` and are in the `screenshots` artifact.
+
+## History
+
 NOW: R-2 done (setup 19.71 MB, SDK.NET projection gone), R-22/R-16/R-18/R-14/R-17 done — CI build + tests green — next: R-20, R-15 (phase-2 keys), R-5 screenshots
 
 ## Session 3 results (CI run 39218574689 and the ones before it)
