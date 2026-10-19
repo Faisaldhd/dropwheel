@@ -2,7 +2,10 @@
 
 Status: **done** for `installer/**` and the two scripts. Branch CI only builds and tests the app,
 so the Inno Setup compile and the smoke test run in the **Package** job (see "CI steps" below).
-No local build, publish, ISCC run or installer run was performed (AGENT_RULES).
+Branch CI on `2.2.0-installer` (commits `03060cf`, `bbae592`, `a5d8ae3`) is **green**:
+Build + test, run `39243276200` — the Package job is skipped on branches by design, so the setup
+size and the smoke-test result are produced by the first Package run (main, or a one-off dispatch),
+not by this branch. No local build, publish, ISCC run or installer run was performed (AGENT_RULES).
 
 ## What changed
 
