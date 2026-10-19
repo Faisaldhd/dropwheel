@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # Every agent branch gets build + test feedback (the package and release jobs stay on main/tags).
+    branches: ['**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -91,9 +92,9 @@ jobs:
           retention-days: 14
 
   package:
-    name: Package (framework-dependent setup)
+    name: Package (self-contained setup + portable zip)
     needs: build-test
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

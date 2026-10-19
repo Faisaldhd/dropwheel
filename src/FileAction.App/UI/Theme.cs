@@ -103,6 +103,18 @@ internal static class Theme
     /// <summary>Forces dark (true) or light (false) instead of following Windows; used by the self-test.</summary>
     public static bool? Override { get; set; }
 
+    /// <summary>Applies the user's System/Dark/Light choice from settings.</summary>
+    public static void Apply(ThemeMode mode)
+    {
+        Override = mode switch
+        {
+            ThemeMode.Dark => true,
+            ThemeMode.Light => false,
+            _ => null,
+        };
+        Refresh();
+    }
+
     /// <summary>Re-reads the Windows "app mode" (light/dark).</summary>
     public static void Refresh() => Use(Override ?? ReadSystemDark());
 

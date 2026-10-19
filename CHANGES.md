@@ -1,4 +1,48 @@
-# DropWheel 2.1.1 — CHANGES
+# DropWheel 2.2.0 — CHANGES
+
+## 2.2.0
+
+### English
+
+- **Signed auto-update.** DropWheel checks GitHub once a day (60 seconds after start, then every 24 hours) and
+  when you click **Check for updates**. Nothing downloads until you click **Update**. Every download is checked
+  twice: SHA-256 (the GitHub asset digest and `SHA256SUMS.txt`) and an ECDSA P-256 signature against the public
+  key built into the app. If either check fails the files are deleted and DropWheel says **“Update could not be
+  verified”** — an unverified file is never run.
+- **Setup no longer needs .NET.** The installer is self-contained: no runtime detection, no download, no
+  administrator permission for the default install. Choose **Install for me only** (no admin) or **Install for
+  all users**. The wizard speaks English and Arabic (right-to-left).
+- **Two setup tasks, both on by default:** *Start with Windows* and *Watch mouse and keyboard*. A Start-menu
+  shortcut is always created; the desktop shortcut is optional.
+- **Upgrades keep your choices.** The same settings file is reused, the app is closed during the update, and
+  the uninstaller removes the startup entry, the Explorer menu, the Send-to shortcut and the program files —
+  but keeps your settings unless you tick **Remove my settings**.
+- **Settings reorganized into six tabs:** General · Wheels · Quality · Integration · Updates · About. Every
+  switch appears exactly once.
+- **Update UI:** a tray item, a Windows notification, and a violet banner in Settings with **Update now** and
+  **What's new**.
+- **Download page** at <https://faisaldhd.github.io/dropwheel/> in English and Arabic, with the current version
+  and SHA-256.
+
+### العربية
+
+- **تحديث تلقائي موقَّع.** يتحقّق DropWheel من GitHub مرة كل يوم (بعد 60 ثانية من التشغيل ثم كل 24 ساعة) وعند
+  الضغط على **التحقّق من التحديثات**. لا يُنزَّل أي شيء قبل أن تضغط **تحديث الآن**. ويُفحص كل تنزيل مرتين:
+  بصمة SHA-256 (حقل digest في GitHub وملف `SHA256SUMS.txt`) وتوقيع ECDSA P-256 بالمفتاح العام المضمَّن في
+  التطبيق. إذا فشل أي فحص تُحذف الملفات ويظهر **«تعذّر التحقق من التحديث»** — ولا يُشغَّل أي ملف غير موثَّق أبدًا.
+- **المثبِّت لم يعد يحتاج .NET.** أصبح مستقلًّا بالكامل: لا كشف عن وقت التشغيل ولا تنزيل ولا صلاحيات مدير
+  للتثبيت الافتراضي. اختر **التثبيت لي وحدي** (دون مدير) أو **التثبيت لكل المستخدمين**. المعالج بالعربية
+  والإنجليزية (من اليمين إلى اليسار).
+- **مهمتان في المثبِّت، مُفعَّلتان افتراضيًّا:** *البدء مع Windows* و*مراقبة الفأرة ولوحة المفاتيح*. ويُنشأ
+  اختصار في قائمة ابدأ دائمًا، واختصار سطح المكتب اختياري.
+- **الترقية تحافظ على اختياراتك.** يُعاد استخدام ملف الإعدادات نفسه، ويُغلق التطبيق أثناء التحديث، ويزيل
+  برنامج الإزالة إدخال بدء التشغيل وقائمة Explorer واختصار «إرسال إلى» وملفات البرنامج — لكنه يحفظ إعداداتك
+  إلا إذا فعّلت **إزالة إعداداتي**.
+- **الإعدادات في ستة تبويبات:** عام · العجلات · الجودة · التكامل · التحديثات · حول. وكل مفتاح يظهر مرة واحدة فقط.
+- **واجهة التحديث:** عنصر في علبة النظام وإشعار من Windows وشريط بنفسجي في الإعدادات مع **تحديث الآن**
+  و**ما الجديد**.
+- **صفحة تنزيل** على <https://faisaldhd.github.io/dropwheel/> بالعربية والإنجليزية، تعرض الإصدار الحالي
+  وبصمة SHA-256.
 
 ## 2.1.1
 

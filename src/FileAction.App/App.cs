@@ -88,7 +88,7 @@ internal sealed class App : Application
         AppLog.Info($"settings loaded from {Path.Combine(AppSettings.Folder, "settings.json")}");
         LanguageManager.Apply(_settings.Language);
         AppLog.Info($"language: {LanguageManager.Current} (preference {LanguageManager.Preference}), rtl={LanguageManager.IsRtl}");
-        Theme.Refresh();
+        Theme.Apply(_settings.Theme);
         _tools = new ToolLocator();
         var jobs = new JobRunner(_settings, _tools);
         SettingsWindow.DownloadTool = tool => jobs.DownloadToolsAsync([tool], ask: false);

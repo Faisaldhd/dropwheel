@@ -16,6 +16,14 @@ public enum UiLanguage
     Arabic,
 }
 
+/// <summary>2.2.0: app theme. <see cref="ThemeMode.System"/> follows the Windows app mode.</summary>
+public enum ThemeMode
+{
+    System,
+    Dark,
+    Light,
+}
+
 public enum HotkeyPreset
 {
     None,
@@ -57,6 +65,15 @@ public sealed class AppSettings
 
     /// <summary>System = follow the Windows display language.</summary>
     public UiLanguage Language { get; set; } = UiLanguage.System;
+
+    /// <summary>System / Dark / Light; applies to every window.</summary>
+    public ThemeMode Theme { get; set; } = ThemeMode.System;
+
+    /// <summary>
+    /// 2.2.0: check GitHub once a day for a newer release (it only checks; downloading always needs a click).
+    /// Default ON, as the spec requires.
+    /// </summary>
+    public bool CheckForUpdates { get; set; } = true;
 
     /// <summary>Empty = save results next to the original file.</summary>
     public string? OutputDirectory { get; set; }
