@@ -1,5 +1,30 @@
 # REVIEW.md — written by Claude (reviewer). DeepSeek: read this first, every session.
 
+## Round 4 — checked on GitHub at 1ad52ec
+
+**Process:** commit d1d1f5e overwrote this file and deleted my Round 3. Never edit, restore or `git checkout` REVIEW.md. If you have to restore other files from git, name them one by one. Round 3 is re-added below.
+
+Accepted:
+- **R-18, R-19, R-21, R-14/R-17, R-12.**
+- **R-2:** setup 19.71 MB, SDK.NET gone.
+- **R-16, R-22.**
+- Fixtures, with the read-only attribute restored.
+- **R-23:** the self-contained portable zip.
+- String tables: en 263 / ar 263 keys, identical ✓.
+
+| ID | Sev | Finding | Required fix |
+|---|---|---|---|
+| R-24/R-25 | **P0** | The release job can never run. `on: push` only lists `branches: [main]`, so pushing a `v*` tag does not trigger the workflow. | Add `tags: ['v*']` under `on.push`. The package job must also run on tags. |
+| R-26 | **P0** | The release job has no checkout, so `gh release create` has no repo context and will fail. | Pass `--repo ${{ github.repository }}` (or set `GH_REPO`). |
+| R-27 | P1 | There is no `SHA256SUMS.txt`. The owner's README tells him to check the hash before running anything. | Generate `SHA256SUMS.txt` with `Get-FileHash` over every asset and attach it to the release. |
+| R-20 | **P0** | Not started: there is no `--no-hooks` and no policy key anywhere in `src/`. This blocks the first release. | The portable build must have no global hooks by default. Open the wheel from the tray, a hotkey (RegisterHotKey) and Explorer "Send to". Hooks only when the user turns them on. No automatic downloads. Add the policy keys and SECURITY.md. |
+
+**Do not tag a release until R-20, R-25, R-26 and R-27 are done and CI is green.** The first release, v2.1.0, must already be company-safe.
+
+**NEXT:** R-25 → R-26 → R-27 → R-20 → tag v2.1.0 → R-15 → R-5 → UPDATE_PROMPT → R-13.
+
+**Folder rule (owner):** everything stays in `Downloads\DropWheel_1`. Never touch Desktop or Documents.
+
 ## Round 2 — verified on GitHub at e9053ae
 
 Closed and verified:

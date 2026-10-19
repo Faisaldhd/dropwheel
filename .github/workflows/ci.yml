@@ -42,15 +42,22 @@ jobs:
       - name: Restore
         shell: pwsh
         run: |
+          # In a multi-line pwsh step only the LAST command's exit code decides success, so every
+          # command is checked explicitly (a failing App build once slipped through this way).
           dotnet restore src/FileAction.App/FileAction.App.csproj
+          if ($LASTEXITCODE -ne 0) { throw "restore App failed" }
           dotnet restore tests/FileAction.Tests/FileAction.Tests.csproj
+          if ($LASTEXITCODE -ne 0) { throw "restore Tests failed" }
 
       - name: Build
         shell: pwsh
         run: |
           dotnet build src/FileAction.Core/FileAction.Core.csproj -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { throw "build Core failed" }
           dotnet build src/FileAction.App/FileAction.App.csproj -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { throw "build App failed" }
           dotnet build tests/FileAction.Tests/FileAction.Tests.csproj -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { throw "build Tests failed" }
 
       - name: Install FFmpeg and Pandoc (integration tests)
         # Best effort: the community Chocolatey feed regularly answers 503. The integration tests skip the

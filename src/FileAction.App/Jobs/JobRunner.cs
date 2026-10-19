@@ -1,3 +1,4 @@
+using System.Windows;
 using FileAction.App.Diagnostics;
 using FileAction.App.Actions;
 using FileAction.App.Shell;
