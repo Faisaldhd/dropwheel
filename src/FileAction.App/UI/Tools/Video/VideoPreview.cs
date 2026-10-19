@@ -67,7 +67,7 @@ internal sealed class VideoPreview : IDisposable
         };
         _message = new Border
         {
-            Background = new SolidColorBrush(Color.FromArgb(0xE6, 0x12, 0x0E, 0x1C)),
+            Background = Theme.Page,
             CornerRadius = new CornerRadius(10),
             Visibility = Visibility.Collapsed,
             Child = _messageText,

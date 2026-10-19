@@ -30,6 +30,8 @@ internal sealed class VideoSpeedView
     private VideoInfo? _info;
     private double _rate = 1;
     private bool _busy;
+    private Grid? _root;
+    private VideoPalette _palette;
 
     public VideoSpeedView(FileItem item, DropTargets? targets)
     {
@@ -67,8 +69,14 @@ internal sealed class VideoSpeedView
         Grid.SetRow(presets, 3);
         Grid.SetRow(footer, 4);
 
+        _root = root;
+        _palette = VideoPalette.Capture();
+        VideoThemeWatcher.Start();
+        VideoThemeWatcher.Changed += OnThemeChanged;
+
         root.Unloaded += (_, _) =>
         {
+            VideoThemeWatcher.Changed -= OnThemeChanged;
             _lifetime.Cancel();
             _preview.Dispose();
         };
@@ -190,16 +198,12 @@ internal sealed class VideoSpeedView
         var container = VideoEdit.OutputContainerFor(_item.Format);
         var directory = VideoOutput.DirectoryFor(_item, _targets);
         var name = VideoOutput.NameFor(_item, VideoEdit.SpeedSuffix(rate));
-        var request = new VideoSpeedRequest(_item.Path, string.Empty, rate, container, info.HasAudio);
+        var request = new VideoSpeedRequest(_item.Path, string.Empty, rate, container, info.HasAudio, Fps: info.Fps);
 
         SetBusy(true);
         try
         {
-            return await OutputPaths.ProduceAsync(directory, name, container, temporary =>
-                ProcessRunner.RunAsync(
-                    ffmpeg,
-                    VideoEdit.BuildSpeedArgs(request with { OutputPath = temporary }),
-                    _lifetime.Token));
+            return await VideoToolRunner.SpeedAsync(ffmpeg, request, directory, name, _lifetime.Token);
         }
         catch (OperationCanceledException)
         {
@@ -215,5 +219,15 @@ internal sealed class VideoSpeedView
     {
         _busy = busy;
         _status.Text = busy ? T("tool.videospeed.applyBusy") : string.Empty;
+    }
+
+    private void OnThemeChanged()
+    {
+        if (_root is null)
+            return;
+        var next = VideoPalette.Capture();
+        var target = (DependencyObject?)Window.GetWindow(_root) ?? _root;
+        VideoThemeTint.Apply(target, _palette, next);
+        _palette = next;
     }
 }

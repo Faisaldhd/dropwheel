@@ -74,6 +74,8 @@ internal sealed class VideoCropView
     private bool _syncing;
     private bool _busy;
     private VideoInfo? _info;
+    private Grid? _root;
+    private VideoPalette _palette;
 
     public VideoCropView(FileItem item, DropTargets? targets)
     {
@@ -132,8 +134,14 @@ internal sealed class VideoCropView
         Grid.SetRow(boxes, 3);
         Grid.SetRow(footer, 4);
 
+        _root = root;
+        _palette = VideoPalette.Capture();
+        VideoThemeWatcher.Start();
+        VideoThemeWatcher.Changed += OnThemeChanged;
+
         root.Unloaded += (_, _) =>
         {
+            VideoThemeWatcher.Changed -= OnThemeChanged;
             _lifetime.Cancel();
             _preview.Dispose();
         };
@@ -481,22 +489,7 @@ internal sealed class VideoCropView
         SetBusy(true);
         try
         {
-            return await OutputPaths.ProduceAsync(directory, name, container, async temporary =>
-            {
-                var withOutput = request with { OutputPath = temporary };
-                try
-                {
-                    await ProcessRunner.RunAsync(ffmpeg, VideoEdit.BuildCropArgs(withOutput), _lifetime.Token);
-                }
-                catch (ConversionException) when (info.HasAudio && !_lifetime.IsCancellationRequested)
-                {
-                    // PCM/Vorbis audio cannot always be copied into MP4: keep it by encoding it instead.
-                    await ProcessRunner.RunAsync(
-                        ffmpeg,
-                        VideoEdit.BuildCropArgs(withOutput with { CopyAudio = false }),
-                        _lifetime.Token);
-                }
-            });
+            return await VideoToolRunner.CropAsync(ffmpeg, request, directory, name, _lifetime.Token);
         }
         catch (OperationCanceledException)
         {
@@ -512,5 +505,15 @@ internal sealed class VideoCropView
     {
         _busy = busy;
         _status.Text = busy ? T("tool.videocrop.applyBusy") : string.Empty;
+    }
+
+    private void OnThemeChanged()
+    {
+        if (_root is null)
+            return;
+        var next = VideoPalette.Capture();
+        var target = (DependencyObject?)Window.GetWindow(_root) ?? _root;
+        VideoThemeTint.Apply(target, _palette, next);
+        _palette = next;
     }
 }

@@ -35,6 +35,8 @@ internal sealed class VideoTrimView
     private TimeSpan _end;
     private bool _fastCopy = true;
     private bool _busy;
+    private Grid? _root;
+    private VideoPalette _palette;
 
     public VideoTrimView(FileItem item, DropTargets? targets)
     {
@@ -87,8 +89,14 @@ internal sealed class VideoTrimView
         Grid.SetRow(timeRow, 2);
         Grid.SetRow(footer, 3);
 
+        _root = root;
+        _palette = VideoPalette.Capture();
+        VideoThemeWatcher.Start();
+        VideoThemeWatcher.Changed += OnThemeChanged;
+
         root.Unloaded += (_, _) =>
         {
+            VideoThemeWatcher.Changed -= OnThemeChanged;
             _lifetime.Cancel();
             _preview.Dispose();
         };
@@ -341,21 +349,12 @@ internal sealed class VideoTrimView
         SetBusy(true);
         try
         {
-            return await OutputPaths.ProduceAsync(directory, name, container, async temporary =>
-            {
-                var request = new VideoTrimRequest(
-                    _item.Path, temporary, _start, _end, container, mode, info.HasAudio);
-                try
-                {
-                    await ProcessRunner.RunAsync(ffmpeg, VideoEdit.BuildTrimArgs(request), _lifetime.Token);
-                }
-                catch (ConversionException) when (mode == VideoTrimMode.StreamCopy && !_lifetime.IsCancellationRequested)
-                {
-                    // Some codec/container pairs refuse a copy (for example MPEG-2 into MP4): encode instead.
-                    await ProcessRunner.RunAsync(
-                        ffmpeg, VideoEdit.BuildTrimArgs(request with { Mode = VideoTrimMode.ReEncode }), _lifetime.Token);
-                }
-            });
+            return await VideoToolRunner.TrimAsync(
+                ffmpeg,
+                new VideoTrimRequest(_item.Path, string.Empty, _start, _end, container, mode, info.HasAudio),
+                directory,
+                name,
+                _lifetime.Token);
         }
         catch (OperationCanceledException)
         {
@@ -371,5 +370,16 @@ internal sealed class VideoTrimView
     {
         _busy = busy;
         _status.Text = busy ? T("tool.videotrim.applyBusy") : string.Empty;
+    }
+
+    private void OnThemeChanged()
+    {
+        if (_root is null)
+            return;
+        var next = VideoPalette.Capture();
+        // Include the shared window chrome so title, close and Reset/Apply retint too.
+        var target = (DependencyObject?)Window.GetWindow(_root) ?? _root;
+        VideoThemeTint.Apply(target, _palette, next);
+        _palette = next;
     }
 }
