@@ -108,6 +108,7 @@ internal sealed class App : Application
         AppLog.Info($"settings loaded from {Path.Combine(AppSettings.Folder, "settings.json")}");
         LanguageManager.Apply(_settings.Language);
         AppLog.Info($"language: {LanguageManager.Current} (preference {LanguageManager.Preference}), rtl={LanguageManager.IsRtl}");
+        AppLog.Info($"localization: {Loc.KeyCount} keys, settings.title=\"{Loc.T("settings.title")}\"");
         Theme.Apply(_settings.Theme);
         _theme = _settings.Theme;
 

@@ -9,6 +9,7 @@ using FileAction.App.UI;
 using FileAction.App.Wheel;
 using FileAction.Core;
 using FileAction.Core.Operations;
+using FileAction.Core.Updates;
 
 namespace FileAction.App;
 
@@ -26,18 +27,37 @@ internal static class SelfTest
             Directory.CreateDirectory(outDir);
             _ = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             JobCard.Animate = false;
-            foreach (var (language, dark, folder) in new[]
-                     {
-                         (UiLanguage.English, true, "en"),
-                         (UiLanguage.English, false, "en-light"),
-                         (UiLanguage.Arabic, true, "ar"),
-                         (UiLanguage.Arabic, false, "ar-light"),
-                     })
+
+            // Render with the real update service (no network is started): this is the path the installed
+            // app uses, and the one the previous framework-dependent screenshots never exercised.
+            using var updateService = new UpdateService(
+                typeof(Program).Assembly.GetName().Version ?? new Version(2, 2, 1),
+                UpdatePaths.IsPortable);
+            SettingsWindow.Updates = updateService;
+            try
             {
-                LanguageManager.Apply(language);
-                Theme.Override = dark;
-                Theme.Refresh();
-                RenderAll(Path.Combine(outDir, folder), language, log);
+                foreach (var (language, dark, folder) in new[]
+                         {
+                             (UiLanguage.English, true, "en"),
+                             (UiLanguage.English, false, "en-light"),
+                             (UiLanguage.Arabic, true, "ar"),
+                             (UiLanguage.Arabic, false, "ar-light"),
+                         })
+                {
+                    LanguageManager.Apply(language);
+                    Theme.Override = dark;
+                    Theme.Refresh();
+                    var keys = Loc.KeyCount;
+                    log.Add($"ok {folder}/localization: {keys} keys ({Loc.Current})");
+                    if (keys < 300)
+                        throw new InvalidOperationException(
+                            $"localization loaded only {keys} keys for {Loc.Current}; embedded string tables are broken");
+                    RenderAll(Path.Combine(outDir, folder), language, log);
+                }
+            }
+            finally
+            {
+                SettingsWindow.Updates = null;
             }
             LanguageManager.Apply(UiLanguage.English);
             Theme.Override = null;

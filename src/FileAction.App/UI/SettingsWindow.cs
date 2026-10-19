@@ -6,6 +6,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using FileAction.App.Diagnostics;
 using FileAction.App.Input;
 using FileAction.App.Shell;
 using FileAction.Core;
@@ -127,6 +128,35 @@ internal sealed class SettingsWindow : Window
     }
 
     private void Build()
+    {
+        try
+        {
+            BuildCore();
+        }
+        catch (Exception ex)
+        {
+            // A failed build must never leave the user with an untitled black window. Log the real
+            // exception and show a readable fallback so the report can be acted on.
+            AppLog.Error("settings window build failed", ex);
+            ShowBuildFailure(ex);
+        }
+    }
+
+    private void ShowBuildFailure(Exception ex)
+    {
+        Title = "DropWheel – settings";
+        Background = Theme.Page;
+        FlowDirection = LanguageManager.FlowDirection;
+        var panel = new StackPanel { Margin = new Thickness(32, 28, 32, 32), MaxWidth = 720 };
+        panel.Children.Add(Text("DropWheel settings could not be drawn.", 20, FontWeights.SemiBold));
+        panel.Children.Add(Text(
+            "The window hit an unexpected error. Run \"DropWheel.exe --diagnose\" and send the report; " +
+            "the details are also in log.txt.", 13, brush: Theme.Muted));
+        panel.Children.Add(Text($"{ex.GetType().Name}: {ex.Message}", 12, brush: Theme.Error));
+        Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    }
+
+    private void BuildCore()
     {
         Title = T("settings.title");
         FlowDirection = LanguageManager.FlowDirection;
@@ -579,11 +609,19 @@ internal sealed class SettingsWindow : Window
         var panel = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
         var image = new Image
         {
-            Source = new BitmapImage(new Uri("pack://application:,,,/Assets/DropWheel.png")),
             Width = 56,
             Height = 56,
             Margin = new Thickness(0, 0, 18, 0),
         };
+        try
+        {
+            image.Source = new BitmapImage(new Uri("pack://application:,,,/Assets/DropWheel.png"));
+        }
+        catch (Exception ex)
+        {
+            // A missing image must not take the whole settings window down (and must not leave it black).
+            AppLog.Error("settings header image could not be loaded", ex);
+        }
         panel.Children.Add(image);
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var title = Text("DropWheel", 28, FontWeights.SemiBold);

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using FileAction.Core;
 
 namespace FileAction.Tests;
 
@@ -163,6 +164,15 @@ public class NewStringsTests
         var table = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path));
         Assert.NotNull(table);
         return table!;
+    }
+
+    [Fact]
+    public void Loc_loads_the_embedded_tables_and_never_shows_the_key()
+    {
+        Assert.True(Loc.KeyCount >= 300, $"Loc loaded only {Loc.KeyCount} keys; the embedded tables are broken.");
+        Assert.False(
+            Loc.T("settings.title").Contains("settings.title", StringComparison.Ordinal),
+            "Loc.T(\"settings.title\") returned the key instead of a translated title.");
     }
 
     private static string[] Placeholders(string value) =>

@@ -56,6 +56,7 @@ internal static class Diagnose
         text.AppendLine($"integrity:  {Integrity.Describe()}{(Integrity.IsLow ? "  <-- PROBLEM: low integrity cannot write to %APPDATA%/%TEMP% or receive input" : "")}");
         text.AppendLine($"culture:    {CultureInfo.CurrentUICulture.Name} (system {CultureInfo.InstalledUICulture.Name})");
         text.AppendLine($"language:   Loc.Current={Loc.Current}, Loc.Preferred={Loc.Preferred}");
+        text.AppendLine($"strings:    {Loc.KeyCount} keys, settings.title=\"{Loc.T("settings.title")}\"");
         text.AppendLine();
 
         text.AppendLine("Folders (first writable one holds the log)");
