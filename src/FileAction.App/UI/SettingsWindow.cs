@@ -12,6 +12,7 @@ using FileAction.Core;
 using FileAction.Core.Updates;
 using static FileAction.App.UI.Controls;
 using static FileAction.Core.Loc;
+using AppThemeMode = FileAction.App.ThemeMode;
 
 namespace FileAction.App.UI;
 
@@ -222,11 +223,12 @@ internal sealed class SettingsWindow : Window
 
         page.Children.Add(SectionHeader(T("settings.general.theme.title")));
         page.Children.Add(SectionDetail(T("settings.general.theme.detail")));
-        var theme = Segmented<ThemeMode>(
+        // Window.ThemeMode (WPF) shadows the app's enum name inside a Window, so the alias above is used.
+        var theme = Segmented<AppThemeMode>(
             [
-                (T("settings.theme.system"), ThemeMode.System),
-                (T("settings.theme.dark"), ThemeMode.Dark),
-                (T("settings.theme.light"), ThemeMode.Light),
+                (T("settings.theme.system"), AppThemeMode.System),
+                (T("settings.theme.dark"), AppThemeMode.Dark),
+                (T("settings.theme.light"), AppThemeMode.Light),
             ],
             _settings.Theme,
             value =>
