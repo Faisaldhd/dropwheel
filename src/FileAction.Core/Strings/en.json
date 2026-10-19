@@ -519,5 +519,6 @@
   "tool.lock.rescuer.sessionIntro": "The Rescuer password and the recovery key are not stored on disk. Enter both once for this session; they are used only to protect new files.",
   "tool.lock.rescuer.sessionKey": "Rescuer key (24 characters)",
   "tool.lock.rescuer.sessionNote": "Without the key, existing files still open with the Rescuer password, but new files cannot get a recovery-key slot until you create a new key.",
-  "tool.lock.rescuer.sessionInvalid": "Enter the 24-character Rescuer key."
+  "tool.lock.rescuer.sessionInvalid": "Enter the 24-character Rescuer key.",
+  "tool.lock.error.openSession": "Lock this file first: it is open in a DropWheel session, and changing the password now would be undone when it relocks."
 }

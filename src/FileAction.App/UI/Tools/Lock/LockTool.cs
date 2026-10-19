@@ -823,6 +823,12 @@ internal sealed class ChangeFilePasswordWindow : Window
 
     private void Apply()
     {
+        if (LockRuntime.Journal.FindByContainer(_item.Path) is not null)
+        {
+            _status.Text = T("tool.lock.error.openSession");
+            _status.Foreground = Theme.Error;
+            return;
+        }
         try
         {
             LockRuntime.Service.SetFilePassword(_item.Path, _current.Text, _password.Text);
