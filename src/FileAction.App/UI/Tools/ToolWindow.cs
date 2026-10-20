@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -66,6 +67,9 @@ internal sealed class ToolWindow : Window
     private readonly IToolWindowSpec _spec;
     private readonly ToolContent _content;
     private Border? _applyButton;
+    private Border? _chrome;
+    private Motion.Handle? _motion;
+    private bool _closeMotionRunning;
     private bool _prepared;
 
     public ToolWindow(IToolWindowSpec spec, IReadOnlyList<FileItem> items, DropTargets? targets)
@@ -94,9 +98,16 @@ internal sealed class ToolWindow : Window
 
         _content = spec.Create(items, targets);
         Content = Build();
-        UiSetup.Configure(this);
+        // The one place tool-window motion is wired: the chrome Border contains the title bar, the tool's
+        // view (the content root) and the button bar, so one transform set animates all three together.
+        _motion = Motion.Prepare(_chrome!);
+        UiSetup.Configure(this, animate: false);
         SourceInitialized += (_, _) => CenterOnCursorMonitor();
-        Loaded += (_, _) => _ = PrepareAsync(animate: true);
+        Loaded += (_, _) =>
+        {
+            StartOpenMotion();
+            _ = PrepareAsync(animate: true);
+        };
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape)
@@ -109,6 +120,20 @@ internal sealed class ToolWindow : Window
                 _ = ApplyAsync();
             }
         };
+    }
+
+    /// <summary>Fade in, rise 8 px and settle from 0.97 → 1 (180 ms). Skipped in reduced-motion mode.</summary>
+    private void StartOpenMotion()
+    {
+        if (_chrome is null || _motion is null)
+            return;
+        if (!Motion.Enabled)
+        {
+            Motion.Reset(_motion);
+            _chrome.Opacity = 1;
+            return;
+        }
+        Motion.Play(Motion.Open(_chrome, _motion), _chrome);
     }
 
     /// <summary>
@@ -144,10 +169,9 @@ internal sealed class ToolWindow : Window
 
         if (animate)
         {
-            Animate(Width, size.Width, WidthProperty);
-            Animate(Height, size.Height, HeightProperty);
-            Animate(Left, left, LeftProperty);
-            Animate(Top, top, TopProperty);
+            // The one allowed width/height animation in the app: the window follows the media
+            // orientation over 180 ms instead of jumping between portrait and landscape.
+            Motion.Resize(this, left, top, size.Width, size.Height);
         }
         else
         {
@@ -158,16 +182,47 @@ internal sealed class ToolWindow : Window
         }
     }
 
-    private void Animate(double from, double to, DependencyProperty property)
+    /// <summary>
+    /// Detaches the chrome for the motion self-test and the website clips. The element can be rendered
+    /// repeatedly at different poses; the window itself is never shown.
+    /// </summary>
+    internal FrameworkElement DetachForCapture()
     {
-        var animation = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(130))
+        if (_chrome is null)
+            throw new InvalidOperationException("tool window chrome was not built");
+        Content = null;
+        var root = new Grid
         {
-            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+            Background = SelfTest.Desktop(),
+            Width = Width,
+            Height = Height,
+            FlowDirection = FlowDirection,
         };
-        BeginAnimation(property, animation);
+        root.Children.Add(_chrome);
+        return root;
     }
 
-    private FrameworkElement Build()
+    /// <summary>
+    /// Applies the exact tool-window pose with no animation clocks: the 180 ms fade + 8 px rise +
+    /// 0.97 → 1 settle, optionally cross-faded by the 120 ms close.
+    /// </summary>
+    internal void Pose(double openMs, double closeMs = 0)
+    {
+        if (_chrome is null || _motion is null)
+            return;
+        var open = Math.Clamp(openMs / Motion.WindowOpenMs, 0, 1);
+        var close = Math.Clamp(closeMs / Motion.WindowCloseMs, 0, 1);
+        var closeEase = Motion.EaseIn.Ease(close);
+        _chrome.Opacity = Motion.SoftOut.Ease(open) * (1 - closeEase);
+        var scale = (Motion.WindowScaleFrom + (1 - Motion.WindowScaleFrom) * Motion.Settle.Ease(open)) *
+                    (1 - 0.015 * closeEase);
+        _motion.Scale.ScaleX = scale;
+        _motion.Scale.ScaleY = scale;
+        if (_motion.Lift is { } lift)
+            lift.Y = Motion.RisePx * (1 - Motion.SoftOut.Ease(open));
+    }
+
+    private Border Build()
     {
         var panel = (Theme.Panel as SolidColorBrush)?.Color ?? Colors.Black;
         var glass = new SolidColorBrush(Color.FromArgb(0xE6, panel.R, panel.G, panel.B));
@@ -186,7 +241,7 @@ internal sealed class ToolWindow : Window
         grid.Children.Add(_content.View);
         grid.Children.Add(bottom);
 
-        return new Border
+        return _chrome = new Border
         {
             CornerRadius = new CornerRadius(20),
             Background = glass,
@@ -201,6 +256,34 @@ internal sealed class ToolWindow : Window
                 Opacity = 0.35,
             },
         };
+    }
+
+    /// <summary>Closes with a 120 ms fade, then releases every animation clock the window held.</summary>
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!_closeMotionRunning && _chrome is not null && _motion is not null
+            && Motion.Enabled && IsVisible && !Dispatcher.HasShutdownStarted)
+        {
+            e.Cancel = true;
+            var chrome = _chrome;
+            var motion = _motion;
+            Motion.Play(Motion.Close(chrome, motion, () =>
+            {
+                Motion.Release(chrome, motion);
+                if (!Dispatcher.HasShutdownStarted)
+                    Close();
+            }), chrome);
+            _closeMotionRunning = true;
+            return;
+        }
+        base.OnClosing(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (_chrome is not null && _motion is not null)
+            Motion.Release(_chrome, _motion);
+        base.OnClosed(e);
     }
 
     private FrameworkElement BuildTitleBar()
@@ -224,6 +307,7 @@ internal sealed class ToolWindow : Window
             ToolTip = T("tool.window.close"),
         };
         close.MouseLeftButtonUp += (_, _) => Close();
+        Motion.Interactive(close);
 
         var title = new TextBlock
         {
@@ -288,7 +372,16 @@ internal sealed class ToolWindow : Window
         {
             var created = await _content.Apply();
             if (!string.IsNullOrEmpty(created))
+            {
                 Notifications.Show(T("tool.window.done.title"), T("tool.window.done", Bidi.Value(Path.GetFileName(created))));
+                // Success pulse on the primary action, then the normal close fade. In reduced-motion mode
+                // the window closes straight away, exactly as before 2.4.0.
+                if (Motion.Enabled && _applyButton is not null)
+                {
+                    Motion.Play(Motion.Pulse(_applyButton), _applyButton);
+                    await Task.Delay((int)(Motion.PulseMs * 0.55));
+                }
+            }
             Close();
         }
         catch (Exception ex)
