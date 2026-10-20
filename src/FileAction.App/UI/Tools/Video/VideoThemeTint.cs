@@ -9,7 +9,7 @@ namespace FileAction.App.UI.Tools.Video;
 /// The <see cref="Theme"/> colours a video window was built with. Captured before a theme change so the
 /// window can be retinted in place: the old colour identifies the role, the new palette supplies the brush.
 /// </summary>
-internal readonly record struct VideoPalette(
+internal readonly record struct VideoThemePalette(
     Color Text,
     Color Muted,
     Color Card,
@@ -20,10 +20,10 @@ internal readonly record struct VideoPalette(
     Color Panel,
     Color PanelGlass)
 {
-    public static VideoPalette Capture()
+    public static VideoThemePalette Capture()
     {
         var panel = ColorOf(Theme.Panel);
-        return new VideoPalette(
+        return new VideoThemePalette(
             ColorOf(Theme.Text),
             ColorOf(Theme.Muted),
             ColorOf(Theme.Card),
@@ -47,7 +47,7 @@ internal readonly record struct VideoPalette(
 internal static class VideoThemeTint
 {
     /// <summary>Maps one palette colour; anything else (content colour) is returned unchanged.</summary>
-    public static Color Map(Color color, VideoPalette before, VideoPalette after)
+    public static Color Map(Color color, VideoThemePalette before, VideoThemePalette after)
     {
         if (color == before.Text) return after.Text;
         if (color == before.Muted) return after.Muted;
@@ -62,7 +62,7 @@ internal static class VideoThemeTint
     }
 
     /// <summary>Replaces a solid brush that belongs to the old palette; gradients and content colours stay.</summary>
-    public static Brush? MapBrush(Brush? brush, VideoPalette before, VideoPalette after)
+    public static Brush? MapBrush(Brush? brush, VideoThemePalette before, VideoThemePalette after)
     {
         if (brush is not SolidColorBrush solid)
             return brush;
@@ -75,7 +75,7 @@ internal static class VideoThemeTint
     }
 
     /// <summary>Walks the visual tree and retints every themed brush in place.</summary>
-    public static void Apply(DependencyObject root, VideoPalette before, VideoPalette after)
+    public static void Apply(DependencyObject root, VideoThemePalette before, VideoThemePalette after)
     {
         ArgumentNullException.ThrowIfNull(root);
         Retint(root, before, after);
@@ -85,7 +85,7 @@ internal static class VideoThemeTint
             Apply(VisualTreeHelper.GetChild(root, index), before, after);
     }
 
-    private static void Retint(DependencyObject item, VideoPalette before, VideoPalette after)
+    private static void Retint(DependencyObject item, VideoThemePalette before, VideoThemePalette after)
     {
         switch (item)
         {

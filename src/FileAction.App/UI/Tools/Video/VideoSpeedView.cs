@@ -17,7 +17,7 @@ internal sealed class VideoSpeedView
 
     private readonly FileItem _item;
     private readonly DropTargets? _targets;
-    private readonly VideoPreview _preview;
+    private readonly VideoEditPreview _preview;
     private readonly VideoTimeline _timeline = new(compact: true);
     private readonly VideoRateSlider _slider = new();
     private readonly StackPanel _presetRow = new() { Orientation = Orientation.Horizontal };
@@ -27,17 +27,17 @@ internal sealed class VideoSpeedView
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _lifetime = new();
 
-    private VideoInfo? _info;
+    private FileAction.Core.VideoInfo? _info;
     private double _rate = 1;
     private bool _busy;
     private Grid? _root;
-    private VideoPalette _palette;
+    private VideoThemePalette _palette;
 
     public VideoSpeedView(FileItem item, DropTargets? targets)
     {
         _item = item;
         _targets = targets;
-        _preview = new VideoPreview(item, "tool.videospeed");
+        _preview = new VideoEditPreview(item, "tool.videospeed");
         _lengthText = VideoControls.Hint(string.Empty);
         _lengthText.Foreground = Theme.Text;
         _status = VideoControls.Hint(string.Empty);
@@ -70,7 +70,7 @@ internal sealed class VideoSpeedView
         Grid.SetRow(footer, 4);
 
         _root = root;
-        _palette = VideoPalette.Capture();
+        _palette = VideoThemePalette.Capture();
         VideoThemeWatcher.Start();
         VideoThemeWatcher.Changed += OnThemeChanged;
 
@@ -196,8 +196,8 @@ internal sealed class VideoSpeedView
 
         var rate = VideoEdit.ClampSpeed(_rate);
         var container = VideoEdit.OutputContainerFor(_item.Format);
-        var directory = VideoOutput.DirectoryFor(_item, _targets);
-        var name = VideoOutput.NameFor(_item, VideoEdit.SpeedSuffix(rate));
+        var directory = VideoEditOutput.DirectoryFor(_item, _targets);
+        var name = VideoEditOutput.NameFor(_item, VideoEdit.SpeedSuffix(rate));
         var request = new VideoSpeedRequest(_item.Path, string.Empty, rate, container, info.HasAudio, Fps: info.Fps);
 
         SetBusy(true);
@@ -225,7 +225,7 @@ internal sealed class VideoSpeedView
     {
         if (_root is null)
             return;
-        var next = VideoPalette.Capture();
+        var next = VideoThemePalette.Capture();
         var target = (DependencyObject?)Window.GetWindow(_root) ?? _root;
         VideoThemeTint.Apply(target, _palette, next);
         _palette = next;

@@ -17,7 +17,7 @@ namespace FileAction.App.UI.Tools.Video;
 /// containers WPF's Media Foundation pipeline can open get a play button, and when the file cannot be
 /// opened the tool stays scrub-only and says so. Nothing here runs FFmpeg on the UI thread.
 /// </summary>
-internal sealed class VideoPreview : IDisposable
+internal sealed class VideoEditPreview : IDisposable
 {
     /// <summary>Still frames are decoded to at most 960 px on the long side.</summary>
     private const int DecodeLongSide = 960;
@@ -44,7 +44,7 @@ internal sealed class VideoPreview : IDisposable
     private int _seekGeneration;
     private bool _disposed;
 
-    public VideoPreview(FileItem item, string keyPrefix)
+    public VideoEditPreview(FileItem item, string keyPrefix)
     {
         _item = item;
         _keyPrefix = keyPrefix;
@@ -99,7 +99,7 @@ internal sealed class VideoPreview : IDisposable
 
     public string? Ffmpeg => _ffmpeg;
 
-    public VideoInfo? Info { get; private set; }
+    public FileAction.Core.VideoInfo? Info { get; private set; }
 
     public TimeSpan Position { get; private set; }
 
@@ -122,7 +122,7 @@ internal sealed class VideoPreview : IDisposable
 
         try
         {
-            var info = await VideoProbe.ReadAsync(_ffmpeg, _item.Path, _lifetime.Token);
+            var info = await FileAction.Core.VideoProbe.ReadAsync(_ffmpeg, _item.Path, _lifetime.Token);
             if (info is null)
             {
                 ShowMessage(T(_keyPrefix + ".probeFailed", Bidi.Value(_item.Name)));
@@ -363,7 +363,7 @@ internal sealed class VideoPreview : IDisposable
         }
     }
 
-    private static int DecodeWidth(VideoInfo info) => info.Width >= info.Height
+    private static int DecodeWidth(FileAction.Core.VideoInfo info) => info.Width >= info.Height
         ? DecodeLongSide
         : Math.Max(320, (int)Math.Round(DecodeLongSide * (double)info.Width / info.Height));
 

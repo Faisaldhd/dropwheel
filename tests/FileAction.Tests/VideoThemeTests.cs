@@ -72,7 +72,7 @@ public class VideoThemeTests
     [Fact]
     public void Theme_mapping_replaces_palette_colours_and_keeps_content_colours()
     {
-        var before = new VideoPalette(
+        var before = new VideoThemePalette(
             Text: Colors.Black,
             Muted: Colors.DimGray,
             Card: Colors.DarkSlateGray,
@@ -82,7 +82,7 @@ public class VideoThemeTests
             Page: Colors.MidnightBlue,
             Panel: Colors.DarkOliveGreen,
             PanelGlass: Colors.DarkGreen);
-        var after = new VideoPalette(
+        var after = new VideoThemePalette(
             Text: Colors.White,
             Muted: Colors.Gainsboro,
             Card: Colors.WhiteSmoke,

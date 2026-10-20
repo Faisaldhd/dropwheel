@@ -4,7 +4,7 @@ using FileAction.Core;
 namespace FileAction.App.UI.Tools.Video;
 
 /// <summary>Where the three video tools write their results: next to the source, or into the drop folder.</summary>
-internal static class VideoOutput
+internal static class VideoEditOutput
 {
     public static string NameFor(FileItem item, string suffix) => $"{item.BaseName} {suffix}";
 

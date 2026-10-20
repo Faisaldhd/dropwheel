@@ -30,7 +30,7 @@ internal sealed class VideoCropView
 
     private readonly FileItem _item;
     private readonly DropTargets? _targets;
-    private readonly VideoPreview _preview;
+    private readonly VideoEditPreview _preview;
     private readonly VideoTimeline _timeline = new(compact: true);
     private readonly Canvas _canvas = new() { ClipToBounds = true, Background = Brushes.Transparent, Visibility = Visibility.Collapsed };
     private readonly Border _frame = new()
@@ -73,15 +73,15 @@ internal sealed class VideoCropView
     private double _originY;
     private bool _syncing;
     private bool _busy;
-    private VideoInfo? _info;
+    private FileAction.Core.VideoInfo? _info;
     private Grid? _root;
-    private VideoPalette _palette;
+    private VideoThemePalette _palette;
 
     public VideoCropView(FileItem item, DropTargets? targets)
     {
         _item = item;
         _targets = targets;
-        _preview = new VideoPreview(item, "tool.videocrop");
+        _preview = new VideoEditPreview(item, "tool.videocrop");
         _sizeText = VideoControls.Hint(string.Empty);
         _sizeText.Foreground = Theme.Text;
         _status = VideoControls.Hint(string.Empty);
@@ -135,7 +135,7 @@ internal sealed class VideoCropView
         Grid.SetRow(footer, 4);
 
         _root = root;
-        _palette = VideoPalette.Capture();
+        _palette = VideoThemePalette.Capture();
         VideoThemeWatcher.Start();
         VideoThemeWatcher.Changed += OnThemeChanged;
 
@@ -474,8 +474,8 @@ internal sealed class VideoCropView
             return null;
 
         var container = VideoEdit.OutputContainerFor(_item.Format);
-        var directory = VideoOutput.DirectoryFor(_item, _targets);
-        var name = VideoOutput.NameFor(_item, T("tool.videocrop.suffix"));
+        var directory = VideoEditOutput.DirectoryFor(_item, _targets);
+        var name = VideoEditOutput.NameFor(_item, T("tool.videocrop.suffix"));
         var request = new VideoCropRequest(
             _item.Path,
             string.Empty,
@@ -511,7 +511,7 @@ internal sealed class VideoCropView
     {
         if (_root is null)
             return;
-        var next = VideoPalette.Capture();
+        var next = VideoThemePalette.Capture();
         var target = (DependencyObject?)Window.GetWindow(_root) ?? _root;
         VideoThemeTint.Apply(target, _palette, next);
         _palette = next;

@@ -117,7 +117,7 @@ public class VideoEditTests
     [Fact]
     public void Probe_reads_duration_size_fps_and_audio()
     {
-        var info = VideoProbe.Parse(Banner);
+        var info = FileAction.Core.VideoProbe.Parse(Banner);
         Assert.NotNull(info);
         Assert.Equal(62.5, info!.Duration.TotalSeconds, 3);
         Assert.Equal(1920, info.Width);
@@ -134,7 +134,7 @@ public class VideoEditTests
     [Fact]
     public void Probe_swaps_a_rotated_video_to_its_display_size()
     {
-        var info = VideoProbe.Parse(
+        var info = FileAction.Core.VideoProbe.Parse(
         [
             "  Duration: 00:00:10.00, start: 0.000000, bitrate: 2000 kb/s",
             "  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p, 1920x1080 [SAR 1:1 DAR 16:9], 30 fps, 30 tbr",
@@ -150,7 +150,7 @@ public class VideoEditTests
     [Fact]
     public void Probe_reads_a_legacy_rotate_metadata_tag()
     {
-        var info = VideoProbe.Parse(
+        var info = FileAction.Core.VideoProbe.Parse(
         [
             "  Duration: 00:00:10.00, start: 0.000000, bitrate: 2000 kb/s",
             "    rotate          : 90",
@@ -166,7 +166,7 @@ public class VideoEditTests
     [Fact]
     public void Probe_defaults_to_30_fps_and_no_audio()
     {
-        var info = VideoProbe.Parse(
+        var info = FileAction.Core.VideoProbe.Parse(
         [
             "  Duration: 00:00:05.00, start: 0.000000, bitrate: 1000 kb/s",
             "  Stream #0:0[0x1](und): Video: vp9, yuv420p, 1280x720, 800 kb/s, 24 tbr, 1k tbn",
@@ -181,19 +181,19 @@ public class VideoEditTests
     [Fact]
     public void Probe_rejects_audio_only_and_unknown_durations()
     {
-        Assert.Null(VideoProbe.Parse(
+        Assert.Null(FileAction.Core.VideoProbe.Parse(
         [
             "  Duration: 00:00:05.00, start: 0.000000, bitrate: 128 kb/s",
             "  Stream #0:0[0x1](und): Audio: mp3, 48000 Hz, stereo, fltp, 128 kb/s",
         ]));
 
-        Assert.Null(VideoProbe.Parse(
+        Assert.Null(FileAction.Core.VideoProbe.Parse(
         [
             "  Duration: N/A, start: 0.000000, bitrate: N/A",
             "  Stream #0:0[0x1](und): Video: h264, yuv420p, 640x360, 25 fps, 25 tbr",
         ]));
 
-        Assert.Null(VideoProbe.Parse([]));
+        Assert.Null(FileAction.Core.VideoProbe.Parse([]));
     }
 
     // ---------------------------------------------------------------- containers

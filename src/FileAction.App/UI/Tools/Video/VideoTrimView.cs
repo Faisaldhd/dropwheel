@@ -18,7 +18,7 @@ internal sealed class VideoTrimView
 
     private readonly FileItem _item;
     private readonly DropTargets? _targets;
-    private readonly VideoPreview _preview;
+    private readonly VideoEditPreview _preview;
     private readonly VideoTimeline _timeline = new(compact: false, showRange: true);
     private readonly VideoTimeBox _startBox = new();
     private readonly VideoTimeBox _endBox = new();
@@ -30,19 +30,19 @@ internal sealed class VideoTrimView
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _lifetime = new();
 
-    private VideoInfo? _info;
+    private FileAction.Core.VideoInfo? _info;
     private TimeSpan _start;
     private TimeSpan _end;
     private bool _fastCopy = true;
     private bool _busy;
     private Grid? _root;
-    private VideoPalette _palette;
+    private VideoThemePalette _palette;
 
     public VideoTrimView(FileItem item, DropTargets? targets)
     {
         _item = item;
         _targets = targets;
-        _preview = new VideoPreview(item, "tool.videotrim");
+        _preview = new VideoEditPreview(item, "tool.videotrim");
 
         _durationText = VideoControls.Hint(string.Empty);
         _durationText.Foreground = Theme.Text;
@@ -90,7 +90,7 @@ internal sealed class VideoTrimView
         Grid.SetRow(footer, 3);
 
         _root = root;
-        _palette = VideoPalette.Capture();
+        _palette = VideoThemePalette.Capture();
         VideoThemeWatcher.Start();
         VideoThemeWatcher.Changed += OnThemeChanged;
 
@@ -343,8 +343,8 @@ internal sealed class VideoTrimView
         var mode = _fastCopy && VideoEdit.SupportsStreamCopy(_item.Format)
             ? VideoTrimMode.StreamCopy
             : VideoTrimMode.ReEncode;
-        var directory = VideoOutput.DirectoryFor(_item, _targets);
-        var name = VideoOutput.NameFor(_item, T("tool.videotrim.suffix"));
+        var directory = VideoEditOutput.DirectoryFor(_item, _targets);
+        var name = VideoEditOutput.NameFor(_item, T("tool.videotrim.suffix"));
 
         SetBusy(true);
         try
@@ -376,7 +376,7 @@ internal sealed class VideoTrimView
     {
         if (_root is null)
             return;
-        var next = VideoPalette.Capture();
+        var next = VideoThemePalette.Capture();
         // Include the shared window chrome so title, close and Reset/Apply retint too.
         var target = (DependencyObject?)Window.GetWindow(_root) ?? _root;
         VideoThemeTint.Apply(target, _palette, next);
