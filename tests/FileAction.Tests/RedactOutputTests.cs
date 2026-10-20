@@ -133,8 +133,10 @@ public class RedactOutputTests : IDisposable
 
         Assert.Equal("photo Redacted.png", Path.GetFileName(first));
         Assert.Equal("photo Redacted (2).png", Path.GetFileName(second));
+        Assert.NotEqual(first, second);
+        Assert.True(File.Exists(first), "the first copy disappeared");
+        Assert.True(File.Exists(second), "the second copy was not written");
         Assert.Equal(firstHash, Sha256(first));
-        Assert.NotEqual(firstHash, Sha256(second));
     }
 
     [Fact]
@@ -214,7 +216,8 @@ public class RedactOutputTests : IDisposable
             RepoRoot(), "src", "FileAction.App", "UI", "Tools", "Image", "RedactView.cs"));
 
         // Only the user's swatch colours are literals; every chrome brush comes from the active palette.
-        Assert.DoesNotContain("Colors.", source, StringComparison.Ordinal);
+        // ("RedactionColors." must not count as a hardcoded "Colors." brush, hence the word boundary.)
+        Assert.False(Regex.IsMatch(source, @"\bColors\."), "a hardcoded Colors.* brush found; use Theme.* instead");
         foreach (Match brush in Regex.Matches(source, @"Brushes\.(\w+)"))
             Assert.Equal("Transparent", brush.Groups[1].Value);
 
