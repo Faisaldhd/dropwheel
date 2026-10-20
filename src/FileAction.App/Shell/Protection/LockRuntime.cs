@@ -138,6 +138,7 @@ internal static class LockRuntime
     {
         Initialize();
         ProtectionAssociations.Remove(new HkcuProtectionRegistry());
+        LockIconCache.Clear();
         Settings.AssociationsRegistered = false;
         Settings.Save();
         new ProtectionHost().NotifyShell(string.Empty);

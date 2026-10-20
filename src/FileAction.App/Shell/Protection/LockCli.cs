@@ -128,6 +128,7 @@ internal sealed class LockOpenWindow : Window
         {
             var outcome = LockRuntime.Service.Unprotect(_path, _secret.Text,
                 LockRuntime.Settings.RecycleContainerAfterUnlock);
+            LockIconCache.RemoveItem(outcome.RestoredPath);
             var text = T("tool.lock.removeDone", Bidi.Value(outcome.RestoredPath));
             if (!outcome.ContainerRemoved)
                 text += Environment.NewLine + T("tool.lock.removeLeftover", Bidi.Value(outcome.ContainerError ?? ""));

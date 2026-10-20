@@ -1,4 +1,6 @@
+using System.Runtime.ExceptionServices;
 using System.Text;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using FileAction.App.Shell.Protection;
@@ -641,36 +643,137 @@ public class LockSafetyTests
     // ------------------------------------------------------------------ icons, registry, desktop.ini
 
     [Fact]
-    public void Lock_icons_are_shipped_multi_size_png_frames_and_use_the_purple_tokens()
+    public void Padlock_is_the_only_shipped_badge_and_uses_the_purple_tokens()
     {
-        long total = 0;
-        foreach (var name in LockIcons.AssetNames)
+        var icon = LockIcons.PadlockBytes;
+        Assert.True(icon.Length < 200 * 1024, $"padlock.ico is {icon.Length} bytes");
+        Assert.True(LockIcons.HasAllFrames(icon), "padlock.ico must contain 16/24/32/48/64/256 PNG frames");
+        foreach (var size in LockIcons.FrameSizes)
         {
-            var icon = LockIcons.AssetBytes(name);
-            total += icon.Length;
-            Assert.True(LockIcons.HasAllFrames(icon), name + " must contain 16/24/32/48/64/256 PNG frames");
-            foreach (var size in LockIcons.FrameSizes)
-            {
-                var frame = LockIcons.ReadFrame(icon, size);
-                Assert.NotNull(frame);
-                var decoder = BitmapDecoder.Create(new MemoryStream(frame!),
-                    BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-                Assert.Equal(size, decoder.Frames[0].PixelWidth);
-                Assert.Equal(size, decoder.Frames[0].PixelHeight);
-            }
+            var frame = LockIcons.ReadFrame(icon, size);
+            Assert.NotNull(frame);
+            var decoder = BitmapDecoder.Create(new MemoryStream(frame!),
+                BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            Assert.Equal(size, decoder.Frames[0].PixelWidth);
+            Assert.Equal(size, decoder.Frames[0].PixelHeight);
         }
-        Assert.True(total < 200 * 1024, $"lock icons are {total} bytes; the budget is 200 KB");
-
         Assert.Equal(Color.FromRgb(0x82, 0x24, 0xD4), Theme.LockBadgeColor);
         Assert.Equal(Color.FromRgb(0xB4, 0x8A, 0xE0), Theme.LockBadgeHighlightColor);
         Assert.Equal(Theme.LockBadgeColor, ((SolidColorBrush)Theme.LockBadge).Color);
         Assert.Equal(Theme.LockBadgeHighlightColor, ((SolidColorBrush)Theme.LockBadgeHighlight).Color);
+    }
 
-        Assert.Equal("locked-image", LockIcons.AssetForPath("photo.JPG"));
-        Assert.Equal("locked-video", LockIcons.AssetForPath("clip.mp4"));
-        Assert.Equal("locked-archive", LockIcons.AssetForPath("bundle.zip"));
-        Assert.Equal("locked-document", LockIcons.AssetForPath("notes.pdf"));
-        Assert.Equal("locked-other", LockIcons.AssetForPath("data.bin"));
+    [Fact]
+    public void Composition_keeps_the_real_shell_icon_and_adds_purple_pixels_bottom_left()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var pdf = Path.Combine(directory, "sample.pdf");
+            var jpg = Path.Combine(directory, "sample.jpg");
+            var folder = Path.Combine(directory, "RealFolder");
+            File.WriteAllBytes(pdf, []);
+            File.WriteAllBytes(jpg, []);
+            Directory.CreateDirectory(folder);
+
+            RunSta(() =>
+            {
+                foreach (var (path, isFolder) in new[] { (pdf, false), (jpg, false), (folder, true) })
+                {
+                    foreach (var size in new[] { 48, 256 })
+                    {
+                        var baseIcon = LockIcons.SystemIconFor(path, isFolder, size);
+                        Assert.NotNull(baseIcon);
+                        var composed = LockIcons.Compose(path, isFolder, size);
+                        Assert.NotNull(composed);
+                        Assert.Equal(size, composed!.PixelWidth);
+                        Assert.Equal(size, composed.PixelHeight);
+
+                        var basePixels = ToPixels(Scale(baseIcon!, size));
+                        var pixels = ToPixels(composed);
+                        // The top-right area is untouched by the bottom-left badge.
+                        var topRight = ((size - 2) + (2 * size)) * 4;
+                        Assert.Equal(basePixels[topRight + 0], pixels[topRight + 0]);
+                        Assert.Equal(basePixels[topRight + 1], pixels[topRight + 1]);
+                        Assert.Equal(basePixels[topRight + 2], pixels[topRight + 2]);
+
+                        // Purple #8224D4 pixels exist in the bottom-left quadrant.
+                        var purple = 0;
+                        for (var y = size / 2; y < size; y++)
+                        {
+                            for (var x = 0; x < size / 2; x++)
+                            {
+                                var index = ((y * size) + x) * 4;
+                                var b = pixels[index];
+                                var g = pixels[index + 1];
+                                var r = pixels[index + 2];
+                                var a = pixels[index + 3];
+                                if (a > 200 && r is > 90 and < 180 && g < 90 && b > 170)
+                                    purple++;
+                            }
+                        }
+                        Assert.True(purple > 10, $"{Path.GetFileName(path)} {size}px has no purple badge pixels");
+                    }
+                }
+            });
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void Icon_cache_reuses_the_extension_cleans_items_and_builds_association_icons()
+    {
+        var directory = NewDirectory();
+        var previous = LockIconCache.RootOverride;
+        LockIconCache.RootOverride = directory;
+        try
+        {
+            RunSta(() =>
+            {
+                var pdf = Path.Combine(directory, "a.pdf");
+                var jpg = Path.Combine(directory, "b.jpg");
+                var folder = Path.Combine(directory, "Folder");
+                File.WriteAllBytes(pdf, []);
+                File.WriteAllBytes(jpg, []);
+                Directory.CreateDirectory(folder);
+
+                var first = LockIconCache.EnsureTypeIcon(pdf, folder: false);
+                var stamp = File.GetLastWriteTimeUtc(first);
+                Thread.Sleep(30);
+                var again = LockIconCache.EnsureTypeIcon(pdf, folder: false);
+                Assert.Equal(first, again);
+                Assert.Equal(stamp, File.GetLastWriteTimeUtc(again));
+
+                var other = LockIconCache.EnsureTypeIcon(jpg, folder: false);
+                Assert.NotEqual(first, other);
+                Assert.True(LockIcons.HasAllFrames(File.ReadAllBytes(first)));
+
+                var item = LockIconCache.EnsureItemIcon(pdf, folder: false);
+                Assert.True(File.Exists(item));
+                Assert.Equal(File.ReadAllBytes(first), File.ReadAllBytes(item));
+                LockIconCache.RemoveItem(pdf);
+                Assert.False(File.Exists(item));
+
+                var (fileIcon, folderIcon) = LockIconCache.EnsureAssociationIcons();
+                Assert.True(File.Exists(fileIcon));
+                Assert.True(File.Exists(folderIcon));
+                Assert.True(LockIcons.HasAllFrames(File.ReadAllBytes(fileIcon)));
+                Assert.True(LockIcons.HasAllFrames(File.ReadAllBytes(folderIcon)));
+
+                LockIconCache.Clear();
+                Assert.False(Directory.Exists(Path.Combine(directory, "items")));
+                Assert.False(Directory.Exists(Path.Combine(directory, "types")));
+                Assert.False(Directory.Exists(Path.Combine(directory, "assoc")));
+            });
+        }
+        finally
+        {
+            LockIconCache.RootOverride = previous;
+            Cleanup(directory);
+        }
     }
 
     [Fact]
@@ -1229,6 +1332,48 @@ public class LockSafetyTests
         {
             Cleanup(directory);
         }
+    }
+    private static void RunSta(Action action)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null)
+            ExceptionDispatchInfo.Capture(failure).Throw();
+    }
+
+    private static BitmapSource Scale(ImageSource source, int size)
+    {
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
+            context.DrawImage(source, new Rect(0, 0, size, size));
+        var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
+    }
+
+    private static byte[] ToPixels(BitmapSource source)
+    {
+        var converted = source.Format == PixelFormats.Bgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        var stride = converted.PixelWidth * 4;
+        var pixels = new byte[stride * converted.PixelHeight];
+        converted.CopyPixels(pixels, stride, 0);
+        return pixels;
     }
     // ------------------------------------------------------------------ helpers
 
