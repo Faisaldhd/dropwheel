@@ -68,3 +68,38 @@ the source. Tests live in `tests/FileAction.Tests/AddBackgroundTests.cs`.
 | E-11 | Every string exists in both tables | 29 `tool.editphotos.*` keys in en and ar (502 keys per table after the 2.4.0 train); no placeholders; Arabic is not a copy of English | PASS | `PhotoEditTests.Every_tool_string_exists_in_both_tables`, with `LocalizationTests` parity |
 
 **How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~PhotoEditTests"` (26 cases), or the CI `Build + test` job. The local 24 MP measurements are from a Release build on the builder's workstation (ImageMagick Q8 in-process); CI hardware will differ.
+
+## QR reader — `tools.qr` (one image)
+
+Read-only tool: it never writes a file, so the chrome's primary button ("Apply") copies the decoded text
+and closes while the view's own **Copy** and **Open** sit above it. Window title "QR Code"; the decoded
+text is selectable; the browser is started from the Open button only. Decoding is ZXing.Net 0.16.11
+in-process (Apache-2.0, see [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md)). Tests live in
+`tests/FileAction.Tests/QrPayloadTests.cs`.
+
+| ID | Check | Expected / assertion | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| Q-1 | Tool identity and localized title | Id `tools.qr`, TitleKey `tool.qr.title`, a declared layout, and the English title differs from the Arabic one | PASS | `QrPayloadTests.The_tool_opens_for_one_image_only` |
+| Q-2 | One image only | `photo.png` and `code.JPG` open; two images, `report.pdf` and an empty list are rejected | PASS | same test |
+| Q-3 | Wheel entry and id-scoped lookup | `WheelController` lists `new UI.Tools.Qr.QrOperation()` beside the other tools; `ToolRegistry.For(id, items)` matches by tool id, so Crop/Edit Photos do not compete for a single image | PASS (inspection) | `WheelController.cs` operation list, `ToolRegistry.For` |
+| Q-4 | Decoder reads a code | `QRCodeWriter` 320 × 320 of a URL → `QrDecoder.Decode` returns the same string | PASS | `QrPayloadTests.Decoder_reads_a_generated_qr_code` |
+| Q-5 | "No code" is not a crash | All-white 160 × 160 → null; a buffer shorter than `w × h × 4` → null; a zero-sized buffer → null | PASS | `Decoder_reports_no_code_for_a_blank_image`, `Decoder_refuses_a_buffer_that_is_too_small` |
+| Q-6 | Link classification | Absolute http/https → kind Link, `CanOpen`, host as the headline, text kept byte-exact; a non-default port stays in the headline (`localhost:8080`) | PASS | `Web_links_are_openable`, `A_non_default_port_stays_in_the_headline` |
+| Q-7 | Only http(s) may ever be opened | `javascript:`, `JavaScript:`, `file:`, `data:`, `vbscript:`, `ms-settings:`, `shell:`, `tel:` and `ftp:` stay plain Text with no URL and no Open button | PASS | `Non_web_schemes_never_become_links` |
+| Q-8 | Disguised or relative values are refused | CRLF, tab, U+202E and U+2066/U+2069 overrides, `//host/path`, a bare host, `http://`, empty and null are all rejected | PASS | `Disguised_or_relative_values_are_not_links` |
+| Q-9 | Scheme and host normalisation | `HTTP://EXAMPLE.COM/Path` → `http://example.com/Path` | PASS | `The_scheme_and_host_are_normalised` |
+| Q-10 | Plain text and empty payloads | Ordinary text stays Text with no title/rows; null, empty and whitespace-only input produce an empty Text payload without throwing | PASS | `Plain_text_stays_text`, `Missing_text_is_an_empty_payload` |
+| Q-11 | E-mail payloads | `mailto:` → address headline plus the decoded subject, no Open; the DoCoMo `MATMSG:` shape parses the same way | PASS | `Mailto_is_an_email_with_its_subject`, `Matmsg_is_an_email_too` |
+| Q-12 | Wi-Fi payloads | `WIFI:` → network / security / password rows, `\;` and `\\` escapes honoured, empty SSID still shows the details | PASS | `Wifi_shows_network_security_and_password`, `Wifi_keeps_escaped_backslashes`, `A_wifi_code_without_a_network_name_still_shows_its_details` |
+| Q-13 | vCard payloads | FN as the headline; ORG/TEL/EMAIL/URL as rows; folded lines unfold; an https URL on the card may be opened, a card without one may not | PASS | `Vcard_shows_the_contact_details`, `Vcard_folded_lines_are_unfolded`, `A_contact_without_a_web_address_is_not_openable` |
+| Q-14 | Every shown label exists in both tables | All five kind keys and every field label are `tool.qr.*` and exist in en and ar; 26 `tool.qr.*` keys per table after the merge; `LocaleUsageTests` covers the literals the view passes to `Loc.T` | PASS | `Every_kind_and_field_label_exists_in_both_languages`, `LocalizationTests`, `LocaleUsageTests` |
+| Q-15 | No network access and no telemetry | Inspection: the only shell call is `Process.Start(…, UseShellExecute: true)` inside `QrView.Open()`, reachable from the Open button; `QrDecoder` is a pure in-process ZXing call on a pixel buffer; no `HttpClient`/`WebRequest`/upload path in `UI/Tools/Qr` or `Core/Qr*` | PASS (inspection) | `QrView.Open`, `QrDecoder.Decode` |
+| Q-16 | Never blocks the UI | Inspection: the constructor starts `Task.Run` (Magick rasterise → ZXing decode → frozen `BitmapSource`); `ActivateAsync` only paints the result and then reports the source `MediaSize` to `ToolWindowSizer` | PASS (inspection) | `QrView.Load`, `QrView.ActivateAsync` |
+| Q-17 | Copy / Open / Reset | Copy writes `QrPayload.Text` verbatim and reports success or failure; Open re-checks `QrSafety.HttpUrl` and refuses with “Only http and https links can be opened.”; Reset clears the last message and the selection | PASS (inspection) | `QrView.Copy`, `QrView.Open`, `QrView.Reset` |
+| Q-18 | Theme and RTL | Only `Theme.*` brushes (glass, borders and the X/title/Reset/primary bar come from the shared `ToolWindow`); the view inherits `FlowDirection` and technical values pass through `Bidi.Value` | PASS (inspection) | `QrView` brushes, `ToolWindow` chrome |
+| Q-19 | Adaptive window | Own `ToolSpecLayout` (chrome 36 × 320; preview 300–720 wide, 220–520 high); the source pixel size feeds `ToolWindowSizer`, which fits any aspect and clamps to 95 % × 90 % of the work area | PASS (inspection) | `QrTool.Layout`, `ToolWindowSizer` |
+
+**How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~QrPayloadTests"` (42 cases), or the CI `Build + test` job. The run used for this matrix is [39336656593](https://github.com/Faisaldhd/dropwheel/actions/runs/39336656593) on `f78170c`: `Build + test` green with no failures, including every `QrPayloadTests` case; the same suite re-runs on every push to this branch.
+
+The `--self-test` window sweep still renders only the crop tool (`SelfTest.cs` is a shared file this tool did not edit), so Q-16…Q-19 are code inspection rather than a rendered screenshot; the `Screenshots` job needs a desktop session and is skipped on pull requests.
+

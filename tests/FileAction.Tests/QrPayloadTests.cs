@@ -1,3 +1,4 @@
+using FileAction.App.UI.Tools.Qr;
 using FileAction.Core;
 using ZXing;
 using ZXing.Common;
@@ -12,6 +13,25 @@ namespace FileAction.Tests;
 /// </summary>
 public class QrPayloadTests
 {
+    /// <summary>The tool's identity and the inputs it opens for (one image, never a folder or a PDF).</summary>
+    [Fact]
+    public void The_tool_opens_for_one_image_only()
+    {
+        var tool = QrTool.Instance;
+
+        Assert.Equal("tools.qr", tool.Id);
+        Assert.Equal("tool.qr.title", tool.TitleKey);
+        Assert.True(tool.Layout.ChromeHeight > 0);
+        Assert.True(tool.Applies([new FileItem("photo.png")]));
+        Assert.True(tool.Applies([new FileItem(@"C:\shots\code.JPG")]));
+        Assert.False(tool.Applies([new FileItem("photo.png"), new FileItem("other.png")]));
+        Assert.False(tool.Applies([new FileItem("report.pdf")]));
+        Assert.False(tool.Applies([]));
+
+        var english = Loc.Table(Language.English)[tool.TitleKey];
+        var arabic = Loc.Table(Language.Arabic)[tool.TitleKey];
+        Assert.NotEqual(english, arabic);
+    }
     [Theory]
     [InlineData("http://example.com/path?x=1", "http://example.com/path?x=1")]
     [InlineData("https://example.com", "https://example.com/")]
