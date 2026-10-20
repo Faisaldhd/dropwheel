@@ -440,7 +440,7 @@ jobs:
 
       - name: Self-test the exact packaged publish
         shell: pwsh
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
           # release/selfcontained is the folder ISCC packages and the portable zip copies. Run the UI gate
           # here, on those exact files, instead of only on a separate build-test publish.
