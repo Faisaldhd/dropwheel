@@ -81,7 +81,8 @@ internal static class MotionClips
             foreach (var spec in ToolRegistry.All)
             {
                 var item = new FileItem(sample);
-                if (!spec.Applies([item]))
+                var sampleItems = MotionSelfTest.SampleItems(spec, item);
+                if (sampleItems is null)
                 {
                     log.Add($"skipped motion/{spec.Id} (no sample)");
                     continue;
@@ -98,7 +99,7 @@ internal static class MotionClips
                     ToolWindow? window = null;
                     try
                     {
-                        window = new ToolWindow(spec, [item], null);
+                        window = new ToolWindow(spec, sampleItems, null);
                         SelfTest.Pump(() => window.PrepareAsync(animate: false));
                         var root = window.DetachForCapture();
                         var poster = Path.Combine(directory, name + "-poster.png");

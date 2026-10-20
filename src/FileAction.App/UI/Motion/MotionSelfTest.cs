@@ -105,7 +105,8 @@ internal static class MotionSelfTest
                 // Every registered tool window, data-driven from the registry so a new tool is covered at merge.
                 foreach (var spec in ToolRegistry.All)
                 {
-                    if (!spec.Applies([item]))
+                    var sampleItems = SampleItems(spec, item);
+                    if (sampleItems is null)
                     {
                         skips.Add(spec.Id);
                         continue;
@@ -113,7 +114,7 @@ internal static class MotionSelfTest
                     ToolWindow? window = null;
                     try
                     {
-                        window = new ToolWindow(spec, [item], null);
+                        window = new ToolWindow(spec, sampleItems, null);
                         SelfTest.Pump(() => window.PrepareAsync(animate: false));
                         var root = window.DetachForCapture();
                         Motion.Override = true;
@@ -188,6 +189,10 @@ internal static class MotionSelfTest
                 "| --- | ---: | ---: | ---: | ---: | --- |",
                 .. rows,
                 "",
+                skips.Count == 0
+                    ? "Every registered tool window was driven by the harness."
+                    : $"Not measured ({skips.Count} registered tool(s) want a media family the harness does not " +
+                      $"create): {string.Join(", ", skips.Order(StringComparer.Ordinal))}.",
                 $"Idle CPU after close: **{idleCpu:F2} %** (budget {IdleCpuBudgetPercent:F0} %).",
                 $"Working set retained by the motion suite: **{retainedMb:F1} MB** (budget {MemoryRetentionBudgetMb:F0} MB).",
             ];
@@ -204,6 +209,16 @@ internal static class MotionSelfTest
     }
 
     private readonly record struct Metrics(double UiP95, double UiMean, double RasterP95, double CpuPercent);
+
+    /// <summary>
+    /// The smallest sample set a tool accepts: one file, or two copies of the same file for a tool that
+    /// needs a second input (collage). Null means the tool wants a media family this harness does not
+    /// create (video, audio, PDF); it is then reported as skipped instead of silently unmeasured.
+    /// </summary>
+    internal static IReadOnlyList<FileItem>? SampleItems(IToolWindowSpec spec, FileItem item) =>
+        spec.Applies([item]) ? [item]
+        : spec.Applies([item, item]) ? [item, item]
+        : null;
 
     /// <summary>
     /// Catches a broken storyboard factory (the failure mode the offscreen previews cannot see, because
