@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -57,6 +58,21 @@ public sealed class AppSettings
     }
 
     private static string FilePath => Path.Combine(Folder, "settings.json");
+
+    /// <summary>
+    /// UP-01: the copy of an unreadable settings file that was kept before the app fell back to defaults,
+    /// or null when the last load was clean. <see cref="ConsumeRecoveryBackup"/> reports it once.
+    /// </summary>
+    public static string? RecoveryBackupPath { get; private set; }
+
+    /// <summary>Returns the kept backup (if any) and clears it, so the notice is shown once per start.</summary>
+    public static string? ConsumeRecoveryBackup()
+    {
+        var path = RecoveryBackupPath;
+        RecoveryBackupPath = null;
+        return path;
+    }
+
 
     public ModifierKey ConvertKey { get; set; } = ModifierKey.Shift;
     public ModifierKey ToolsKey { get; set; } = ModifierKey.Ctrl;
@@ -138,22 +154,72 @@ public sealed class AppSettings
 
     public static AppSettings Load() => LoadFrom(FilePath);
 
-    /// <summary>Loads one settings file; also used by the self-test to exercise the real file path.</summary>
+    /// <summary>
+    /// Loads one settings file; also used by the self-test to exercise the real file path.
+    /// A missing file is a first run and stays silent. A file that exists but cannot be read or parsed is
+    /// copied to <c>settings.bad-&lt;timestamp&gt;.json</c> first (UP-01), so the user's preferences are
+    /// never destroyed silently: the defaults are used for this run only, and the next save writes a
+    /// fresh, valid file next to the kept copy.
+    /// </summary>
     internal static AppSettings LoadFrom(string path)
+    {
+        RecoveryBackupPath = null;
+
+        if (!File.Exists(path))
+            return new AppSettings();
+
+        string json;
+        try
+        {
+            json = File.ReadAllText(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Unreadable (locked, permissions): keep what we can before anyone writes over it.
+            RecoveryBackupPath = Backup(path);
+            return new AppSettings();
+        }
+
+        try
+        {
+            if (JsonSerializer.Deserialize(MigrateLanguage(json), SettingsJson.Default.AppSettings) is { } settings)
+                return settings;
+        }
+        catch (JsonException)
+        {
+            // Corrupt JSON: fall through to the backup + defaults path.
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Source-gen deserialization does not touch the disk, but stay conservative.
+        }
+
+        RecoveryBackupPath = Backup(path);
+        return new AppSettings();
+    }
+
+    /// <summary>
+    /// Copies an unreadable settings file next to itself as <c>settings.bad-&lt;timestamp&gt;.json</c>
+    /// (never overwriting an earlier backup). Returns the copy's path, or null when even that failed.
+    /// </summary>
+    internal static string? Backup(string path)
     {
         try
         {
-            if (File.Exists(path))
-            {
-                var json = File.ReadAllText(path);
-                return JsonSerializer.Deserialize(MigrateLanguage(json), SettingsJson.Default.AppSettings) ?? new AppSettings();
-            }
+            var folder = Path.GetDirectoryName(path) ?? string.Empty;
+            var name = Path.GetFileNameWithoutExtension(path);
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+            var target = Path.Combine(folder, $"{name}.bad-{stamp}.json");
+            for (var suffix = 2; File.Exists(target); suffix++)
+                target = Path.Combine(folder, $"{name}.bad-{stamp}-{suffix}.json");
+            File.Copy(path, target, overwrite: false);
+            return target;
         }
-        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Broken settings file: start with defaults.
+            // The file may have vanished or the folder may be read-only; the app still starts.
+            return null;
         }
-        return new AppSettings();
     }
 
     /// <summary>
@@ -192,21 +258,34 @@ public sealed class AppSettings
 
     public void Save() => SaveTo(FilePath);
 
-    /// <summary>Saves one settings file; also used by the self-test to exercise the real file path.</summary>
+    /// <summary>
+    /// Saves one settings file; also used by the self-test to exercise the real file path. The write goes
+    /// through <c>settings.json.tmp</c> so a crash never leaves a half-written file, and a failed save
+    /// removes that temporary file instead of leaving an orphan behind (UP-01).
+    /// </summary>
     internal void SaveTo(string path)
     {
+        var temp = path + ".tmp";
         try
         {
             var folder = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(folder))
                 Directory.CreateDirectory(folder);
-            var temp = path + ".tmp";
             File.WriteAllText(temp, JsonSerializer.Serialize(this, SettingsJson.Default.AppSettings));
             File.Move(temp, path, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Not fatal; settings simply won't persist.
+            // Not fatal; settings simply won't persist. Clean up the half-written temp file.
+            try
+            {
+                if (File.Exists(temp))
+                    File.Delete(temp);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+                // Nothing else to do; the next successful save overwrites it.
+            }
         }
     }
 

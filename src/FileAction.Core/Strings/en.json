@@ -483,6 +483,8 @@
   "preview.duration": "Duration {0}",
   "preview.durationUnknown": "Duration unknown",
   "settings.title": "DropWheel – settings",
+  "settings.recovered.title": "Settings were reset",
+  "settings.recovered.body": "Your settings file couldn't be read, so DropWheel started with the defaults. A copy of the old file was kept as {0}.",
   "settings.tab.general": "General",
   "settings.tab.wheels": "Wheels",
   "settings.tab.quality": "Quality",

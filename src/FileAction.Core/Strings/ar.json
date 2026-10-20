@@ -483,6 +483,8 @@
   "preview.duration": "المدة ⁦{0}⁩",
   "preview.durationUnknown": "المدة غير معروفة",
   "settings.title": "DropWheel – الإعدادات",
+  "settings.recovered.title": "أُعيد ضبط الإعدادات",
+  "settings.recovered.body": "تعذّرت قراءة ملف الإعدادات، لذا بدأ DropWheel بالإعدادات الافتراضية. احتُفظ بنسخة من الملف القديم باسم ⁦{0}⁩.",
   "settings.tab.general": "عام",
   "settings.tab.wheels": "العجلات",
   "settings.tab.quality": "الجودة",
