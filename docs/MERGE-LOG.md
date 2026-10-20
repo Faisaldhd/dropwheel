@@ -8,3 +8,4 @@
 | #9 | Edit photos | e87e3b4 | CI green 39350297389 |
 | #13 | Video frames + redact | f01eda8 | CI green 39351209717 |
 | #11 | Video trim/crop/speed | 5da0b89 | CI green 39352799362 |
+| #12 | Split/Join | 0c462a9 | CI green 39354842668 |
