@@ -81,7 +81,7 @@ public class VideoToolsFunctionTests : IClassFixture<VideoToolsFunctionTests.Sam
         var output = OutputPaths.TempDirectory();
         try
         {
-            var info = await VideoProbe.ReadAsync(ffmpeg, _samples.Clip, default);
+            var info = await FileAction.App.UI.Tools.Video.VideoProbe.ReadAsync(ffmpeg, _samples.Clip, default);
             Assert.NotNull(info);
             Assert.Equal(320, info!.Width);
             Assert.Equal(180, info.Height);
@@ -191,7 +191,7 @@ public class VideoToolsFunctionTests : IClassFixture<VideoToolsFunctionTests.Sam
         File.WriteAllText(corrupt, "this is not a video");
         try
         {
-            Assert.Null(await VideoProbe.ReadAsync(ffmpeg, corrupt, default));
+            Assert.Null(await FileAction.App.UI.Tools.Video.VideoProbe.ReadAsync(ffmpeg, corrupt, default));
 
             var error = await Assert.ThrowsAsync<ConversionException>(() => VideoRunner.ExportFramesAsync(
                 ffmpeg,

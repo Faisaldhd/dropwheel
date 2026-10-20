@@ -44,6 +44,9 @@ internal sealed class WheelWindow : Window
     private readonly Action<Operation, IReadOnlyList<FileItem>, DropTargets?> _execute;
     private readonly DropTargets? _targets;
     private readonly Canvas _canvas = new() { Width = Size, Height = Size };
+    private readonly ScaleTransform _canvasScale = new(1, 1);
+    private readonly RotateTransform _canvasRotate = new(0, Size / 2, Size / 2);
+    private readonly Motion.Handle _motion;
     private readonly List<Path> _slices = [];
     private readonly List<StackPanel> _labels = [];
     private readonly List<Canvas> _groups = [];
@@ -63,6 +66,9 @@ internal sealed class WheelWindow : Window
     private Win32.POINT _anchor;
     private bool _finished;
     private bool _repeat;
+    private bool _switching;
+    private bool _closing;
+    private int _pressed = -1;
     private double _fit = 1.0;
     private DispatcherTimer? _closeTimer;
 
@@ -100,14 +106,20 @@ internal sealed class WheelWindow : Window
         FontFamily = Theme.UiFont;
         Focusable = true;
         Content = _canvas;
-        UiSetup.Configure(this);
+        UiSetup.Configure(this, animate: false);
         // The disc is circular and its slices run clockwise; mirroring it would move every slice.
         // Only the text inside the slices and the hub follow the reading direction.
         _canvas.FlowDirection = System.Windows.FlowDirection.LeftToRight;
         _hubContent.FlowDirection = LanguageManager.FlowDirection;
         _tabs.FlowDirection = LanguageManager.FlowDirection;
+        // One transform group for the whole disc: the open/close scale and the mode-switch rotation are
+        // both RenderTransform work, so the wheel never changes its layout or allocates a visual per frame.
+        var canvasTransforms = new TransformGroup();
+        canvasTransforms.Children.Add(_canvasScale);
+        canvasTransforms.Children.Add(_canvasRotate);
         _canvas.RenderTransformOrigin = new Point(0.5, 0.5);
-        _canvas.RenderTransform = new ScaleTransform(0.9, 0.9);
+        _canvas.RenderTransform = canvasTransforms;
+        _motion = new Motion.Handle(_canvasScale, null);
         _tabTrack.Child = _tabs;
         _iconGlyph.FontFamily = Theme.Icons;
         _hubContent.Children.Add(_icon);
@@ -142,6 +154,9 @@ internal sealed class WheelWindow : Window
                 SetHighlight(HitTest(e.GetPosition(_canvas), out bool _));
         };
         MouseLeftButtonUp += OnClick;
+        // Pressed micro-scale (90 ms): confirms the pointer landed on the slice before the action runs.
+        PreviewMouseLeftButtonDown += (_, _) => PressHighlight(true);
+        PreviewMouseLeftButtonUp += (_, _) => PressHighlight(false);
         KeyDown += OnKeyDown;
         Deactivated += (_, _) =>
         {
@@ -176,12 +191,15 @@ internal sealed class WheelWindow : Window
         // The HWND settles its new size on the next layout pass; position once more before the
         // fade-in becomes visible (the window starts at Opacity 0).
         Dispatcher.BeginInvoke(PositionAtAnchor);
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        var duration = TimeSpan.FromMilliseconds(140);
-        BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
-        var scale = (ScaleTransform)_canvas.RenderTransform;
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.9, 1, duration) { EasingFunction = ease });
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.9, 1, duration) { EasingFunction = ease });
+        if (Motion.Enabled)
+        {
+            Motion.Play(Motion.OpenWheel(this, _canvas, _motion), this);
+        }
+        else
+        {
+            Motion.Release(_canvas, _motion);
+            Opacity = 1;
+        }
         AnimateSlicesIn();
 
         if (Mode == WheelMode.Click)
@@ -248,13 +266,11 @@ internal sealed class WheelWindow : Window
     {
         if (_finished)
             return;
-        _wheel = wheel;
-        _repeat = false;
-        LoadOperations();
-        Build();
-        AnimateSlicesIn();
-        if (Mode == WheelMode.Click && _ops.Count > 0)
-            SetHighlight(0);
+        ApplyView(() =>
+        {
+            _wheel = wheel;
+            _repeat = false;
+        });
     }
 
     /// <summary>Tapping the same key again shows a single slice that repeats the last action.</summary>
@@ -267,12 +283,7 @@ internal sealed class WheelWindow : Window
             SwitchTo(_wheel);
             return;
         }
-        _repeat = true;
-        LoadOperations();
-        Build();
-        AnimateSlicesIn();
-        if (Mode == WheelMode.Click && _ops.Count > 0)
-            SetHighlight(0);
+        ApplyView(() => _repeat = true);
     }
 
     /// <summary>
@@ -287,11 +298,88 @@ internal sealed class WheelWindow : Window
         FlowDirection = LanguageManager.FlowDirection;
         _hubContent.FlowDirection = LanguageManager.FlowDirection;
         _tabs.FlowDirection = LanguageManager.FlowDirection;
+        ApplyView(() => { }, () => { }, selectFirst: false);
+        if (highlight >= 0 && _ops.Count > 0)
+            SetHighlight(Math.Min(highlight, _ops.Count - 1));
+    }
+
+    /// <summary>
+    /// Rebuilds the wheel's content. With motion on, the disc fades to 25 % and leans 4° while the mode
+    /// changes, then fades back: a fade-through with a rotate, 170 ms in total (budget ≤ 180 ms).
+    /// </summary>
+    private void ApplyView(Action mutate, Action? after = null, bool selectFirst = true)
+    {
+        if (Motion.Enabled && IsVisible && !_finished)
+        {
+            if (_switching)
+                CancelSwitch();
+            _switching = true;
+            AnimateCanvas(0.25, -Motion.SwitchRotateDegrees, Motion.SwitchMs * 0.4, Motion.EaseIn, () =>
+            {
+                if (_finished)
+                    return;
+                CommitView(mutate, after, selectFirst);
+                AnimateCanvas(1, 0, Motion.SwitchMs * 0.6, Motion.EaseOut, () =>
+                {
+                    _switching = false;
+                    _canvas.BeginAnimation(OpacityProperty, null);
+                    _canvas.Opacity = 1;
+                    _canvasRotate.BeginAnimation(RotateTransform.AngleProperty, null);
+                    _canvasRotate.Angle = 0;
+                });
+            });
+            return;
+        }
+
+        if (_switching)
+            CancelSwitch();
+        CommitView(mutate, after, selectFirst);
+        _canvas.Opacity = 1;
+        _canvasRotate.Angle = 0;
+    }
+
+    private void CommitView(Action mutate, Action? after, bool selectFirst)
+    {
+        mutate();
         LoadOperations();
         Build();
         AnimateSlicesIn();
-        if (highlight >= 0 && _ops.Count > 0)
-            SetHighlight(Math.Min(highlight, _ops.Count - 1));
+        after?.Invoke();
+        if (selectFirst && Mode == WheelMode.Click && _ops.Count > 0)
+            SetHighlight(0);
+    }
+
+    private void AnimateCanvas(double opacity, double angle, double milliseconds, IEasingFunction ease, Action? completed)
+    {
+        var storyboard = new Storyboard();
+        var fade = new DoubleAnimation(_canvas.Opacity, opacity, TimeSpan.FromMilliseconds(milliseconds))
+        {
+            EasingFunction = ease,
+            FillBehavior = FillBehavior.HoldEnd,
+        };
+        Storyboard.SetTarget(fade, _canvas);
+        Storyboard.SetTargetProperty(fade, new PropertyPath(UIElement.OpacityProperty));
+        storyboard.Children.Add(fade);
+        var rotate = new DoubleAnimation(_canvasRotate.Angle, angle, TimeSpan.FromMilliseconds(milliseconds))
+        {
+            EasingFunction = ease,
+            FillBehavior = FillBehavior.HoldEnd,
+        };
+        Storyboard.SetTarget(rotate, _canvasRotate);
+        Storyboard.SetTargetProperty(rotate, new PropertyPath(RotateTransform.AngleProperty));
+        storyboard.Children.Add(rotate);
+        if (completed is not null)
+            storyboard.Completed += (_, _) => completed();
+        storyboard.Begin(_canvas);
+    }
+
+    private void CancelSwitch()
+    {
+        _switching = false;
+        _canvas.BeginAnimation(OpacityProperty, null);
+        _canvas.Opacity = 1;
+        _canvasRotate.BeginAnimation(RotateTransform.AngleProperty, null);
+        _canvasRotate.Angle = 0;
     }
 
     /// <summary>The drag ended somewhere: close unless the drop landed on us.</summary>
@@ -309,13 +397,30 @@ internal sealed class WheelWindow : Window
             return;
         _finished = true;
         _closeTimer?.Stop();
-        Close();
+        if (_closing)
+            return;
+        _closing = true;
+        CancelSwitch();
+        if (!Motion.Enabled || !IsVisible || Dispatcher.HasShutdownStarted)
+        {
+            Close();
+            return;
+        }
+        // ~100 ms: fade the window while the disc scales down by 3.5 %.
+        Motion.Play(Motion.CloseWheel(this, _motion, Close), this);
     }
 
     /// <summary>Renders the wheel to a PNG without showing it (used by --self-test).</summary>
     public void RenderPreview(string file, int highlight)
     {
-        _canvas.RenderTransform = Transform.Identity;
+        _canvas.BeginAnimation(OpacityProperty, null);
+        _canvas.Opacity = 1;
+        _canvasScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        _canvasScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        _canvasScale.ScaleX = 1;
+        _canvasScale.ScaleY = 1;
+        _canvasRotate.BeginAnimation(RotateTransform.AngleProperty, null);
+        _canvasRotate.Angle = 0;
         _canvas.LayoutTransform = Transform.Identity;
         foreach (var group in _groups)
         {
@@ -324,6 +429,8 @@ internal sealed class WheelWindow : Window
             var scale = (ScaleTransform)((TransformGroup)group.RenderTransform).Children[0];
             scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
             scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            scale.ScaleX = 1;
+            scale.ScaleY = 1;
         }
         if (highlight >= 0 && highlight < _ops.Count)
             SetHighlight(highlight);
@@ -333,6 +440,74 @@ internal sealed class WheelWindow : Window
         _canvas.HorizontalAlignment = HorizontalAlignment.Center;
         _canvas.VerticalAlignment = VerticalAlignment.Center;
         SelfTest.SaveElement(root, file);
+    }
+
+    /// <summary>
+    /// Detaches the disc for the motion self-test and the website clips. The caller owns the returned
+    /// element and can render it repeatedly at different poses without a window being shown.
+    /// </summary>
+    internal FrameworkElement DetachForCapture()
+    {
+        Content = null;
+        foreach (var group in _groups)
+        {
+            group.BeginAnimation(OpacityProperty, null);
+            var scale = (ScaleTransform)((TransformGroup)group.RenderTransform).Children[0];
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        }
+        var root = new Grid { Background = SelfTest.Desktop(), Width = Size, Height = Size, FlowDirection = LanguageManager.FlowDirection };
+        root.Children.Add(_canvas);
+        _canvas.HorizontalAlignment = HorizontalAlignment.Center;
+        _canvas.VerticalAlignment = VerticalAlignment.Center;
+        return root;
+    }
+
+    /// <summary>
+    /// Applies the exact wheel pose for a point in time with no animation clocks: the open scale/fade,
+    /// the 18 ms slice stagger, the 100 ms travelling highlight and the 100 ms close. This is the same
+    /// math the storyboards run, evaluated deterministically for measurement and frame capture.
+    /// </summary>
+    internal void Pose(double timeMs, int highlight, int previousHighlight = -1, double travel = 1, double closeMs = 0)
+    {
+        var open = Math.Clamp(timeMs / Motion.WheelOpenMs, 0, 1);
+        var close = Math.Clamp(closeMs / Motion.WheelCloseMs, 0, 1);
+        var closeEase = Motion.EaseIn.Ease(close);
+        var settled = Motion.Settle.Ease(open);
+        var scale = (Motion.WheelScaleFrom + (1 - Motion.WheelScaleFrom) * settled) * (1 - 0.035 * closeEase);
+        _canvasScale.ScaleX = scale;
+        _canvasScale.ScaleY = scale;
+        _canvas.Opacity = Motion.SoftOut.Ease(open) * (1 - closeEase);
+
+        for (var i = 0; i < _groups.Count; i++)
+        {
+            var local = Math.Clamp((timeMs - i * Motion.StaggerMs) / Motion.SliceMs, 0, 1);
+            var eased = Motion.EaseOut.Ease(local);
+            _groups[i].Opacity = eased;
+            var sliceScale = (ScaleTransform)((TransformGroup)_groups[i].RenderTransform).Children[0];
+            sliceScale.ScaleX = 0.82 + 0.18 * eased;
+            sliceScale.ScaleY = sliceScale.ScaleX;
+            var move = (TranslateTransform)((TransformGroup)_groups[i].RenderTransform).Children[1];
+            move.X = 0;
+            move.Y = 0;
+        }
+
+        if (highlight < 0 || highlight >= _ops.Count)
+            return;
+        SetHighlight(highlight);
+        Offset(highlight, travel);
+        if (previousHighlight >= 0 && previousHighlight != highlight)
+            Offset(previousHighlight, 1 - travel);
+
+        void Offset(int index, double amount)
+        {
+            if (index < 0 || index >= _groups.Count || _ops.Count <= 1)
+                return;
+            var angle = index * 360.0 / _ops.Count * Math.PI / 180;
+            var move = (TranslateTransform)((TransformGroup)_groups[index].RenderTransform).Children[1];
+            move.X = PopOut * amount * Math.Sin(angle);
+            move.Y = -PopOut * amount * Math.Cos(angle);
+        }
     }
 
     // ------------------------------------------------------------------ data
@@ -664,18 +839,23 @@ internal sealed class WheelWindow : Window
         _canvas.Children.Add(_hubContent);
     }
 
-    /// <summary>Slices grow out of the centre one after another.</summary>
+    /// <summary>Slices grow out of the centre one after another, 18 ms apart.</summary>
     private void AnimateSlicesIn()
     {
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         for (var i = 0; i < _groups.Count; i++)
         {
-            var delay = TimeSpan.FromMilliseconds(14 * i);
-            var duration = TimeSpan.FromMilliseconds(170);
             var scale = (ScaleTransform)((TransformGroup)_groups[i].RenderTransform).Children[0];
-            _groups[i].BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { BeginTime = delay, EasingFunction = ease });
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.82, 1, duration) { BeginTime = delay, EasingFunction = ease });
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.82, 1, duration) { BeginTime = delay, EasingFunction = ease });
+            if (!Motion.Enabled)
+            {
+                _groups[i].BeginAnimation(OpacityProperty, null);
+                _groups[i].Opacity = 1;
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                scale.ScaleX = 1;
+                scale.ScaleY = 1;
+                continue;
+            }
+            Motion.Play(Motion.Stagger(_groups[i], i), _canvas);
         }
     }
 
@@ -794,6 +974,18 @@ internal sealed class WheelWindow : Window
         UpdateHubText();
     }
 
+    private void PressHighlight(bool down)
+    {
+        if (!Motion.Enabled || _finished)
+            return;
+        var index = down ? _highlight : _pressed;
+        if (index < 0 || index >= _groups.Count)
+            return;
+        var scale = (ScaleTransform)((TransformGroup)_groups[index].RenderTransform).Children[0];
+        Motion.Press(scale, down);
+        _pressed = down ? index : -1;
+    }
+
     private void SetHighlight(int index)
     {
         if (index == _highlight)
@@ -819,22 +1011,23 @@ internal sealed class WheelWindow : Window
             child.Opacity = on && subtitle ? 0.85 : 1;
         }
 
-        // Pop the slice outwards along its middle angle.
+        // Pop the slice outwards along its middle angle; 100 ms, so the highlight visibly travels.
         var n = _ops.Count;
         var angle = n <= 1 ? 0 : index * 360.0 / n * Math.PI / 180;
         var distance = on && n > 1 ? PopOut : 0;
         var move = (TranslateTransform)((TransformGroup)_groups[index].RenderTransform).Children[1];
-        var duration = TimeSpan.FromMilliseconds(130);
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        if (IsVisible)
+        var x = distance * Math.Sin(angle);
+        var y = -distance * Math.Cos(angle);
+        if (IsVisible && Motion.Enabled)
         {
-            move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(distance * Math.Sin(angle), duration) { EasingFunction = ease });
-            move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-distance * Math.Cos(angle), duration) { EasingFunction = ease });
+            Motion.Slide(move, x, y);
         }
         else
         {
-            move.X = distance * Math.Sin(angle);
-            move.Y = -distance * Math.Cos(angle);
+            move.BeginAnimation(TranslateTransform.XProperty, null);
+            move.BeginAnimation(TranslateTransform.YProperty, null);
+            move.X = x;
+            move.Y = y;
         }
     }
 

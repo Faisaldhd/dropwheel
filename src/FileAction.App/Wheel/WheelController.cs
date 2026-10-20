@@ -97,6 +97,9 @@ internal sealed class WheelController
         new UI.Tools.Video.VideoRedactOperation(),
         new UI.Tools.Video.VideoSplitOperation(),
         new UI.Tools.Video.VideoJoinOperation(),
+        new UI.Tools.Video.VideoTrimOperation(),
+        new UI.Tools.Video.VideoCropOperation(),
+        new UI.Tools.Video.VideoSpeedOperation(),
     ];
 
     /// <summary>

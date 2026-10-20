@@ -118,6 +118,7 @@ internal static class Controls
                 Select(v);
                 changed(v);
             };
+            Motion.Interactive(pill);
             pills.Add((pill, text, value));
             panel.Children.Add(pill);
         }
@@ -153,8 +154,9 @@ internal static class Controls
             track.BorderBrush = on ? Brushes.Transparent : Theme.Muted;
             knob.Fill = on ? Brushes.White : Theme.Muted;
             var x = on ? 23.0 : 3.0;
-            if (animate)
-                translate.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(x, TimeSpan.FromMilliseconds(120)) { EasingFunction = new CubicEase() });
+            if (animate && Motion.Enabled)
+                translate.BeginAnimation(TranslateTransform.XProperty,
+                    new DoubleAnimation(x, TimeSpan.FromMilliseconds(Motion.ToggleMs)) { EasingFunction = Motion.SoftOut });
             else
                 translate.X = x;
         }
@@ -164,6 +166,7 @@ internal static class Controls
             Paint(true);
             changed(on);
         };
+        Motion.Interactive(track);
         Paint(false);
         return track;
     }
@@ -226,6 +229,7 @@ internal static class Controls
         Show();
 
         var row = new StackPanel { Orientation = Orientation.Horizontal };
+        Motion.Interactive(thumb);
         row.Children.Add(surface);
         row.Children.Add(label);
         return row;
@@ -261,8 +265,7 @@ internal static class Controls
             Child = content,
             HorizontalAlignment = HorizontalAlignment.Left,
         };
-        button.MouseEnter += (_, _) => button.Opacity = 0.88;
-        button.MouseLeave += (_, _) => button.Opacity = 1;
+        Motion.Interactive(button);
         button.MouseLeftButtonUp += (_, e) =>
         {
             e.Handled = true;
