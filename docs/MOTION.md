@@ -5,10 +5,10 @@ curve and distance lives in one file, `src/FileAction.App/UI/Motion/Motion.cs`, 
 that file for its animation. No window, wheel or button hard-codes a duration of its own.
 
 The rule that keeps it cheap: **only `RenderTransform` and `Opacity` are animated**. The single
-exception is the media-orientation resize of a tool window, which animates width/height for 180 ms
-because it is the one case where the layout itself is the transition. Nothing is animated on a timer:
-WPF storyboards run on the render thread's clock, and when reduced motion is on no storyboard is
-started at all, so the app has no animation work while idle.
+exception is the media-orientation resize of a tool window, which animates the window's width, height,
+left and top for 180 ms because it is the one case where the layout itself is the transition. Nothing
+is animated on a timer: WPF storyboards run on the render thread's clock, and when reduced motion is on
+no storyboard is started at all, so the app has no animation work while idle.
 
 ## Tokens
 
@@ -31,6 +31,8 @@ started at all, so the app has no animation work while idle.
 | `ToggleMs` | 120 ms | toggle knob slide |
 | `PulseMs` | 320 ms | success pulse |
 | `PopMs` | 260 ms | badge pop (Lock/success/error) |
+| `ToastMs` | 200 ms | job/progress card slide-in |
+| `BreathMs` | 700 ms per direction | indeterminate progress breathing |
 | `SwitchRotateDegrees` | 4 deg | wheel mode switch lean |
 
 Easings: `EaseOut` (Cubic), `EaseIn` (Cubic), `EaseInOut` (Cubic), `SoftOut` (Quadratic, cross-fades),
@@ -43,7 +45,7 @@ frozen once at startup.
 | --- | --- | ---: | --- | --- |
 | whole disc | wheel opens | 150 ms | `SoftOut` fade, `Settle` scale | window opacity, disc scale 0.88 -> 1 |
 | slices | wheel opens / mode switch | 150 ms each, 18 ms apart | `EaseOut` | slice opacity, slice scale 0.82 -> 1 |
-| highlighted slice | pointer or keyboard moves the selection | 100 ms | `EaseOut` | slice translate (7 px along its angle) + accent fill |
+| highlighted slice | pointer or keyboard moves the selection | 100 ms | `EaseOut` | slice translate (7 px along its angle); the accent fill itself is an instant brush swap, not animated |
 | pressed slice | mouse down on a slice | 90 ms | `EaseOut` | slice scale 1 -> 0.96 -> 1 |
 | mode switch | Tab, modifier key, tab click, repeat toggle, language switch | 170 ms total | `EaseIn` out, `EaseOut` in | disc opacity 1 -> 0.25 -> 1, disc rotation 0 -> -4 deg -> 0 |
 | whole disc | Esc, action, deactivate, drag ended | 100 ms | `EaseIn` | window opacity 1 -> 0, disc scale 1 -> 0.965 |
@@ -112,8 +114,12 @@ measures both, so the reduced-motion path is covered on every CI run.
   frame. Interactive elements attach handlers once, guarded by an attached property.
 - **Stop and release.** Close storyboards clear their clocks when they complete; `Motion.Release`
   clears opacity and transform clocks. A closed window holds no animation clock.
-- **No polling timers.** The only timers are the pre-existing one-shot drag-end timer and the
-  self-test's measurement timer.
+- **No polling animation timer.** The motion system schedules nothing: every animation is a WPF
+  storyboard/clock started by a user or lifecycle event. The timers that predate 2.4.0 (the 350 ms
+  Explorer-args coalescer, the 150 ms drag folder sampler, the 500 ms drag-end close, the job-card
+  auto-remove, the preview playback reporters, the video theme poller and the protection runtime
+  pollers) are unchanged by motion; none of them drives an animation. The self-test's one-second
+  measurement timer is the only timer motion creates.
 - **GPU rendering.** Transforms and opacity are compositor-friendly; the app does not force software
   rendering. `Motion.RenderTier` records WPF's tier in the self-test (2 = full hardware acceleration).
 - **DPI and RTL** are untouched: motion uses render transforms only, never layout mirrors, and the

@@ -97,7 +97,7 @@ internal static class MotionSelfTest
 
                 if (!warm)
                 {
-                    rows.Add(ToRow("wheel (424×424)", wheelOn, wheelOff));
+                    rows.Add(ToRow($"wheel ({wheelRoot.Width:F0}×{wheelRoot.Height:F0})", wheelOn, wheelOff));
                     Check(wheelOn.UiP95, "wheel", failures);
                     worstP95 = Math.Max(worstP95, wheelOn.UiP95);
                 }
