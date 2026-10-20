@@ -22,8 +22,11 @@ check to make a run green.
 | `push` | any branch matching `site/**` or the `feat/2.4.0-website` branch |
 | `workflow_dispatch` | manual re-run from the Actions tab |
 
-The workflow has three independent gates plus a screenshot job. Each job is
-shown separately in the run, so a failure names the gate directly.
+The workflow has three independent gates plus a screenshot job and a deploy
+stamp smoke check. Each job is shown separately in the run, so a failure names
+the gate directly. The smoke check stamps a synthetic release through the exact
+relative `--index docs/site/index.html` + `--output <temp>` shape used by the
+deploy, so a path/copy bug fails in CI instead of after release verification.
 
 ## Gate 1: Lighthouse CI (desktop, every category >= 0.95)
 
@@ -213,6 +216,9 @@ uploaded, and a tag push should not publish a half-verified release.)
 
 Before anything is uploaded, the deploy job:
 
+0. Runs a synthetic `SHA256SUMS.txt` through `stamp_release.py` with the same
+   relative `--index` / `--output` arguments and verifies the temp page is
+   stamped, so a path bug cannot survive until after release verification.
 1. Resolves the newest stable release (`releases/latest` excludes drafts and
    pre-releases) or the tag supplied in `release_tag`. Drafts and pre-releases
    are refused.

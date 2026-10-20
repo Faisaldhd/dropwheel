@@ -44,6 +44,24 @@ jobs:
             cat "$RUNNER_TEMP/size-budget.txt"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Smoke-test release stamping with synthetic sums
+        run: |
+          set -euo pipefail
+          SUMS="$RUNNER_TEMP/synthetic-SHA256SUMS.txt"
+          HASH=$(python3 -c 'print("a" * 64)')
+          printf '%s  DropWheel-Setup.exe\n' "$HASH" > "$SUMS"
+          # Exercise the exact relative --index + --output shape pages.yml uses.
+          python scripts/site/stamp_release.py --index docs/site/index.html --sums "$SUMS" \
+            --version 9.9.9 --asset-size 12345678 --dry-run
+          python scripts/site/stamp_release.py --index docs/site/index.html --sums "$SUMS" \
+            --version 9.9.9 --asset-size 12345678 --output "$RUNNER_TEMP/stamp-smoke"
+          test -f "$RUNNER_TEMP/stamp-smoke/index.html"
+          grep -q '<!--release-version:start-->9.9.9<!--release-version:end-->' "$RUNNER_TEMP/stamp-smoke/index.html"
+          grep -q "<!--release-sha256:start-->$HASH<!--release-sha256:end-->" "$RUNNER_TEMP/stamp-smoke/index.html"
+          if grep -q 'releases/download/v2\.3\.0/' "$RUNNER_TEMP/stamp-smoke/index.html"; then
+            echo "::error::Synthetic stamp left a stale v2.3.0 download URL."
+            exit 1
+          fi
 
   link-check:
     name: Link check
