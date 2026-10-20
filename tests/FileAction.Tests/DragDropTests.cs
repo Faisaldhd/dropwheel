@@ -1,8 +1,7 @@
-using System.IO;
+﻿using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Windows;
-using FileAction.App.Actions;
 using FileAction.App.UI.Tools;
 using FileAction.App.Wheel;
 using FileAction.Core;
@@ -233,8 +232,8 @@ public sealed class DragDropTests : IDisposable
     }
 
     [Theory]
-    [MemberData(nameof(DispatchByDrop))]
-    public void A_tool_is_on_the_wheel_only_when_its_registered_window_accepts_the_same_drop(string shape, string[] expected, string[] refused)
+    [MemberData(nameof(DropShapes))]
+    public void A_tool_is_on_the_wheel_only_when_its_registered_window_accepts_the_same_drop(string shape)
     {
         var items = ItemsFor(shape);
         var offered = Offered(items).ToHashSet(StringComparer.Ordinal);
@@ -242,6 +241,16 @@ public sealed class DragDropTests : IDisposable
         foreach (var spec in ToolRegistry.All.Where(s => offered.Contains(s.Id)))
             Assert.True(spec.Applies(items), $"{spec.Id} is offered for '{shape}' but its window refuses the drop");
     }
+
+    public static TheoryData<string> DropShapes => new()
+    {
+        "one image",
+        "two images",
+        "one video",
+        "one audio file",
+        "one folder",
+        "image and video together",
+    };
 
     private List<FileItem> ItemsFor(string shape) => shape switch
     {
@@ -463,12 +472,14 @@ public sealed class DragDropTests : IDisposable
 
         public string[]? Files { get; init; }
 
-        public object? GetData(string format) => format switch
+        public object? GetData(string format)
         {
-            DataFormats.FileDrop => Files,
-            DataFormats.UnicodeText => Text,
-            _ => null,
-        };
+            if (format == DataFormats.FileDrop)
+                return Files;
+            if (format == DataFormats.UnicodeText)
+                return Text;
+            return null;
+        }
 
         public object? GetData(Type format) => null;
 
