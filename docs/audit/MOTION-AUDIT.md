@@ -1,7 +1,8 @@
 # Motion audit — DropWheel 2.4.0
 
 Lane: TEAM B, lane 4 (motion auditor). Branch `audit/amotion`, PR
-[#40](https://github.com/Faisaldhd/dropwheel/pull/40), base `origin/main` `4f23c9c`.
+[#40](https://github.com/Faisaldhd/dropwheel/pull/40), base `origin/main` `4f23c9c`, merged with
+`origin/main` `cf8a1a6` as `9e61ffd`.
 Measured code state: `17a6265` (CI run **39376236166**). Commits after it (`849f420`, `96f64ae`,
 `517843e` and this doc) touch the theme-watcher timer, tests, a dead-code removal and docs — none of
 them changes a motion pose, and the harness opens no video tool, so the measured table stands for the
@@ -215,8 +216,8 @@ Not allowed: "every registered tool window is measured", "all 25 tools" (wrong c
 offscreen" while constructing only `CropTool`). Main's latest merges make it data-driven: it builds
 every registered tool from `CreateToolSamples`/`FindToolSample`, shows each window offscreen and then
 prepares it, and skips with a `perf/<tool>` line when a preview cannot prepare (`SelfTest.cs:524-594`).
-So the l10n F-02 (PR #30) / selftest GAP 2 (PR #37) concern is addressed there — and that helper is now
-the cheapest way to close the motion gate's own coverage gap (§4a).
+So the overstatement is gone on main — the l10n F-02 (PR #30) and selftest GAP 2 (PR #37) lanes can cite
+that method — and its helper is now the cheapest way to close the motion gate's own coverage gap (§4a).
 
 ## 5. Measured on CI
 
@@ -310,7 +311,7 @@ and no open item is orphaned.
 | M-14 | Low | docs | The new "Not measured" report line said the skipped tools "want a media family the harness does not create", which is wrong for the lock timeout. Now neutral and points at the per-id reason. | `MotionSelfTest.cs:189-192` | motion lane, PR #40 — **fixed** `517843e` |
 | M-15 | Low | hygiene | `RasterBudgetMs = 33.0` was unused as a gate while the measured raster proxy is 38.8-73.7 ms — a constant that contradicted the artifact. Removed. | old `MotionSelfTest.cs:33-34`; `motion/report.md` raster column | motion lane, PR #40 — **fixed** `517843e` |
 | M-16 | Medium | docs | `docs/PERF.md` contradicts itself on idle CPU — table text says **0.39 %** (line 54) while line 63 says **0.00 %** — and its measured table is from run 39351795353 (6 surfaces, before six tools landed). It also implies tools are measured automatically, which the 15 skips disprove. | `docs/PERF.md:47,62-64` | **open** owner: docs lane (reassigned by the supervisor), status: open (PR #36); motion lane supplied the run-39376236166 table and §4(c) wording |
-| M-17 | Medium | release | The tree still ships **2.3.0**: `FileAction.App.csproj:24` and `installer/DropWheel.iss:16`. A `v2.4.0` tag would publish a setup named/versioned 2.3.0. | `src/FileAction.App/FileAction.App.csproj:24`; `installer/DropWheel.iss:16` | **open** owner: version lane, status: open (PR #34); must merge before the tag |
+| M-17 | Medium | release | The tree shipped **2.3.0**: `FileAction.App.csproj:24` and `installer/DropWheel.iss:16`. A `v2.4.0` tag would have published a setup named/versioned 2.3.0. | `src/FileAction.App/FileAction.App.csproj:24`; `installer/DropWheel.iss:16` | **fixed on main** by version lane PR #34 (merge `19add41`); the merged tree (`9e61ffd`) reads 2.4.0 in both files |
 
 Law-1 violations: **none**. Law-2 violations: M-01, M-02 (fixed). Law-3 violations: M-12 (fixed).
 Sum of animated surfaces that ignored reduced motion before this PR: 3 of 17 (M-01 counts two
@@ -323,7 +324,8 @@ animations, M-02 one); after it, 0 of 17.
 2. **M-03 / M-04 / M-16** — the claim, not the code: `docs/PERF.md` and the release notes (both docs
    lane, PR #36) must use the §4(c) wording; perf lane (PR #24) carries the coverage statements. Do not
    publish "every tool window measured", "all 25 tools" or "Arabic motion verified".
-3. **M-17** — land the 2.4.0 version bump (PR #34) before tagging; otherwise the setup is 2.3.0.
+3. **M-17** — version bump (PR #34) is merged on main (`19add41`): the merged tree ships 2.4.0 in both
+   `FileAction.App.csproj:24` and `DropWheel.iss:16`; only verify the tag job reads that number.
 4. **M-13** — decide whether to keep paying 90 s per run for `tools.lock`; cheapest is an explicit skip
    with a reason in `MotionSelfTest`/`MotionClips`, best is fixing `LockView`'s offscreen prep.
 
