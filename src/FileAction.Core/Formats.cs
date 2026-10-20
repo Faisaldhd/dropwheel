@@ -21,19 +21,25 @@ public static class Formats
     private static readonly string[] DoubleExtensions = [".tar.gz", ".tar.bz2", ".tar.xz"];
 
     public static readonly HashSet<string> Images = Set("jpg", "png", "webp", "heic", "tiff", "avif", "bmp", "gif", "svg", "ico");
-    public static readonly string[] ImageOutputs = ["jpg", "png", "webp", "avif", "tiff", "ico", "pdf"];
+    // "heic" is listed for completeness but the bundled Magick.NET build cannot encode it (see
+    // Catalog.CanEncodeImage); the catalog hides that target instead of offering a failing conversion.
+    public static readonly string[] ImageOutputs = ["jpg", "png", "webp", "avif", "tiff", "ico", "pdf", "bmp", "heic"];
 
     public static readonly HashSet<string> Audio = Set("mp3", "m4a", "aac", "wav", "flac", "ogg", "opus", "aiff", "wma");
-    public static readonly string[] AudioOutputs = ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aiff"];
+    public static readonly string[] AudioOutputs = ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aiff", "wma"];
 
     public static readonly HashSet<string> Video = Set("mp4", "mov", "mkv", "webm", "avi", "wmv", "flv", "mpg", "mpeg", "3gp", "ts", "mts");
-    public static readonly string[] VideoOutputs = ["mp4", "mov", "mkv", "webm", "gif", "mp3"];
+    public static readonly string[] VideoOutputs = ["mp4", "mov", "mkv", "webm", "gif", "mp3", "avi", "wmv"];
 
     public static readonly HashSet<string> Pdf = Set("pdf");
 
-    public static readonly HashSet<string> Documents = Set("docx", "doc", "odt", "rtf", "md", "txt", "html", "epub");
+    public static readonly HashSet<string> Documents = Set("docx", "doc", "odt", "rtf", "md", "txt", "html");
     public static readonly HashSet<string> PandocInputs = Set("docx", "odt", "rtf", "md", "txt", "html", "epub");
     public static readonly string[] DocumentOutputs = ["docx", "pdf", "odt", "md", "html", "txt", "epub", "rtf"];
+
+    /// <summary>EPUB has its own group: pandoc reads it, and it is the only input offered there.</summary>
+    public static readonly HashSet<string> Epub = Set("epub");
+    public static readonly string[] EpubOutputs = ["pdf", "docx", "txt", "md", "html"];
 
     public static readonly HashSet<string> Slides = Set("pptx", "ppt", "odp");
     public static readonly string[] SlideOutputs = ["pdf", "png", "jpg", "pptx", "odp"];
