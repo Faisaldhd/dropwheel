@@ -111,7 +111,14 @@ internal sealed class ToolWindow : Window
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape)
+            {
                 Close();
+            }
+            else if (e.Key == Key.Enter && _content.View is IToolActionGate gate && gate.CanApply)
+            {
+                e.Handled = true;
+                _ = ApplyAsync();
+            }
         };
     }
 
@@ -327,8 +334,18 @@ internal sealed class ToolWindow : Window
     private FrameworkElement BuildBottomBar()
     {
         var reset = Controls.Button(T("tool.window.reset"), () => _content.Reset());
-        var apply = Controls.Button(T(_spec.PrimaryLabelKey), () => _ = ApplyAsync(), primary: true);
+        var applyLabel = (_content.View as IToolActionLabel)?.PrimaryLabelKey ?? _spec.PrimaryLabelKey;
+        var apply = Controls.Button(T(applyLabel), () => _ = ApplyAsync(), primary: true);
         _applyButton = apply;
+        if (_content.View is IToolActionGate gate)
+        {
+            apply.IsEnabled = gate.CanApply;
+            gate.CanApplyChanged += () =>
+            {
+                if (_applyButton is not null)
+                    _applyButton.IsEnabled = gate.CanApply;
+            };
+        }
 
         var bar = new DockPanel { Margin = new Thickness(18, 8, 18, 18), LastChildFill = false };
         DockPanel.SetDock(reset, Dock.Left);
