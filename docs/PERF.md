@@ -43,36 +43,39 @@ variance into a red PR. The same reasoning applies to the idle baseline (77.0 MB
 
 ## Measured on this branch (2.4.0)
 
-CI runs [39346865313](https://github.com/Faisaldhd/dropwheel/actions/runs/39346865313) (PR check, merge
-ref with `tools.annotate` + `tools.crop`) and [39346860321](https://github.com/Faisaldhd/dropwheel/actions/runs/39346860321)
-(push, branch head) at commit `050e5d6` — the last commit that changes the binaries; this
-documentation-only update does not change them. The PR check builds the merge ref, so the size numbers
-include the `tools.annotate` tool that merged into main after this branch was cut — the shipped 2.4.0
+CI runs [39347724063](https://github.com/Faisaldhd/dropwheel/actions/runs/39347724063) (PR check, merge
+ref with four merged tools) and [39347719949](https://github.com/Faisaldhd/dropwheel/actions/runs/39347719949)
+(push, branch head) at commit `0a21cd4` — the last commit that changes the binaries; this
+documentation-only update does not change them. The PR check builds the merge ref, so the size and
+per-tool numbers include the tools that merged into main after this branch was cut — the shipped 2.4.0
 state.
 
 | metric | v2.3.0 baseline | current | delta | budget |
 | --- | ---: | ---: | ---: | ---: |
-| installer | 62,967,948 B (60.05 MiB) | 62,981,278 B (60.07 MiB) | +13,330 B (+0.01 MiB) | +6 MiB |
-| portable zip | 89,266,161 B (85.13 MiB) | 89,297,630 B (85.16 MiB) | +31,469 B (+0.03 MiB) | +6 MiB |
-| cold start | 1,500 ms recorded (759–1,290 ms observed) | 817 ms (PR run) | −683 ms | 1,575 ms (−5 % rule) |
-| idle memory | 77.0 MB | 75.2 MB | −1.8 MB | 92.0 MB (−15 MB rule) |
+| installer | 62,967,948 B (60.05 MiB) | 63,004,773 B (60.09 MiB) | +36,825 B (+0.04 MiB) | +6 MiB |
+| portable zip | 89,266,161 B (85.13 MiB) | 89,329,051 B (85.16 MiB) | +62,890 B (+0.06 MiB) | +6 MiB |
+| cold start | 1,500 ms recorded (759–1,290 ms observed) | 815 ms (PR run) | −685 ms | 1,575 ms (−5 % rule) |
+| idle memory | 77.0 MB | 75.1 MB | −1.9 MB | 92.0 MB (−15 MB rule) |
 
-The installer and portable zip grew by ~13–31 KB (the merged annotate tool); this branch itself adds a
+The installer and portable zip grew by ~37–63 KB for the four merged tools; this branch itself adds a
 few kilobytes of harness code and no dependency. The PR check prints the same baseline/current/delta
 table in the job summary.
 
 ### Per-tool open/close (20 cycles after one warm-up)
 
-The PR check builds the merge ref, so it already exercised the `tools.annotate` tool that merged into
-main after this branch was cut — exactly the data-driven coverage the loop is for:
+The PR check builds the merge ref, so it already exercised the tools that merged into main after this
+branch was cut — exactly the data-driven coverage the loop is for:
 
 | tool | opens | baseline MB | final MB | delta | peak MB | result |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `tools.annotate` (merge ref) | 20 | 211.2 | 207.0 | −4.3 | 215.3 | ok |
-| `tools.crop` (merge ref) | 20 | 208.6 | 213.7 | +5.2 | 213.7 | ok |
+| `tools.annotate` | 20 | 211.6 | 207.8 | −3.9 | 211.8 | ok |
+| `tools.crop` | 20 | 209.2 | 214.5 | +5.3 | 214.5 | ok |
+| `tools.addbackground` | 20 | 215.0 | 216.0 | +1.0 | 216.1 | ok |
+| `tools.redact` | 20 | 211.2 | 213.1 | +1.9 | 213.1 | ok |
 
-On the branch head (one registered tool) the same reading was 211.8 → 209.2 MB, −2.6 MB. The working
-set fluctuates with collection timing; the tolerance is +12 MB.
+All four are within the +12 MB tolerance with no leaked `ffmpeg.exe` and no temp file. On the branch
+head (one registered tool) the crop reading was 211.8 → 209.2 MB, −2.6 MB. The working set fluctuates
+with collection timing; the tolerance is +12 MB.
 
 The loop is data-driven from `ToolRegistry.All`: once the 2.4.0 tool branches merge, every new tool is
 exercised automatically. A tool that grows the working set by more than 12 MB, leaves `ffmpeg.exe`
@@ -80,10 +83,10 @@ running, or leaves a file in the redirected `TEMP`/`TMP` folder fails the self-t
 format the loop does not create yet fail with an explicit message asking for the format to be added to
 `SelfTest.CreateToolSamples` — coverage cannot silently shrink.
 
-**No tool leaks today.** Neither `tools.crop` nor `tools.annotate` holds a timer, stream,
-`MediaElement`, ffmpeg process or temp file after close; the runs above report no leaked `ffmpeg.exe`,
-no temp file, and both tools returned within 6 MB of their post-warm-up baseline (annotate below it).
-`tools.crop`'s Magick image is disposed in `Load`, and the decoded `BitmapSource` is frozen and
+**No tool leaks today.** None of the four merged tool windows holds a timer, stream, `MediaElement`,
+ffmpeg process or temp file after close; the run above reports no leaked `ffmpeg.exe`, no temp file, and
+every tool returned within +6 MB of its post-warm-up baseline (two below it). `tools.crop`'s Magick image
+is disposed in `Load`, and the decoded `BitmapSource` is frozen and
 collected with the view.
 
 ## How each gate is enforced
@@ -122,7 +125,7 @@ collected with the view.
   `PDFtoImage`, `SkiaSharp`, `ClosedXML`, `ExcelDataReader`, `UglyToad.PdfPig`, `SharpCompress`,
   `SixLabors`, `DocumentFormat.OpenXml`, `ZXing`) is already loaded. A registrar that did heavy work
   would have loaded its renderer by then. The run above logged
-  `perf registration: 1 tool spec(s), renderer assemblies loaded: none`.
+  `perf registration: 4 tool spec(s), renderer assemblies loaded: none`.
 - **Self-test wheel proof**: the first wheel is laid out offscreen; the self-test fails if laying it
   out loads any renderer assembly beyond the ones the operation catalog already references. The catalog's
   image-edit operations take a `MagickImage`, so `Magick.NET` is loaded by `Catalog.Build()` in v2.3.0;
@@ -152,13 +155,16 @@ pull-request job summary.
 
 ## Known limitations / notes for the tool PRs
 
-- **Only the tools merged on main are covered today.** At the time of this branch main contains
-  `tools.crop` only; the loop is driven by `ToolRegistry.All`, so each tool branch that merges is
-  measured automatically and must add its format to `CreateToolSamples` if it is not listed yet.
+- **Only the tools merged on main are covered by a given run.** The branch head of this PR contains
+  `tools.crop` only; its PR checks build the merge ref and cover every tool merged so far (four at the
+  last measurement: annotate, crop, addbackground, redact). The loop is driven by `ToolRegistry.All`, so
+  each tool branch that merges is measured automatically and must add its format to `CreateToolSamples`
+  if it is not listed yet.
 - **Tool windows have no generic `Closed` hook in the framework.** `ToolWindow`/`IToolWindowSpec` are
   shared files owned by the tool-framework PR, so this branch does not change them. Tools that own a
   `MediaElement`, timer or ffmpeg process must release it in their own view/file on close; the
-  per-tool loop fails a tool that keeps memory, a process or a temp file alive. The current tool
-  (`tools.crop`) has nothing to release: no timer, stream, `MediaElement`, ffmpeg process or temp file.
+  per-tool loop fails a tool that keeps memory, a process or a temp file alive. The four merged tools
+  measured above release everything: no timer, stream, `MediaElement`, ffmpeg process or temp file
+  survives the 20 cycles.
 - **Cold-start noise**: see “Why the cold-start baseline is conservative, not the median” above. Re-baseline
   only with a new v2.3.0-equivalent measurement; never to make a slower build pass.
