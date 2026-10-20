@@ -1893,3 +1893,7 @@ h1 {
   .tool-pending__window { width: min(150px, 60%); }
   .tool-pending__note { font-size: 0.68rem; max-width: 30ch; }
 }
+
+@media print {
+  html.reveal-ready [data-reveal] { opacity: 1; transform: none; transition: none; }
+}

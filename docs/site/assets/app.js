@@ -190,10 +190,6 @@
     setMeta('property', 'og:locale:alternate', lang === 'ar' ? 'en_US' : 'ar_AR');
     setMeta('name', 'twitter:title', meta.title);
     setMeta('name', 'twitter:description', meta.description);
-    setMeta('name', 'twitter:image:alt', meta.title);
-    setMeta('property', 'og:image:alt', lang === 'ar'
-      ? 'أيقونة DropWheel: عجلة بنفسجية مقسّمة مع سهم يهبط على أحد القطاعات.'
-      : 'The DropWheel app icon: a violet segmented wheel with an arrow dropping onto one slice.');
   }
 
   function setLanguage(lang, persist) {
@@ -478,4 +474,15 @@
       status.textContent = next === 'ar' ? 'تم التبديل إلى العربية.' : 'Switched to English.';
     });
   }
+})();
+
+/* ------------------------------------------------------- reveal + focus safety
+ * A keyboard user can tab into a card that the observer has not revealed yet; reveal it
+ * before it can receive focus so focus is never invisible. Print always shows everything. */
+(function () {
+  document.addEventListener('focusin', function (event) {
+    var node = event.target;
+    var host = node && node.closest ? node.closest('[data-reveal]') : null;
+    if (host) host.classList.add('is-in');
+  });
 })();
