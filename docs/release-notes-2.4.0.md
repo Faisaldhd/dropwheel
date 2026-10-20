@@ -18,9 +18,10 @@ motion language, and password protection for your files — all local, all purpl
 - **Password protection.** AES-256 for a ZIP or a PDF copy, and **Remove password** to get back in.
   **Lock** (Beta) goes further: a file becomes one `.dwenc` container and a folder a `.dwdir`, in place,
   with a Rescuer password and a one-time recovery key.
-- **Light and fast, and measured.** The `--self-test` motion gate fails CI above 16.7 ms UI frame p95,
-  5 % idle CPU or 12 MB retained; the recorded run on the merge head is 0.02–0.07 ms p95, 0.39 % idle
-  and 0.0 MB retained ([PERF.md](PERF.md), CI run `39351795353`).
+- **Light and fast, and measured.** Motion gate drives the wheel + 11 image-family tool windows (15
+  media-family tools skipped and named in `motion/report.md`), en-LTR, runner theme; all 26 share the
+  animated chrome code path; UI p95 0.02-0.04 ms, idle CPU 0.00 %, retention 0.0 MB
+  ([PERF.md](PERF.md), run `39376236166`).
 
 ## New tools
 

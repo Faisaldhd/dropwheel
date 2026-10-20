@@ -127,9 +127,11 @@ writes none — and leaves the source alone, except Lock, which transforms the i
 #### Performance and quality
 
 - The `--self-test` motion gate fails CI when the UI frame p95 exceeds **16.7 ms**, idle CPU exceeds
-  **5 %** or the motion surfaces retain more than **12 MB** after closing. The recorded run on the merge
-  head (CI run `39351795353`): UI frame p95 **0.02–0.07 ms**, idle CPU **0.39 %**, retained **0.0 MB**
-  (`docs/PERF.md`).
+  **5 %** or the motion surfaces retain more than **12 MB** after closing. In run `39376236166` it drove
+  the wheel and the **11 image-family tool windows** — the 15 media-family tools are skipped and named in
+  `motion/report.md`, en-LTR and runner theme only — with UI frame p95 **0.02–0.04 ms**, idle CPU
+  **0.00 %** and **0.0 MB** retained (`docs/PERF.md`). All 26 tools share the same animated chrome code
+  path, which is what the gate covers; it does not measure the media-family tools.
 - Compress caps its video two-pass average with `maxrate`/`bufsize` so a target size is reached honestly,
   and a cancelled video run cleans its temporary files without touching the source.
 - Both string tables carry **1,094 keys each** with identical key sets and placeholders, enforced by
@@ -275,8 +277,11 @@ writes none — and leaves the source alone, except Lock, which transforms the i
 
 - تفشّل بوابة الحركة في `--self-test` الاختبار إذا تجاوز الإطار p95 في خيط الواجهة **⁦16.7⁩ مللي ثانية**،
   أو تجاوز خمول المعالج **⁦5⁩٪**، أو احتفظت أسطح الحركة بأكثر من **⁦12⁩ ميغابايت** بعد الإغلاق. وفي
-  التشغيل المسجّل على رأس الدمج (تشغيل CI رقم ⁦39351795353⁩): p95 للواجهة **⁦0.02–0.07⁩ مللي ثانية**،
-  وخمول المعالج **⁦0.39⁩٪**، والاحتفاظ **⁦0.0⁩ ميغابايت** (`docs/PERF.md`).
+  التشغيل ⁦39376236166⁩ قادت العجلة و**⁦11⁩ نافذة أداة من عائلة الصور** — أما الأدوات الـ⁦15⁩ من عائلة
+  الوسائط فتُتخطّى وتُسمّى في `motion/report.md`، والقياس بالإنجليزية ومن اليسار إلى اليمين وبسمة
+  المُشغِّل فقط — بـp95 للواجهة **⁦0.02–0.04⁩ مللي ثانية**، وخمول معالج **⁦0.00⁩٪**، واحتفاظ
+  **⁦0.0⁩ ميغابايت** (`docs/PERF.md`). وتشترك الأدوات الست والعشرون في مسار الهيكل المتحرّك نفسه، وهو ما
+  تغطّيه البوابة؛ أما أدوات عائلة الوسائط فلا تقيسها.
 - يقيّد ضغط الفيديو متوسط مروره المزدوج بـ`maxrate`/`bufsize` ليبلغ الحجم المستهدف بأمانة، والتشغيل الملغى
   ينظّف ملفاته المؤقتة دون المساس بالمصدر.
 - يحمل جدولا النصوص **⁦1,094⁩ مفتاحًا لكل منهما** بمجموعات مفاتيح وعناصر بديلة متطابقة، يفرضها اختبار

@@ -24,8 +24,9 @@ DropWheel is based on [FileAction](https://github.com/Metamorfolog/file_action) 
   to get back in, and **Lock** (Beta) that turns a file into one self-contained `.dwenc` container or a
   folder into `.dwdir` — in place, with a Rescuer password and a recovery key.
 - **Light and fast, and measured.** The `--self-test` motion gate fails CI above 16.7 ms UI frame p95,
-  5 % idle CPU or 12 MB retained (CI run `39351795353`); the recorded run on the merge head is
-  0.02–0.07 ms p95, 0.39 % idle and 0.0 MB retained ([docs/PERF.md](docs/PERF.md)).
+  5 % idle CPU or 12 MB retained. Run `39376236166` drove the wheel + 11 image-family tool windows (the
+  15 media-family tools are skipped and named in `motion/report.md`, en-LTR, runner theme): UI p95
+  0.02-0.04 ms, idle CPU 0.00 %, retention 0.0 MB ([docs/PERF.md](docs/PERF.md)).
 
 The full tool list — id, English and Arabic title, inputs, output names and controls — is in
 [docs/TOOLS.md](docs/TOOLS.md), and the user-facing summary is in the
@@ -145,7 +146,7 @@ dotnet publish src/FileAction.App -c Release -r win-x64 --self-contained -o publ
 publish\DropWheel.exe
 ```
 
-`DropWheel.exe --self-test <folder>` renders the app's windows offscreen and saves PNG previews in English and Arabic, light and dark (used by CI). Its motion gate opens every registered tool window; the screenshot sweep renders the Crop tool as the representative tool window.
+`DropWheel.exe --self-test <folder>` renders the app's windows offscreen and saves PNG previews in English and Arabic, light and dark (used by CI). Its motion gate drives the wheel and the 11 image-family tool windows — the 15 media-family tools are skipped and named in `motion/report.md` — and the screenshot sweep renders the Crop tool as the representative tool window.
 
 ## Project layout
 
