@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DropWheel brand icon - vector master.
+  Hand-authored, flat colours only (no gradients, no filters).
+  Geometry measured from branding/DropWheel-1024.png and the tray frames:
+    6 equal slices, gap-centres at 30/90/150/210/270/330 deg
+    (12, 2, 4, 6, 8, 10 o'clock), outer radius 500/512, hub radius 111,
+    radial gap 24 px at the rim, highlighted slice = right-hand slice.
+  The old 1024 raster carried a decorative arrow; at 16-32 px it rendered as
+  a smudge, so the mark is redrawn as the wheel it always was.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="t d">
+  <title id="t">DropWheel</title>
+  <desc id="d">Six-slice wheel with the right-hand slice highlighted.</desc>
+  <g fill="#8224D4">
+    <path d="M938.89 772.32 A500 500 0 0 1 524.00 1011.86 L514.66 622.97 A111 111 0 0 0 606.77 569.79 Z"/>
+    <path d="M500.00 1011.86 A500 500 0 0 1 85.11 772.32 L417.23 569.79 A111 111 0 0 0 509.34 622.97 Z"/>
+    <path d="M73.11 751.54 A500 500 0 0 1 73.11 272.46 L414.57 458.82 A111 111 0 0 0 414.57 565.18 Z"/>
+    <path d="M85.11 251.68 A500 500 0 0 1 500.00 12.14 L509.34 401.03 A111 111 0 0 0 417.23 454.21 Z"/>
+    <path d="M524.00 12.14 A500 500 0 0 1 938.89 251.68 L606.77 454.21 A111 111 0 0 0 514.66 401.03 Z"/>
+  </g>
+  <path fill="#B48AE0" d="M950.89 272.46 A500 500 0 0 1 950.89 751.54 L609.43 565.18 A111 111 0 0 0 609.43 458.82 Z"/>
+  <circle cx="512" cy="512" r="111" fill="#F5F1FB"/>
+</svg>
