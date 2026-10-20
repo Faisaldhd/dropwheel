@@ -101,12 +101,17 @@ Below-the-fold assets are deliberately excluded:
 - anything outside `docs/site/index.html`'s initial document (for example
   `docs/site/README.md`).
 
-At the time of writing (commit `db01f16`, 2026-10-20) the measured payload is
-**394,106 bytes**: 130,937 HTML + 54,732 CSS + 17,168 app JS + 1,244 boot JS +
-1,983 favicon + 52,660 apple-touch-icon + 3,644 brand mark + 131,738 hero
-candidates. That is 78.8% of the 500,000 byte budget, with 105,894 bytes of
-headroom. The script prints the per-file table and the total on every run and
-writes the same table to the job summary.
+At the time of writing (commit `042a71d`, including feat `db01f16`,
+2026-10-20) the measured payload is **390,552 bytes**: 129,854 HTML + 52,785
+CSS + 16,680 app JS + 1,208 boot JS + 1,983 favicon + 52,660 apple-touch-icon +
+3,644 brand mark + 131,738 hero candidates. That is 78.1% of the 500,000 byte
+budget, with 109,448 bytes of headroom. The script prints the per-file table and
+the total on every run and writes the same table to the job summary.
+
+Numbers above are the bytes in the Git tree (LF), which is what GitHub Pages
+serves and what CI measures. A Windows working tree with `core.autocrlf=true`
+reports about 3.5 KB more because CRLF adds one byte per line; the CI number is
+authoritative for the budget.
 
 ## Gate 3: link check
 
@@ -223,7 +228,7 @@ Before anything is uploaded, the deploy job:
 markers themselves stay). Version, MiB, bytes and SHA-256 may repeat — the
 page uses them in the release bar, hero facts, For IT commands, release card,
 download card and installer filenames — and every occurrence is replaced.
-At commit `db01f16` the page has 8 version, 4 MiB, 2 SHA-256, 1 bytes and 1
+At commit `042a71d` the page has 8 version, 4 MiB, 2 SHA-256, 1 bytes and 1
 status pair; the status pair must appear exactly once. There is no note marker
 to stamp: the top status strip is the only status surface.
 
