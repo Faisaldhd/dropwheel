@@ -1584,6 +1584,31 @@ public class LockSafetyTests
         Assert.Equal("stored-key", LockSecrets.ChooseResetKey(null, stored));
         Assert.Null(LockSecrets.ChooseResetKey(null, null));
     }
+    [Fact]
+    public void Preview_for_a_temp_png_and_a_folder_returns_a_bitmap_without_throwing()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var png = Path.Combine(directory, "preview.png");
+            WriteFile(png, "not a real image; the shell type icon is enough");
+            var folder = Path.Combine(directory, "preview-folder");
+            Directory.CreateDirectory(folder);
+            RunSta(() =>
+            {
+                var fileIcon = LockIcons.PreviewForPath(png, 48);
+                Assert.NotNull(fileIcon);
+                Assert.Equal(48, ((System.Windows.Media.Imaging.BitmapSource)fileIcon!).PixelWidth);
+                var folderIcon = LockIcons.PreviewForPath(folder, 48);
+                Assert.NotNull(folderIcon);
+                Assert.Equal(48, ((System.Windows.Media.Imaging.BitmapSource)folderIcon!).PixelWidth);
+            });
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
     // ------------------------------------------------------------------ helpers
 
     private static string ReadContent(LockService service, string container, string secret)
