@@ -1,0 +1,136 @@
+# Final-candidate verification — DropWheel 2.4.0
+
+Pre-staged so it can run **the minute `main` is green**. Nine minutes of `gh` queries, no local build,
+no exe, no installer, no signing.
+
+- **Runner:** `pwsh ./docs/audit/final-candidate/verify.ps1`
+- **Contract:** read-only. It calls `gh`, reads files already in the tree, downloads CI artifacts into
+  `_local/tmp/finalcheck` (git-ignored) and deletes them unless `-KeepArtifacts`. It never starts a
+  process from the repository: its own first action is a self-scan that refuses to run if the script
+  text contains an execution primitive (see `Assert-ReadOnly`).
+- **Exit codes:** `0` every gate PASS · `1` a gate FAILED · `2` **not yet provable** — no run carries
+  the 2.4.0 artifacts (this is the current state while `main` is red).
+
+## How to run it
+
+```powershell
+# auto-pick the newest green main run that carries DropWheel-Setup-2.4.0
+pwsh ./docs/audit/final-candidate/verify.ps1
+
+# pin a specific run, keep the downloaded artifacts for the record
+pwsh ./docs/audit/final-candidate/verify.ps1 -RunId <run> -KeepArtifacts
+
+# rehearse against another branch (e.g. while the ui-coverage step is not on main)
+pwsh ./docs/audit/final-candidate/verify.ps1 -Branch audit/selftest
+```
+
+The script declares `#Requires -Version 5.1`, so it runs under both PowerShell 7 (what CI uses,
+`shell: pwsh`) and Windows PowerShell 5.1:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\docs\audit\final-candidate\verify.ps1
+```
+
+**Execution policy.** On a machine locked to `AllSigned` by Group Policy, the per-process
+`-ExecutionPolicy Bypass` is overridden and the script will not start — that is the machine, not the
+script, and the fix is to run it where policy allows scripts (the CI runner does) or to use the `gh`
+commands in the table below by hand. Every gate is expressed as a plain `gh`/artifact read for exactly
+that reason; the script is a convenience, never the only way to check a gate.
+
+**What was validated here, and what was not.** This lane could not execute the script on the owner's
+laptop (Group-Policy `AllSigned`, and only Windows PowerShell 5.1 is installed — no `pwsh`). It was
+validated by: a full PowerShell parser pass (0 syntax errors), a simulation of its own read-only guard
+(exactly one invocation in the file, `gh`; no execution primitive), and live checks of the three `gh`
+API shapes it relies on (`contents?ref=<sha>` base64 decode → returned `<Version>2.4.0</Version>`;
+`runs/<id>/artifacts?per_page=100` → 6 artifact names; `run view --job --log` → the package log). Its
+behaviour on a green 2.4.0 run is therefore unproven end-to-end — treat the first real run as a smoke
+test of the script too, and read its per-gate evidence rather than its exit code alone.
+
+`-RunId` skips discovery. Without it, the script walks the newest **completed, successful** runs on the
+branch and picks the first one that owns an artifact named `DropWheel-Setup-2.4.0`. If none does, it
+prints exactly which runs it looked at and exits `2` — it does **not** guess and does **not** dispatch.
+
+## Gates
+
+Fill the PASS/FAIL cell in the run record below (the script prints the same rows). Every row names the
+precise artifact or log line, so a PASS is never a matter of opinion.
+
+| # | Gate | Exact evidence to read | Check id | PASS/FAIL |
+|---|---|---|---|---|
+| 1 | **Installer clean-profile smoke** — silent install exit 0, silent uninstall exit 0, HKCU `Run` value + Start-menu + Send-to + both context-menu keys gone, program folder gone, settings retained, **and no HKLM uninstall entry** | `gh run view <run> --job <package-job> --log`, lines from `scripts/test-installer.ps1`: `ok: the installer exited with 0`, `ok: the uninstaller exited with 0`, `ok: the HKCU Run value is gone`, `ok: the Start-menu shortcut is gone`, `ok: the Send-to shortcut is gone`, `ok: the file context-menu key is gone`, `ok: the folder context-menu key is gone`, `ok: the program folder is gone`, `ok: a silent uninstall keeps the settings folder`, and the verdict `PASS: silent install, shell entries, silent uninstall and settings retention verified.` HKLM: the smoke test prints `uninstall entry: <key>` only for keys that exist (`scripts/test-installer.ps1:243-245`), so **PASS requires that no printed entry starts with `HKLM:`** | `smoke` | ☐ |
+| 2 | **2.4.0 everywhere** — csproj, installer define, asset names, packaged diagnose, About string, README, CHANGES | `gh api repos/Faisaldhd/dropwheel/contents/src/FileAction.App/FileAction.App.csproj?ref=<sha>` → `<Version>2.4.0</Version>`; the same for `installer/DropWheel.iss` → `#define AppVersion "2.4.0"`; artifact `DropWheel-Setup-2.4.0` contains **`DropWheel-2.4.0-Setup.exe`** and **`DropWheel-2.4.0-portable-win-x64.zip`**; `diagnose` artifact → `version:    2.4.0.`; About window: `settings.about.version` present in **both** `src/FileAction.Core/Strings/en.json` and `ar.json` and fed by `Assembly.GetName().Version` (`src/FileAction.App/UI/SettingsWindow.cs:477-483`) — the diagnostic `version:` and the About line come from the same assembly version, so the packaged `2.4.0.x` proves the About line renders `2.4.0`; `README.md` mentions `2.4.0`; `CHANGES.md` has a `## 2.4.0` section | `version` | ☐ |
+| 3 | **26-tool reachability** — all 26 registered ids are dispatchable | `shipped-self-test` artifact → `ok tools/crop (26 registered)`; **`tests/FileAction.Tests/ToolDispatchTests.cs` → `EveryRegisteredToolWindowIsReachableFromTheWheel`** (iterates `ToolRegistry.All`, requires a dispatchable `IInteractiveTool` operation with a matching id) and `WheelOperationIdsAreUnique` (duplicate ids fail), both `Passed` in `test-results/*.trx` — this test **fails CI when a registered tool is unwired** (it is why #42/#31 exist); the `ui-coverage` report lists **26 distinct `tool:tools.<id>` ids**, each in `en` **and** `ar`; source count `ToolRegistry.Register(...)` = 26; wiring is `WheelController.BuildOperations()` (`src/FileAction.App/Wheel/WheelController.cs:88-116`) | `tools` | ☐ |
+| 4 | **en+ar RTL coverage** — `ui-coverage` artifact, and a FAIL row really fails the job | **This is a release-commit gate: the step is on `main`** (`.github/workflows/ci.yml:250-270` — asserts the report exists, contains no `| FAIL |` row, has ≥ 52 tool/culture rows and an explicit "Not covered by this run" section, then uploads `ui-coverage/**`). Read from that run's `ui-coverage` artifact: `ui-coverage.txt` → `surfaces: 114 rows, pass 114, skip 0, fail 0` and `keys: 1094 English / 1094 Arabic`; `ui-coverage.md` → no `| FAIL |` rows, 52 tool/culture rows; **90 PNGs**. Current green proof: run **`39379321230`** (main lineage `32757e9`) — `114 surfaces · 0 failure(s)`. **Read the numbers as assertion counts, not as 114 Arabic renders: `112/114 surfaces genuinely en+ar; 2 surfaces (wheel, parameter dialog) are English renders in the ar pass - gate defect, post-tag fix`** (localization lane; mechanism: `SelfTestUiCoverage.cs:100` builds the operation set once, before/outside the per-culture loop, with the pass culture pinned at `:76-77`, so the wheel and parameter-dialog `ar` rows reuse English text and pass a raw-key/empty-label assertion vacuously). **Gate-strength proof that a FAIL row fails the job:** run `39377633125` went red at *Self-contained UI self-test (shipped publish)* with `self-contained --self-test failed with 1` after `FAILED: … UI coverage (en+ar) failed for 1 surface(s)`. **Separate remaining caveat: 200 % DPI is not covered** — the report's own section says fixed-size dialogs are only size-checked at 1280x800 @100 % and that 150 %/200 % is asserted for tool windows only | `uicoverage` | ☐ |
+| 5 | **No raw string keys in the shipped build** — four language/theme passes, 1094 keys each, zero uppercase `FAILED:` | `shipped-self-test` artifact → `self-test.txt`: `ok en/localization: 1094 keys (English)`, `ok en-light/localization: 1094 keys (English)`, `ok ar/localization: 1094 keys (Arabic)`, `ok ar-light/localization: 1094 keys (Arabic)`, `ok settings.json file load/save`, and **zero case-sensitive `FAILED:` lines** (the case-insensitive match `skipped ocr (failed: …)` is a skip, not a failure) | `rawkeys` | ☐ |
+| 6 | **Lock badge/icons present** — frames committed, embedded and exercised by the packaged build | tree: `src/FileAction.App/Assets/Lock/*.ico` = **7 frames** (`locked-document`, `locked-folder`, `locked-badge`, `locked-archive`, `locked-image`, `locked-other`, `locked-video`), embedded via `src/FileAction.App/FileAction.App.csproj:66` (`LogicalName=FileAction.App.Lock.*`), loaded by `LockIcons.Asset` (`src/FileAction.App/Shell/Protection/LockIcons.cs:20-22,30,39-42`, frame sizes 16/24/32/48/64/256); committed previews `docs/screenshots/lock-badge/` = **8 PNGs + README**; packaged build: the self-test log must contain `ok tools/lock` **and** no `LockIcons`/`ShellIcon`/`SHCreateItemFromParsingName` exception — run `39380479876` is the counter-example (it crashed there) | `lockicons` | ☐ |
+
+**What a PASS on gate 4 does and does not mean.** It means the coverage gate is green on the release
+commit: no `| FAIL |` row exists and the job would have gone red if one did. It does **not** mean every
+window was verified in Arabic. The exact claim is:
+
+> **112/114 surfaces genuinely en+ar; 2 surfaces (wheel, parameter dialog) are English renders in the ar
+> pass - gate defect, post-tag fix.**
+
+Those two rows pass a raw-key / empty-label assertion vacuously, because English text trivially satisfies
+it (`SelfTestUiCoverage.cs:100` builds the operation set once, before/outside the per-culture loop, with
+the pass culture pinned at `:76-77`). Never write "114/114 in en+ar" and never write "every window
+verified in Arabic" — both overstate this run. Beyond that, keep the two limits the report itself names:
+**200 % DPI is not covered**, and native `MessageBox` surfaces plus `UpdatedWindow` are not rasterised.
+If the `ui-coverage` artifact ever has to come from a non-release run, the record must say which run and
+the result is **PASS with caveat**, never a release-commit PASS — `verify.ps1` prints that caveat itself
+whenever the artifact's run id differs from the release run id.
+
+## Current state (last checked: `main` @ `8b28758`, 2026-10-20 ~10:2x +03:00)
+
+`main` has moved past the red commit: the `ShellIcon`/`LockIcons` crash was fixed by #42, the version
+bump (#34) and the dispatch test (#31) are merged, and the `ui-coverage` step plus its upload are now
+part of `main`'s CI (#30/#37). What is still missing is only the **packaged 2.4.0 artifact**, because
+no `main` run has finished the `package` job since the bump.
+
+| # | state | evidence |
+|---|---|---|
+| 1 | **BLOCKED — waiting on the 2.4.0 package run** | the `package` job must complete on a `main` commit that carries the 2.4.0 bump; then its smoke log is readable |
+| 2 | **source PASS, packaged BLOCKED** | `main` @ `8b28758`: `<Version>2.4.0</Version>` + `#define AppVersion "2.4.0"`; no `DropWheel-Setup-2.4.0` artifact has existed yet |
+| 3 | **PASS (test + tree), packaged self-test pending** | `ToolDispatchTests.EveryRegisteredToolWindowIsReachableFromTheWheel` and `WheelOperationIdsAreUnique` exist and run in CI; 26 ids in both cultures already shown by `ui-coverage` |
+| 4 | **PASS on assertion counts — 112/114 genuinely en+ar** | run `39379321230`: `surfaces: 114 rows, pass 114, skip 0, fail 0`, `keys: 1094 / 1094`, 90 PNGs, no `| FAIL |` row. **2 of the 114 (`wheel`, parameter dialog) are English renders in the `ar` pass — gate defect, post-tag fix.** Separate caveat: 200 % DPI not covered (report's own section) |
+| 5 | **PASS at 2.3.0, needs the 2.4.0 re-read** | run `39375412602`: 1094 keys × four language/theme passes, zero uppercase `FAILED:` |
+| 6 | **tree PASS, packaged pending** | 7 embedded `.ico` (document/folder/badge present) + 8 committed PNG previews; the packaged assertion is `ok tools/lock` with no `LockIcons` exception in the 2.4.0 self-test log |
+
+**What is deliberately not claimed:** the 2.4.0 setup/zip names, the 2.4.0 `--diagnose` line and the
+installer smoke at 2.4.0. They are the first four things `verify.ps1` prints once a green `main` run
+owns the artifact, and until then they are **unproven**, not "probably fine".
+
+**Why nothing is dispatched:** a normal push to `main` already runs the `package` job
+(`.github/workflows/ci.yml:151`). This lane never dispatches on `main` and never builds locally.
+
+---
+
+## Run record — **run 39382743079** (`main` @ `8b28758`), verified 2026-10-20 10:30 +03:00
+
+`Build + test` success · **`Package (self-contained setup + portable zip)` success** · `Screenshots` failure
+(the optional job; it does not gate the package) · `GitHub release` skipped (no tag). Artifacts:
+`DropWheel-Setup-2.4.0`, `diagnose`, `shipped-self-test`, `ui-coverage`, `test-results`,
+`self-contained-self-test`, `screenshots`.
+
+| # | gate | PASS/FAIL | evidence from this run |
+|---|---|---|---|
+| 1 | installer clean-profile smoke | **PASS** | `ok: the installer exited with 0 (got 0)`; `ok: the uninstaller exited with 0 (got 0)`; `ok: the program folder is gone`; `ok: the HKCU Run value is gone`; `ok: the file context-menu key is gone`; `ok: the folder context-menu key is gone`; `ok: the Send-to shortcut is gone`; `ok: the Start-menu shortcut is gone`; `ok: a silent uninstall keeps the settings folder`; `ok: a silent uninstall keeps the downloaded helper programs`; verdict `PASS: silent install, shell entries, silent uninstall and settings retention verified.` **HKLM: the only printed entry is `HKCU:\…\Uninstall\{1AB9CDBE-…}_is1` — no `HKLM:` line, so no per-machine entry was created.** |
+| 2 | 2.4.0 everywhere | **PASS** | package log `version = 2.4.0`; `setup exe: 60.52 MB` at `release/DropWheel-2.4.0-Setup.exe`; `ok: setup name matches the update contract (DropWheel-2.4.0-Setup.exe)`; portable `DropWheel-2.4.0-portable-win-x64.zip`; artifact name `DropWheel-Setup-2.4.0`; `SHA256SUMS.txt` lists `da97820f…  DropWheel-2.4.0-Setup.exe` and `0f03b837…  DropWheel-2.4.0-portable-win-x64.zip`; `diagnose` → `version: 2.4.0.0`, `strings: 1107 keys, settings.title="DropWheel – settings"`, `localization: English=1107 keys, Arabic=1107 keys`; `settings.about.version` present in **en** and **ar**; `README.md` mentions 2.4.0; `CHANGES.md` has `## 2.4.0` |
+| 3 | 26 tools reachable | **PASS** | `ok tools/crop (preview, 26 registered)`; **26 distinct `tool:tools.<id>` ids** in `ui-coverage`; `test-results` (1,109 test results) shows `ToolDispatchTests.EveryRegisteredToolWindowIsReachableFromTheWheel -> Passed` and `ToolDispatchTests.WheelOperationIdsAreUnique -> Passed` |
+| 4 | en+ar coverage | **PASS — 112/114 genuinely en+ar** | `ui-coverage.txt`: `surfaces: 114 rows, pass 114, skip 0, fail 0`, `keys: 1107 English / 1107 Arabic`; `ui-coverage.md`: **0** `| FAIL |` rows, **78** tool/culture rows, `Not covered by this run` present; **90 PNGs**. Claim stands as: **112/114 surfaces genuinely en+ar; 2 surfaces (wheel, parameter dialog) are English renders in the ar pass - gate defect, post-tag fix.** Separate caveat: **200 % DPI not covered**. Gate strength: a FAIL row fails the job (run `39377633125` went red at the self-test). |
+| 5 | no raw string keys | **PASS** | `ok en/localization: 1107 keys (English)`, `ok en-light/… 1107 …`, `ok ar/localization: 1107 keys (Arabic)`, `ok ar-light/… 1107 …`, `ok settings.json file load/save`, **0** uppercase `FAILED:` lines. (Key count is **1107** in this build, up from 1094 — assert a floor, never a literal.) |
+| 6 | Lock badge/icons | **PASS** | `ok tools/lock (preview, 26 registered)` and no `LockIcons`/`ShellIcon`/`SHCreateItemFromParsingName` exception; 7 embedded `.ico` (`locked-document`, `locked-folder`, `locked-badge` present) + 8 committed PNG previews |
+
+**Size budget (this lane's `ci.yml` gate, same run):** `setup: 63,459,134 B vs v2.3.0 62,967,948 B -> 0.47 MiB (0.78 %) PASS`
+and `portable zip: 89,928,258 B vs v2.3.0 89,266,161 B -> 0.63 MiB (0.74 %) PASS` — both far inside the
+6 MiB line.
+
+**Verdict: all six gates PASS on run 39382743079.** Release notes may advertise 26 tool windows and
+"112/114 surfaces genuinely en+ar"; they may not claim 114 Arabic surfaces or full DPI coverage.
+
+**Two defects found in `verify.ps1` by running the real case** (both fixed in this commit):
+1. discovery required the **whole run** to be `success`, but a run whose optional `Screenshots` job fails
+   is `failure` while `Package` is green — the script would have exited 2 ("not yet provable") on exactly
+   the run that proves the release. It now keys on the artifact.
+2. gate 5 required the literal string `1094 keys`; the 2.4.0 build reports **1107**, so a correct release
+   would have failed. It now requires four language/theme passes with ≥ 1000 keys each.
