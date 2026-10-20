@@ -249,12 +249,29 @@ internal sealed class WheelController
     }
 
     /// <summary>Runs a wheel choice: a floating tool opens its window, everything else becomes a job.</summary>
-    private void RunOperation(Operation op, IReadOnlyList<FileItem> items, DropTargets? targets)
+    private void RunOperation(Operation op, IReadOnlyList<FileItem> items, DropTargets? targets) =>
+        Dispatch(op, items, targets, _jobs);
+
+    /// <summary>
+    /// The one place a wheel choice becomes work. Interactive tools are still remembered for "repeat last"
+    /// even though they do not go through <see cref="JobRunner.Start"/>; jobs remember themselves there.
+    /// </summary>
+    internal static void Dispatch(
+        Operation op,
+        IReadOnlyList<FileItem> items,
+        DropTargets? targets,
+        JobRunner jobs,
+        bool saveSettings = true)
     {
         if (op is UI.Tools.IInteractiveTool tool)
+        {
+            jobs.Remember(op, null, saveSettings);
             tool.Open(items, targets);
+        }
         else
-            _jobs.StartInto(op, items, null, targets);
+        {
+            jobs.StartInto(op, items, null, targets);
+        }
     }
 
     private void Open(WheelMode mode, WheelKind wheel, IReadOnlyList<FileItem>? items, Win32.POINT at)

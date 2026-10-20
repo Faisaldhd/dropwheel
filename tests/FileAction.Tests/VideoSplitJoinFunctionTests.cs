@@ -449,6 +449,55 @@ public class VideoSplitJoinFunctionTests : IClassFixture<VideoSplitJoinFunctionT
         return numerator / denominator;
     }
 
+    [Fact]
+    public async Task Split_honours_the_detected_drop_folder()
+    {
+        if (!_samples.Available)
+            return;
+
+        var source = _samples.Trip!;
+        var drop = Path.Combine(Path.GetTempPath(), "dropwheel-split-drop-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(drop);
+        try
+        {
+            var plan = VideoSplitJoin.Plan(source, "Parts", Probe(source).Duration, [1.0]);
+            var folder = await VideoSplitRunner.RunAsync(
+                _samples.Ffmpeg!, plan, new InlineProgress(_ => { }), CancellationToken.None,
+                outputDirectory: drop);
+
+            Assert.Equal(Path.TrimEndingDirectorySeparator(Path.GetFullPath(drop)), Path.GetDirectoryName(folder));
+            Assert.True(File.Exists(Path.Combine(folder, "trip 02.mp4")), "the second part was not written into the drop folder");
+        }
+        finally
+        {
+            Directory.Delete(drop, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Join_honours_the_detected_drop_folder()
+    {
+        if (!_samples.Available)
+            return;
+
+        var drop = Path.Combine(Path.GetTempPath(), "dropwheel-join-drop-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(drop);
+        try
+        {
+            var clips = new List<ClipInfo> { ToClip(_samples.Trip!), ToClip(_samples.Wide!) };
+            var joined = await VideoJoinRunner.RunAsync(
+                _samples.Ffmpeg!, clips, new InlineProgress(_ => { }), CancellationToken.None,
+                outputDirectory: drop);
+
+            Assert.Equal(Path.Combine(drop, "Joined.mp4"), joined);
+            Assert.True(File.Exists(joined));
+        }
+        finally
+        {
+            Directory.Delete(drop, recursive: true);
+        }
+    }
+
     private static string Hash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
 
     private static void AssertClose(double expected, double actual, double tolerance, string what) =>

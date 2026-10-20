@@ -32,10 +32,11 @@ internal sealed class PdfMergeOperation : Operation, IInteractiveTool
     public override Task<OperationResult> ExecuteAsync(IReadOnlyList<FileItem> items, OperationContext ctx) =>
         Task.FromResult(OperationResult.Of(Array.Empty<string>()));
 
+    internal IToolWindowSpec Tool => PdfMergeTool.Instance;
+
     public void Open(IReadOnlyList<FileItem> items, DropTargets? targets)
     {
-        var spec = ToolRegistry.For(items) ?? PdfMergeTool.Instance;
-        new ToolWindow(spec, items, targets).Show();
+        new ToolWindow(Tool, items, targets).Show();
     }
 }
 
@@ -56,9 +57,10 @@ internal sealed class PdfOrganizeOperation : Operation, IInteractiveTool
     public override Task<OperationResult> ExecuteAsync(IReadOnlyList<FileItem> items, OperationContext ctx) =>
         Task.FromResult(OperationResult.Of(Array.Empty<string>()));
 
+    internal IToolWindowSpec Tool => PdfOrganizeTool.Instance;
+
     public void Open(IReadOnlyList<FileItem> items, DropTargets? targets)
     {
-        var spec = ToolRegistry.For(items) ?? PdfOrganizeTool.Instance;
-        new ToolWindow(spec, items, targets).Show();
+        new ToolWindow(Tool, items, targets).Show();
     }
 }
