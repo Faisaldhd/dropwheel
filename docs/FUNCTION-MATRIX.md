@@ -69,6 +69,49 @@ the source. Tests live in `tests/FileAction.Tests/AddBackgroundTests.cs`.
 
 **How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~PhotoEditTests"` (26 cases), or the CI `Build + test` job. The local 24 MP measurements are from a Release build on the builder's workstation (ImageMagick Q8 in-process); CI hardware will differ.
 
+## Compress — `tools.compress` (one image, audio, video or PDF)
+
+Window title "Compress File", primary button "Compress", output `<name> Compressed.<ext>` next to the source;
+the source is only read. Rules live in `tests/FileAction.Tests/CompressMetadataTests.cs`, real media in
+`CompressMetadataFunctionTests.cs`.
+
+| ID | Check | Expected / assertion | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| C-1 | Tool identity and localized labels | Id `tools.compress`, TitleKey `tool.compress.title` → "Compress File", PrimaryLabelKey `tool.compress.apply` → "Compress"; Arabic "ضغط" exists and differs | PASS | `CompressMetadataToolTests.Tool_identity_primary_labels_and_applicability` and `CompressMetadataStringTests.Addendum_keys_exist_in_both_languages_with_the_fixed_english` |
+| C-2 | Accepts exactly one supported file | jpg/png/mp3/m4a/mp4/mkv/pdf open; docx, a folder, two files and an empty list are rejected | PASS | same identity test |
+| C-3 | Defaults | Balanced preset (`CompressionPreset.Medium`), target-size and percentage off, 40 % reduction → 60 % kept, image sizes 2560/1920/1280/1024/640 px, "keep original dimensions" = 0 | PASS | `CompressionPlanTests.Defaults_are_the_balanced_preset_with_no_size_goal`, `Reduction_maps_onto_the_kept_percentage` |
+| C-4 | Image compress writes a smaller, resized copy | Generated 1200 × 900 noisy JPEG: output < 80 % of the source, exactly 600 × 450 (max long side), source SHA-256 identical afterwards, no `.part` files | PASS | `CompressMetadataFunctionTests.Compress_image_writes_a_smaller_resized_copy_and_never_touches_the_source` |
+| C-5 | Image plans follow target and percentage | Target 1 MB downscales 4000 × 3000 and estimates 0.9–1.1 MB; percentage 50 % keeps the best quality and scales the pixels to an estimate of 0.95–1.1 MB; never upscales | PASS | `CompressionPlanTests.Target_size_downscales_the_image_to_reach_the_target`, `Percentage_mode_keeps_the_quality_and_scales_the_pixels`, `Image_plan_never_upscales_and_honours_the_max_long_side` |
+| C-6 | Video target size, duration and audio | Generated 8 s noisy testsrc + sine, target 419430 B: output ≤ target + 10 % and > 60 % of it, < 50 % of the source; duration within ±0.25 s; the audio track is still there; source unchanged | PASS | `CompressMetadataFunctionTests.Compress_video_reaches_the_target_size_and_keeps_duration_and_audio`; with the maxrate cap a local noisy run produced 385438 B (92 % of the target), and CI held the ≤ +10 % ceiling |
+| C-7 | Audio gets smaller and keeps duration | Generated 6 s 192 kbps MP3, target 0.08 MB: output < 80 % of the source, duration within ±0.25 s, source unchanged | PASS | `CompressMetadataFunctionTests.Compress_audio_gets_smaller_and_keeps_its_duration` |
+| C-8 | Corrupt input fails cleanly | A fake JPEG throws with a message; only the source remains; no `.part` file | PASS | `CompressMetadataFunctionTests.A_corrupt_image_fails_without_leaving_any_file` |
+| C-9 | Unwritable output fails cleanly | A path whose parent is a file throws; the directory is never created; no partial file; source unchanged | PASS | `CompressMetadataFunctionTests.An_unwritable_output_folder_fails_without_partial_files` |
+| C-10 | Missing FFmpeg fails clearly | `ConversionException` with a message and no partial output; on machines where FFmpeg is installed the case reports a skip instead (CI installs it) | PASS (conditional) | `CompressMetadataFunctionTests.A_missing_ffmpeg_reports_a_clear_error_and_writes_nothing`; `CompressOperation.IsAvailable` hides audio/video without FFmpeg |
+| C-11 | Every string exists in both tables | 46 `tool.compress.*` keys, identical key sets in en and ar (823 keys per table after the merge train), same placeholders, Arabic is not a copy of English, fixed helper line verbatim | PASS | `CompressMetadataStringTests.Both_tables_have_the_same_tool_keys`, `Placeholders_match_for_every_tool_key`, `Addendum_keys_exist_in_both_languages_with_the_fixed_english` |
+| C-12 | Theme only | The view uses `Theme.*` brushes plus `Brushes.Transparent`; no hex colour, `Color.From`, `Colors.` or cached brush; `ToolWindow` calls `Theme.Refresh()` before building | PASS | `ToolThemeTests.Tool_views_use_theme_brushes_only`, `The_shared_window_refreshes_the_theme_before_it_builds` |
+
+## Edit metadata — `tools.metadata` (one image, audio, video or PDF)
+
+Window title "Edit Metadata", primary button "Save", output `<name> Edited metadata.<ext>` next to the
+source; the original is only read. Field groups, validation and the FFmpeg argument builder live in
+`src/FileAction.Core/MetadataModel.cs`.
+
+| ID | Check | Expected / assertion | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| M-1 | Tool identity and labels | Id `tools.metadata`, TitleKey `tool.metadata.title` → "Edit Metadata", PrimaryLabelKey `tool.metadata.save` → "Save"; Arabic "حفظ" exists and differs | PASS | `CompressMetadataToolTests.Tool_identity_primary_labels_and_applicability`, `CompressMetadataStringTests.Addendum_keys_exist_in_both_languages_with_the_fixed_english` |
+| M-2 | Searchable sections in display order | File, Image, Video track, Audio track, ExifIFD, IPTC, XMP, PDF info, Chapters; query matches label/value/group; editable rows come first inside their section | PASS | `MetadataModelTests.The_field_list_is_searchable_and_grouped_in_display_order`, `Editable_rows_come_first_inside_their_group` |
+| M-3 | Writable rows always exist | Media probe seeds title/artist/album plus the chapters row (existing chapters as `mm:ss Title`); image reader ensures Make/Model/Latitude/Longitude; PDF reader ensures the four info rows | PASS (inspection + probe test) | `The_probe_seeds_the_editable_rows_and_the_chapter_text`; `MetadataRunner.ReadImage`/`ReadPdf` `EnsureEditable` rows |
+| M-4 | Camera and GPS write and re-read | Real 640 × 480 JPEG: copy named `shot Edited metadata.jpg`; re-read EXIF has Make `TestCam`, Model `TestModel`, GPS refs `N`/`E` and both GPS values; source SHA-256 unchanged | PASS | `CompressMetadataFunctionTests.Metadata_edit_writes_camera_and_gps_and_remove_all_clears_them` |
+| M-5 | Remove All clears camera and location | A second save `shot Edited metadata (2).jpg` re-reads with no Make and no GPS value; processing/other hidden data is stripped by `image.Strip()` | PASS | same test (`RemoveAll`) |
+| M-6 | Per-field remove deletes that tag | Removed media tags are written as `-metadata title=`; removed chapters add `-map_chapters -1`; EXIF removals call `RemoveValue`; PDF removed fields are emptied; chapter removal drops the chapter track | PASS | `Removed_media_tags_are_written_as_empty_metadata`, `Removing_chapters_drops_the_chapter_track`, `Editable_keys_map_onto_the_edit`; EXIF/PDF removal in `MetadataRunner` |
+| M-7 | PDF info dictionary round-trips | Copy named `doc Edited metadata.pdf`; re-read via PDFsharp has Title/Author/Subject/Keywords as written, 1 page, source unchanged | PASS | `CompressMetadataFunctionTests.Metadata_edit_updates_the_pdf_info_dictionary` |
+| M-8 | Corrupt metadata input fails cleanly | A fake JPEG throws; no `.part` file; only the source remains | PASS | `CompressMetadataFunctionTests.A_corrupt_metadata_input_fails_without_writing_anything` |
+| M-9 | Footer note, Remove All and Save labels | The photo note "For photos, Remove All also clears hidden camera and processing data. HDR and portrait effects may change." and the labels "Search metadata", "Remove All", "Save" exist verbatim in English and are translated in Arabic | PASS | `CompressMetadataStringTests.Addendum_keys_exist_in_both_languages_with_the_fixed_english` |
+| M-10 | Every string exists in both tables | 50 `tool.metadata.*` keys with identical key sets and placeholders in en and ar; no key ends with a plural category (guards `Loc.PluralBaseKeys`) | PASS | `Both_tables_have_the_same_tool_keys`, `Placeholders_match_for_every_tool_key`, `No_tool_key_looks_like_a_plural_group` |
+| M-11 | Theme only | Same rule as Compress: `Theme.*` + `Brushes.Transparent` only, no cached brushes; the window repaints with the current palette when it opens | PASS | `ToolThemeTests.Tool_views_use_theme_brushes_only`, `The_shared_window_refreshes_the_theme_before_it_builds` |
+
+**How to reproduce the compress and metadata rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~CompressMetadata|FullyQualifiedName~ToolTheme"`, or the CI `Build + test` job (which installs FFmpeg first, so C-6 and C-7 run for real).
+
 ## QR reader — `tools.qr` (one image)
 
 Read-only tool: it never writes a file, so the chrome's primary button ("Apply") copies the decoded text
