@@ -10,7 +10,7 @@ namespace FileAction.App.UI.Tools.Audio;
 /// handles and the drag handling. Handles are dragged with the mouse; typing exact times in the view moves
 /// the same selection.
 /// </summary>
-internal sealed class WaveformStrip : WaveformView
+internal sealed class WaveformStrip : WaveformChart
 {
     private const double HandleRadius = 7;
     private const double HitSlop = 14;

@@ -49,7 +49,7 @@ internal sealed class AudioNormalizeView
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _lifetime = new();
     private readonly AudioPreview _preview;
-    private readonly WaveformView _waveform = new() { Height = 104 };
+    private readonly WaveformChart _waveform = new() { Height = 104 };
     private readonly AudioSlider _loudness = new(-30, -5, LoudnessTarget.Default.IntegratedLufs, 0.5, "0.#") { Width = SliderWidth };
     private readonly AudioSlider _range = new(1, 50, LoudnessTarget.Default.LoudnessRangeLu, 1, "0") { Width = SliderWidth };
     private readonly AudioSlider _peak = new(-9, 0, LoudnessTarget.Default.TruePeakDb, 0.5, "0.#") { Width = SliderWidth };

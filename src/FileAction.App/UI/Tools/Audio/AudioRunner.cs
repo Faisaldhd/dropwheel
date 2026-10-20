@@ -7,7 +7,7 @@ using static FileAction.Core.Loc;
 namespace FileAction.App.UI.Tools.Audio;
 
 /// <summary>Peak envelope and exact duration decoded from the same waveform pass.</summary>
-internal sealed record AudioWaveform(float[] Peaks, double Duration);
+internal sealed record AudioPeaks(float[] Peaks, double Duration);
 
 /// <summary>
 /// Runs the FFmpeg work the audio tools need (loudness measurement, silence detection, waveform decode,
@@ -45,7 +45,7 @@ internal static class AudioRunner
     /// Decodes the audio to mono PCM in a temp file and reduces it to the peak envelope. The PCM is read in
     /// chunks, so a long recording never has to fit in memory; the temp file is removed either way.
     /// </summary>
-    public static async Task<AudioWaveform> WaveformAsync(string ffmpeg, string path, CancellationToken ct)
+    public static async Task<AudioPeaks> WaveformAsync(string ffmpeg, string path, CancellationToken ct)
     {
         var directory = OutputPaths.TempDirectory();
         try
@@ -72,7 +72,7 @@ internal static class AudioRunner
                     firstSample += usable / 2;
                 }
             }
-            return new AudioWaveform(peaks, duration);
+            return new AudioPeaks(peaks, duration);
         }
         finally
         {

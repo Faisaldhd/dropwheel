@@ -9,7 +9,7 @@ namespace FileAction.App.UI.Tools.Audio;
 /// A decoded waveform drawn by hand: one bar per two pixels, a centre line and an optional playhead. The
 /// trim strip adds the handles on top; the normalize window only needs this read-only view.
 /// </summary>
-internal class WaveformView : FrameworkElement
+internal class WaveformChart : FrameworkElement
 {
     protected const double ColumnWidth = 2;
 
@@ -19,7 +19,7 @@ internal class WaveformView : FrameworkElement
     private double _duration;
     private double? _playhead;
 
-    public WaveformView()
+    public WaveformChart()
     {
         ClipToBounds = true;
         Focusable = false;
