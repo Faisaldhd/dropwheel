@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Windows.Media;
+using FileAction.App.UI;
 using FileAction.App.UI.Tools.Collage;
 using FileAction.Core;
 using ImageMagick;
@@ -382,6 +385,157 @@ public class CollageTests
         {
             Directory.Delete(directory, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task Renderer_places_the_images_in_the_grid_cells_with_the_background_in_the_gap()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "dropwheel-collage-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var first = Path.Combine(directory, "purple.png");
+            var second = Path.Combine(directory, "gold.png");
+            using (var image = new MagickImage(MagickColors.RebeccaPurple, 100, 100))
+                image.Write(first);
+            using (var image = new MagickImage(MagickColors.Goldenrod, 100, 100))
+                image.Write(second);
+
+            var options = new CollageOptions
+            {
+                Layout = CollageLayout.Grid,
+                Fit = CollageFit.Fill,
+                Size = new CollageSize(320, 240),
+                Spacing = 40,
+                Radius = 0,
+                Background = CollageBackground.Solid(CollageColor.Black),
+            };
+
+            var output = await CollageRenderer.RenderAsync([first, second], options, directory);
+            using var rendered = new MagickImage(output);
+
+            // Two 140-pixel cells with a 40-pixel gap: cell 0 is 0..140, the gap 140..180, cell 1 180..320.
+            AssertColour(rendered, 70, 120, MagickColors.RebeccaPurple);
+            AssertColour(rendered, 160, 120, MagickColors.Black);
+            AssertColour(rendered, 250, 120, MagickColors.Goldenrod);
+            AssertColour(rendered, 70, 5, MagickColors.RebeccaPurple);
+            AssertColour(rendered, 315, 120, MagickColors.Goldenrod);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(1080, 1080)]
+    [InlineData(1920, 1080)]
+    [InlineData(1080, 1920)]
+    public async Task Renderer_honours_every_output_preset_and_leaves_the_source_files_untouched(int width, int height)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "dropwheel-collage-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var first = Path.Combine(directory, "first.png");
+            var second = Path.Combine(directory, "second.jpg");
+            using (var image = new MagickImage(MagickColors.RebeccaPurple, 400, 300))
+                image.Write(first);
+            using (var image = new MagickImage(MagickColors.Goldenrod, 300, 400))
+                image.Write(second);
+
+            var firstHash = SHA256.HashData(File.ReadAllBytes(first));
+            var secondHash = SHA256.HashData(File.ReadAllBytes(second));
+            var firstWrite = File.GetLastWriteTimeUtc(first);
+            var secondWrite = File.GetLastWriteTimeUtc(second);
+
+            var options = new CollageOptions
+            {
+                Layout = CollageLayout.Grid,
+                Fit = CollageFit.Fill,
+                Size = new CollageSize(width, height),
+                Spacing = 8,
+                Radius = 16,
+                Background = CollageBackground.Solid(CollagePalette.Colors[0]),
+            };
+
+            var output = await CollageRenderer.RenderAsync([first, second], options, directory);
+
+            Assert.True(File.Exists(output));
+            Assert.Equal("png", Path.GetExtension(output).TrimStart('.'));
+            using (var rendered = new MagickImage(output))
+            {
+                Assert.Equal((uint)width, rendered.Width);
+                Assert.Equal((uint)height, rendered.Height);
+            }
+
+            // The renderer reads the originals only: same bytes, same write timestamps.
+            Assert.Equal(firstHash, SHA256.HashData(File.ReadAllBytes(first)));
+            Assert.Equal(secondHash, SHA256.HashData(File.ReadAllBytes(second)));
+            Assert.Equal(firstWrite, File.GetLastWriteTimeUtc(first));
+            Assert.Equal(secondWrite, File.GetLastWriteTimeUtc(second));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Window_probe_keeps_the_designed_size_and_fits_a_small_work_area()
+    {
+        var desktop = ToolWindowSizer.Compute(CollageTool.DefaultLayout, 1920, 1080, 1920, 1080, 1.0);
+        Assert.Equal(560, desktop.Width, 3);
+        Assert.Equal(747.5, desktop.Height, 3);
+
+        var small = ToolWindowSizer.Compute(CollageTool.DefaultLayout, 1920, 1080, 1366, 768, 1.0);
+        Assert.True(small.Width <= 1366 * ToolWindowSizer.MaxWidthRatio + 0.01, $"width {small.Width}");
+        Assert.True(small.Height <= 768 * ToolWindowSizer.MaxHeightRatio + 0.01, $"height {small.Height}");
+    }
+
+    [Fact]
+    public void Primary_label_is_create_collage_in_both_tables()
+    {
+        Assert.Equal("tools.collage", CollageTool.Instance.Id);
+        Assert.Equal("tool.collage.create", CollageTool.Instance.PrimaryLabelKey);
+        Assert.Equal("Create Collage", Loc.Table(Language.English)[CollageTool.Instance.PrimaryLabelKey]);
+        Assert.NotEqual("Create Collage", Loc.Table(Language.Arabic)[CollageTool.Instance.PrimaryLabelKey]);
+        Assert.True(Loc.HasKey(CollageTool.Instance.PrimaryLabelKey, Language.English));
+        Assert.True(Loc.HasKey(CollageTool.Instance.PrimaryLabelKey, Language.Arabic));
+    }
+
+    [Fact]
+    public void Theme_switches_between_dark_and_light_palettes_for_the_tool()
+    {
+        var previous = Theme.Override;
+        try
+        {
+            Theme.Override = true;
+            Theme.Refresh();
+            Assert.True(Theme.IsDark);
+            var darkCard = ((SolidColorBrush)Theme.Card).Color;
+
+            Theme.Override = false;
+            Theme.Refresh();
+            Assert.False(Theme.IsDark);
+            var lightCard = ((SolidColorBrush)Theme.Card).Color;
+
+            Assert.NotEqual(darkCard, lightCard);
+        }
+        finally
+        {
+            Theme.Override = previous;
+            Theme.Refresh();
+        }
+    }
+
+    private static void AssertColour(MagickImage image, int x, int y, IMagickColor<byte> expected, int tolerance = 1)
+    {
+        using var pixels = image.GetPixels();
+        var actual = pixels.GetPixel(x, y).ToColor();
+        Assert.InRange((int)actual.R, Math.Max(0, (int)expected.R - tolerance), Math.Min(255, (int)expected.R + tolerance));
+        Assert.InRange((int)actual.G, Math.Max(0, (int)expected.G - tolerance), Math.Min(255, (int)expected.G + tolerance));
+        Assert.InRange((int)actual.B, Math.Max(0, (int)expected.B - tolerance), Math.Min(255, (int)expected.B + tolerance));
     }
 
     private static void AssertInside(IReadOnlyList<CollageCell> cells, double width, double height)
