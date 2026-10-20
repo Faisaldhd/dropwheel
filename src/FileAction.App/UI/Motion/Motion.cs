@@ -92,10 +92,10 @@ internal static class Motion
     public static readonly IEasingFunction SoftOut = Freeze(new QuadraticEase { EasingMode = EasingMode.EaseOut });
 
     /// <summary>
-    /// Ease-out with a small settle. With the wheel's 0.88 → 1 scale the peak is ≈ 1.021 (2.1 % overshoot),
-    /// inside the 4 % budget; for the 0.97 → 1 window scale the peak is ≈ 1.0007.
+    /// Ease-out with a small settle. With the wheel's 0.88 → 1 scale the peak is ≈ 1.026 (2.6 % overshoot),
+    /// inside the 4 % budget; for the 0.97 → 1 window scale the peak is ≈ 1.0008.
     /// </summary>
-    public static readonly IEasingFunction Settle = Freeze(new BackEase { Amplitude = 1.0, EasingMode = EasingMode.EaseOut });
+    public static readonly IEasingFunction Settle = Freeze(new BackEase { Amplitude = 0.7, EasingMode = EasingMode.EaseOut });
 
     // ------------------------------------------------------------------ reduced motion
 

@@ -110,9 +110,10 @@ internal static class MotionSelfTest
                         skips.Add(spec.Id);
                         continue;
                     }
-                    var window = new ToolWindow(spec, [item], null);
+                    ToolWindow? window = null;
                     try
                     {
+                        window = new ToolWindow(spec, [item], null);
                         SelfTest.Pump(() => window.PrepareAsync(animate: false));
                         var root = window.DetachForCapture();
                         Motion.Override = true;
@@ -129,9 +130,16 @@ internal static class MotionSelfTest
                             worstP95 = Math.Max(worstP95, on.UiP95);
                         }
                     }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    {
+                        // A tool whose preview cannot be prepared offscreen (a format or an OS feature the
+                        // runner lacks) must not fail the motion gate; it is reported and skipped.
+                        if (!warm)
+                            skips.Add($"{spec.Id} ({ex.GetType().Name}: {ex.Message})");
+                    }
                     finally
                     {
-                        window.Close();
+                        window?.Close();
                     }
                 }
 

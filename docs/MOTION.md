@@ -48,8 +48,8 @@ frozen once at startup.
 | mode switch | Tab, modifier key, tab click, repeat toggle, language switch | 170 ms total | `EaseIn` out, `EaseOut` in | disc opacity 1 -> 0.25 -> 1, disc rotation 0 -> -4 deg -> 0 |
 | whole disc | Esc, action, deactivate, drag ended | 100 ms | `EaseIn` | window opacity 1 -> 0, disc scale 1 -> 0.965 |
 
-Overshoot budget: the open uses `BackEase(Amplitude = 1.0)` over 0.88 -> 1, which peaks at about
-**1.021 (2.1 % overshoot)**, inside the 4 % budget. The wheel opens from the cursor because the window
+Overshoot budget: the open uses `BackEase(Amplitude = 0.7)` over 0.88 -> 1, which peaks at about
+**1.026 (2.6 % overshoot)**, inside the 4 % budget. The wheel opens from the cursor because the window
 is centred on the pointer and its `RenderTransformOrigin` is the disc centre, which is the pointer.
 
 ## Tool windows

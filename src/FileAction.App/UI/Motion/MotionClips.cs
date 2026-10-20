@@ -90,31 +90,30 @@ internal static class MotionClips
                 {
                     Theme.Override = dark;
                     Theme.Refresh();
+                    var theme = dark ? "dark" : "light";
+                    var name = "tool-" + spec.Id.Replace('.', '-') + "-" + theme;
+                    ToolWindow? window = null;
                     try
                     {
-                        var theme = dark ? "dark" : "light";
-                        var name = "tool-" + spec.Id.Replace('.', '-') + "-" + theme;
-                        var window = new ToolWindow(spec, [item], null);
-                        try
+                        window = new ToolWindow(spec, [item], null);
+                        SelfTest.Pump(() => window.PrepareAsync(animate: false));
+                        var root = window.DetachForCapture();
+                        var poster = Path.Combine(directory, name + "-poster.png");
+                        var times = new double[] { 0, 40, 80, 120, 160, 180, 300, 500, 760, 820 };
+                        var rendered = RenderFrames(root, times, t =>
                         {
-                            SelfTest.Pump(() => window.PrepareAsync(animate: false));
-                            var root = window.DetachForCapture();
-                            var poster = Path.Combine(directory, name + "-poster.png");
-                            var times = new double[] { 0, 40, 80, 120, 160, 180, 300, 500, 760, 820 };
-                            var rendered = RenderFrames(root, times, t =>
-                            {
-                                window.Pose(Math.Min(t, Motion.WindowOpenMs), Math.Max(0, t - 700));
-                            }, framesDir, name, posterAt: 500, poster);
-                            clips.Add(Encode(rendered, Path.Combine(directory, name + ".webp")));
-                            log.Add($"ok motion/{name}.webp ({rendered.Count} frames)");
-                        }
-                        finally
-                        {
-                            window.Close();
-                        }
+                            window.Pose(Math.Min(t, Motion.WindowOpenMs), Math.Max(0, t - 700));
+                        }, framesDir, name, posterAt: 500, poster);
+                        clips.Add(Encode(rendered, Path.Combine(directory, name + ".webp")));
+                        log.Add($"ok motion/{name}.webp ({rendered.Count} frames)");
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    {
+                        log.Add($"skipped motion/{name} ({ex.GetType().Name}: {ex.Message})");
                     }
                     finally
                     {
+                        window?.Close();
                         Theme.Override = null;
                         Theme.Refresh();
                     }
