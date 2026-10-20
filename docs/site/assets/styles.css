@@ -1945,3 +1945,11 @@ html[data-theme="light"] .tool-play { background: rgba(255, 255, 255, 0.9); colo
   clip-path: none;
   white-space: nowrap;
 }
+
+/* The poster WebPs are effectively opaque (alpha >= 191), so a drop-shadow filter buys nothing
+ * over a box-shadow and costs a compositing layer: Chromium's full-page capture intermittently
+ * dropped two of these images. Match the rectangle shadow instead and keep captures truthful. */
+.tool-shot {
+  filter: none;
+  box-shadow: 0 16px 26px rgba(0, 0, 0, 0.34);
+}
