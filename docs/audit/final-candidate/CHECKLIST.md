@@ -102,3 +102,35 @@ owns the artifact, and until then they are **unproven**, not "probably fine".
 
 **Why nothing is dispatched:** a normal push to `main` already runs the `package` job
 (`.github/workflows/ci.yml:151`). This lane never dispatches on `main` and never builds locally.
+
+---
+
+## Run record — **run 39382743079** (`main` @ `8b28758`), verified 2026-10-20 10:30 +03:00
+
+`Build + test` success · **`Package (self-contained setup + portable zip)` success** · `Screenshots` failure
+(the optional job; it does not gate the package) · `GitHub release` skipped (no tag). Artifacts:
+`DropWheel-Setup-2.4.0`, `diagnose`, `shipped-self-test`, `ui-coverage`, `test-results`,
+`self-contained-self-test`, `screenshots`.
+
+| # | gate | PASS/FAIL | evidence from this run |
+|---|---|---|---|
+| 1 | installer clean-profile smoke | **PASS** | `ok: the installer exited with 0 (got 0)`; `ok: the uninstaller exited with 0 (got 0)`; `ok: the program folder is gone`; `ok: the HKCU Run value is gone`; `ok: the file context-menu key is gone`; `ok: the folder context-menu key is gone`; `ok: the Send-to shortcut is gone`; `ok: the Start-menu shortcut is gone`; `ok: a silent uninstall keeps the settings folder`; `ok: a silent uninstall keeps the downloaded helper programs`; verdict `PASS: silent install, shell entries, silent uninstall and settings retention verified.` **HKLM: the only printed entry is `HKCU:\…\Uninstall\{1AB9CDBE-…}_is1` — no `HKLM:` line, so no per-machine entry was created.** |
+| 2 | 2.4.0 everywhere | **PASS** | package log `version = 2.4.0`; `setup exe: 60.52 MB` at `release/DropWheel-2.4.0-Setup.exe`; `ok: setup name matches the update contract (DropWheel-2.4.0-Setup.exe)`; portable `DropWheel-2.4.0-portable-win-x64.zip`; artifact name `DropWheel-Setup-2.4.0`; `SHA256SUMS.txt` lists `da97820f…  DropWheel-2.4.0-Setup.exe` and `0f03b837…  DropWheel-2.4.0-portable-win-x64.zip`; `diagnose` → `version: 2.4.0.0`, `strings: 1107 keys, settings.title="DropWheel – settings"`, `localization: English=1107 keys, Arabic=1107 keys`; `settings.about.version` present in **en** and **ar**; `README.md` mentions 2.4.0; `CHANGES.md` has `## 2.4.0` |
+| 3 | 26 tools reachable | **PASS** | `ok tools/crop (preview, 26 registered)`; **26 distinct `tool:tools.<id>` ids** in `ui-coverage`; `test-results` (1,109 test results) shows `ToolDispatchTests.EveryRegisteredToolWindowIsReachableFromTheWheel -> Passed` and `ToolDispatchTests.WheelOperationIdsAreUnique -> Passed` |
+| 4 | en+ar coverage | **PASS — 112/114 genuinely en+ar** | `ui-coverage.txt`: `surfaces: 114 rows, pass 114, skip 0, fail 0`, `keys: 1107 English / 1107 Arabic`; `ui-coverage.md`: **0** `| FAIL |` rows, **78** tool/culture rows, `Not covered by this run` present; **90 PNGs**. Claim stands as: **112/114 surfaces genuinely en+ar; 2 surfaces (wheel, parameter dialog) are English renders in the ar pass - gate defect, post-tag fix.** Separate caveat: **200 % DPI not covered**. Gate strength: a FAIL row fails the job (run `39377633125` went red at the self-test). |
+| 5 | no raw string keys | **PASS** | `ok en/localization: 1107 keys (English)`, `ok en-light/… 1107 …`, `ok ar/localization: 1107 keys (Arabic)`, `ok ar-light/… 1107 …`, `ok settings.json file load/save`, **0** uppercase `FAILED:` lines. (Key count is **1107** in this build, up from 1094 — assert a floor, never a literal.) |
+| 6 | Lock badge/icons | **PASS** | `ok tools/lock (preview, 26 registered)` and no `LockIcons`/`ShellIcon`/`SHCreateItemFromParsingName` exception; 7 embedded `.ico` (`locked-document`, `locked-folder`, `locked-badge` present) + 8 committed PNG previews |
+
+**Size budget (this lane's `ci.yml` gate, same run):** `setup: 63,459,134 B vs v2.3.0 62,967,948 B -> 0.47 MiB (0.78 %) PASS`
+and `portable zip: 89,928,258 B vs v2.3.0 89,266,161 B -> 0.63 MiB (0.74 %) PASS` — both far inside the
+6 MiB line.
+
+**Verdict: all six gates PASS on run 39382743079.** Release notes may advertise 26 tool windows and
+"112/114 surfaces genuinely en+ar"; they may not claim 114 Arabic surfaces or full DPI coverage.
+
+**Two defects found in `verify.ps1` by running the real case** (both fixed in this commit):
+1. discovery required the **whole run** to be `success`, but a run whose optional `Screenshots` job fails
+   is `failure` while `Package` is green — the script would have exited 2 ("not yet provable") on exactly
+   the run that proves the release. It now keys on the artifact.
+2. gate 5 required the literal string `1094 keys`; the 2.4.0 build reports **1107**, so a correct release
+   would have failed. It now requires four language/theme passes with ≥ 1000 keys each.

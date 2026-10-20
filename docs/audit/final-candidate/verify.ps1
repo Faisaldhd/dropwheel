@@ -268,7 +268,8 @@ if ($RunId) {
     $runs = Invoke-GhJson @('run', 'list', '--repo', $Repo, '--branch', $Branch, '-L', '60', '--json',
         'databaseId,headSha,status,conclusion')
     foreach ($run in @($runs)) {
-        if ($run.conclusion -ne 'success') { continue }
+    # A run's overall conclusion can be failure while the package job is green (the optional
+    # Screenshots job can fail). Artifact presence is the real signal, so no conclusion filter here.
         $names = @(Get-RunArtifactNames -RunIdForArtifact ([string] $run.databaseId))
         $shortSha = ([string] $run.headSha).Substring(0, 7)
         $shown = if ($names.Count -gt 0) { $names -join ', ' } else { 'no artifacts' }
@@ -530,13 +531,17 @@ if (-not $uiText) {
 if (-not $shippedText) {
     Add-Result -Id 'rawkeys' -Title 'no raw string keys' -Status 'BLOCKED' -Evidence 'no shipped-self-test artifact'
 } else {
-    $rawProblems = @(Get-MissingText -Text $shippedText -Expected @(
-            'ok en/localization: 1094 keys (English)'
-            'ok en-light/localization: 1094 keys (English)'
-            'ok ar/localization: 1094 keys (Arabic)'
-            'ok ar-light/localization: 1094 keys (Arabic)'
-            'ok settings.json file load/save'
-        ))
+    $rawProblems = @()
+    $passes = @([regex]::Matches($shippedText, 'ok (en|en-light|ar|ar-light)/localization:\s*(\d+) keys \((English|Arabic)\)'))
+    if ($passes.Count -lt 4) {
+        $rawProblems += ("only {0} of 4 language/theme passes reported" -f $passes.Count)
+    }
+    foreach ($pass in $passes) {
+        if ([int] $pass.Groups[2].Value -lt 1000) {
+            $rawProblems += ("{0} loaded only {1} keys" -f $pass.Groups[1].Value, $pass.Groups[2].Value)
+        }
+    }
+    $rawProblems += @(Get-MissingText -Text $shippedText -Expected @('ok settings.json file load/save'))
     # The app's own failure marker is uppercase; "skipped ocr (failed: ...)" is a skip, not a failure.
     $upperFailures = @([regex]::Matches($shippedText, '(?m)^FAILED:'))
     if ($upperFailures.Count -gt 0) { $rawProblems += ("{0} uppercase FAILED: line(s)" -f $upperFailures.Count) }
@@ -544,7 +549,7 @@ if (-not $shippedText) {
 
     if ($rawProblems.Count -eq 0) {
         Add-Result -Id 'rawkeys' -Title 'no raw string keys' -Status 'PASS' `
-            -Evidence '1094 keys in en, en-light, ar and ar-light; settings.json load/save; zero uppercase FAILED: lines'
+            -Evidence ("{0} keys in en, en-light, ar and ar-light; settings.json load/save; zero uppercase FAILED: lines" -f $passes[0].Groups[2].Value)
     } else {
         Add-Result -Id 'rawkeys' -Title 'no raw string keys' -Status 'FAIL' -Evidence ($rawProblems -join ' | ')
     }
