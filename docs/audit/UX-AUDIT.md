@@ -37,7 +37,7 @@ lock feature.
 | Error states | **FAIL** | the generic path shows a raw `ex.Message` toast (F-18) |
 | Busy / progress states | **FAIL** | no in-window progress or cancel (F-19) |
 | RTL readiness | **PASS with defect** | window `FlowDirection`, `Bidi.Value`, full `ar` string parity; slider fill is not mirrored (F-06) |
-| Tool reachability from the wheel | **FAIL — fixed here** | 24 of 26 windows were reachable; `tools.annotate` / `tools.redact` had no wheel operation (F-27) |
+| Tool reachability from the wheel | **FAIL — fixed upstream, guarded here** | 24 of 26 windows were reachable; `tools.annotate` / `tools.redact` had no wheel operation (F-27), wired in `4f23c9c` |
 | Wheel | **PASS with defects** | purple identity, modal depth, stagger; mode-switch affordance unproven (F-23), stale captures (F-22) |
 | Shipped evidence | **FAIL** | `docs/screenshots/en/wheel-*.png` are pre-2.4 orange-accent captures (F-22) |
 
@@ -282,15 +282,16 @@ Fix: D1.
 
 ### P1
 
-**F-27 — Two 2.4.0 tool windows were unreachable from the wheel** · P1 · **fixed here**
+**F-27 — Two 2.4.0 tool windows were unreachable from the wheel** · P1 · **fixed upstream (`4f23c9c`); guarded here**
 `WheelController.BuildOperations()` (`Wheel/WheelController.cs:88–116`) listed 25 operations and omitted
 `AnnotateOperation` and `RedactOperation` (declared at `UI/Tools/Image/AnnotateTool.cs:60` and
 `UI/Tools/Image/RedactTool.cs:73`, constructed nowhere in `src`). Both tools were therefore dead windows:
-registered, localized, tested — and unopenable. 24 of 26 windows were reachable. Fixed by appending both
-operations; `ToolDispatchTests` now fails if a future tool is registered without a wheel entry. Note: a
-second `tools.ocr` registration exists in `src/FileAction.Linux/TesseractOcr.cs:15` and is **not**
+registered, localized, tested — and unopenable. 24 of 26 windows were reachable. The two operations were
+added upstream in `4f23c9c` while this lane was in review; this branch keeps the durable guard
+(`ToolDispatchTests`) that fails if a future tool is registered without a wheel entry. Note: a second
+`tools.ocr` registration exists in `src/FileAction.Linux/TesseractOcr.cs:15` and is **not**
 Windows-shipped, so it is out of scope here. Screenshot: `tool-annotate-light-poster.png` — a window that
-no shipped path could open before this commit.
+no shipped path could open before the fix.
 
 **F-02 — `Enter` inside a text field also saves the file; `Esc` is swallowed by time boxes** · P1 · annex F-02
 `ToolWindow.cs:117–122` applies on any `Enter`; `CropTool.cs:243–247` commits W/H on `Enter` without
@@ -429,7 +430,7 @@ that needs a rendered window to verify is listed in §12 instead of guessed at.
 | `docs(audit): UX audit — wheel + 26 tool windows` | this document | — |
 | `fix(strings): title-case five tool window titles` | `Redact image`→`Redact Image`, `Redact video`→`Redact Video`, `Save frames`→`Save Frames`, `Password protection`→`Password Protection`, `Remove password`→`Remove Password` (en only; `ar` unchanged) | F-12 (casing half) |
 | `fix(qr): label the read-only primary 'Copy and Close'` | new `tool.qr.copyClose` en+ar, `QrTool.PrimaryLabelKey`; behaviour unchanged (already copied + closed) | F-11 |
-| `fix(wheel): restore the Annotate and Redact operations` | two appended operations in `WheelController.BuildOperations()` — no existing entry reordered, no dispatch refactor | F-27 |
+| `fix(wheel): restore the Annotate and Redact operations` | superseded: the identical two-line wiring landed upstream in `4f23c9c` while this PR was in review, so this lane ships only the guard | — |
 | `test(ux): registry titles, bilingual labels, title case` | 3 deterministic string-contract facts, §13 | F-12, F-31 regressions |
 | `test(wheel): every registered tool window has a dispatchable operation` | 2 deterministic dispatch facts, §13 | F-27 regressions |
 
