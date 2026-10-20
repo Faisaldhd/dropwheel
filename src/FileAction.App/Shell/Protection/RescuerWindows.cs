@@ -213,7 +213,6 @@ internal sealed class RescuerSetupWindow : Window
             },
             IsChecked = false,
             Margin = new Thickness(0, 2, 0, 14),
-            FlowDirection = FlowDirection.LeftToRight,
         };
         _keyPage.Children.Add(_saved);
 
@@ -394,14 +393,16 @@ internal sealed class RescuerSetupWindow : Window
         string key;
         if (_mode == RescuerSetupMode.ResetPassword)
         {
+            // The key may come from a just-opened container (_knownKey) when the vault has no password
+            // yet, so a successful unlock can reset the Rescuer password without a second prompt.
             var stored = LockRuntime.Vault.Load();
-            if (stored is null)
+            key = LockSecrets.ChooseResetKey(_knownKey, stored) ?? string.Empty;
+            if (string.IsNullOrEmpty(key))
             {
                 Dialogs.Show(this, T("tool.lock.rescuer.missing"), Title, MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return;
             }
-            key = stored.Key;
         }
         else
         {
@@ -597,6 +598,72 @@ internal sealed class RescuerSessionWindow : Window
             _error.Text = T("tool.lock.error.short");
             return;
         }
+        if (!RescuerKey.TryParse(_key.Text, out var canonical))
+        {
+            _error.Text = T("tool.lock.rescuer.sessionInvalid");
+            return;
+        }
+        RecoveryKey = canonical;
+        DialogResult = true;
+        Close();
+    }
+}
+/// <summary>Asks for the 24-character recovery key alone (key-only Rescuer password reset).</summary>
+internal sealed class RescuerKeyWindow : Window
+{
+    private readonly SecretField _key;
+    private readonly TextBlock _error;
+
+    public RescuerKeyWindow()
+    {
+        var body = LockUi.Configure(this, T("tool.lock.rescuer.keyOnlyTitle"), 430, 270);
+        body.Children.Add(new TextBlock
+        {
+            Text = T("tool.lock.rescuer.keyOnlyBody"),
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12.5,
+            Foreground = Theme.Muted,
+            Margin = new Thickness(0, 0, 0, 10),
+        });
+        _key = new SecretField(T("tool.lock.rescuer.sessionKey"));
+        body.Children.Add(_key);
+        _error = new TextBlock
+        {
+            FontSize = 11.5,
+            Foreground = Theme.Error,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        body.Children.Add(_error);
+        var buttons = new DockPanel { Margin = new Thickness(0, 16, 0, 0) };
+        var cancel = Controls.Button(T("tool.lock.cancel"), Close);
+        var ok = Controls.Button(T("tool.lock.rescuer.next"), Continue, primary: true);
+        DockPanel.SetDock(cancel, Dock.Left);
+        DockPanel.SetDock(ok, Dock.Right);
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(ok);
+        body.Children.Add(buttons);
+        Closing += (_, _) => _key.HideReveal();
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape)
+            {
+                Close();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter)
+            {
+                Continue();
+                e.Handled = true;
+            }
+        };
+        Loaded += (_, _) => _key.FocusInput();
+    }
+
+    public string RecoveryKey { get; private set; } = string.Empty;
+
+    private void Continue()
+    {
         if (!RescuerKey.TryParse(_key.Text, out var canonical))
         {
             _error.Text = T("tool.lock.rescuer.sessionInvalid");

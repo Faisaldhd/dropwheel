@@ -16,7 +16,8 @@ All CI numbers in this document come from **one** `workflow_dispatch` run on thi
 | Uninstall removes the HKCU key, shell entries and app files | **PASS (CI)** | `scripts/test-installer.ps1:366-375` |
 | Uninstall needs no leftover `%APPDATA%\DropWheel` | **PASS** | `installer/DropWheel.iss:215-240`; `scripts/test-installer.ps1:344-379` |
 | Version `2.4.0` consistent (csproj / .iss / site / notes) | **FAIL at audit commit** | **R-01**, **R-02**, **R-03** — the audited tree says 2.3.0 / 2.2.1, never 2.4.0 |
-| **Pre-tag gate (R-01): packaged asset is `DropWheel-2.4.0-Setup.exe`** | **FAIL — blocks the tag** | run `39375412602` produced `DropWheel-2.3.0-Setup.exe` / artifact `DropWheel-Setup-2.3.0`; fix is **PR #34**, unmerged (see §8) |
+| **Pre-tag gate R-01a (source)**: `main` says 2.4.0 | **PASS** | `main` @ `bc204c4`: `<Version>2.4.0</Version>`, `#define AppVersion "2.4.0"` (PR #34 merged) |
+| **Pre-tag gate R-01b (packaged)**: asset is `DropWheel-2.4.0-Setup.exe` | **NOT PROVEN — remaining gap** | no `main` package run has completed since the bump and `DropWheel-Setup-2.4.0` does not exist; `main` @ `bc204c4` is red (run `39380479876`) so `Package` is skipped. The audited build shipped `DropWheel-2.3.0-Setup.exe` (run `39375412602`) — see §8 |
 | Shipped `--self-test` translated, 300+ keys en+ar | **PASS (CI)** | run `39375412602`, artifact `shipped-self-test` |
 | `--diagnose` positive key count + translated `settings.title` | **PASS (CI)** | run `39375412602`, artifact `diagnose` |
 | Size budget: setup + zip may not grow ≥ 6 MiB over v2.3.0 | **PASS (CI)** | §4 below; gate added in this lane (`ci.yml:293-337`) |
@@ -239,7 +240,7 @@ verified the gate's mechanism from its **red** run, which is the harder half of 
 | artifact name | **`ui-coverage`** — present on run `39377633125`, 5,858,055 B, not expired |
 | artifact really contains the renders | **yes** — 98 files: **90 PNGs**, plus `ui-coverage.txt`, `ui-coverage.md` and 5 sample inputs (`photo.jpg`, `clip.mp4`, `doc.pdf`, `bundle.zip`, `tone.wav`) |
 | per-window / per-culture counts (report header) | `surfaces: 114 rows, pass 113, skip 0, fail 1`<br>`keys: 1094 English / 1094 Arabic` |
-| does every tool window appear in both cultures? | **yes** — the report has one row per `tool:tools.<id>` per culture, for all 26 tools, alongside `settings`, `shelf`, `jobs`, `editor`, `wheel:*` and 10+ dialogs |
+| does every tool window appear in both cultures? | **yes** — **52 tool rows = 26 tools × 2 cultures**, plus 26 `fit` (layout) rows, 22 dialog rows, 6 `wheel:*` rows and 2 each for `settings`, `jobs`, `editor`, `shelf` (8 surface kinds, 114 rows) |
 | does the job **fail** on a non-zero self-test exit? | **yes, proven by a real red run**: run `39377633125` failed at step *Self-contained UI self-test (shipped publish)* with `self-contained --self-test failed with 1`, after the log printed `FAILED: … UI coverage (en+ar) failed for 1 surface(s)` |
 
 **The gate is currently RED, and it is red for a real defect:** run `39377633125` failed on
@@ -428,15 +429,40 @@ created, read or verified here. `SHA256SUMS.txt` *content* for 2.4.0 does not ex
 
 ## 8. Pre-tag gates
 
-The tag must not be cut unless **all four** hold. Gate 1 is the one that decides this release.
+The tag must not be cut unless **every gate below** holds. Gate 1 is the one that decides this release.
 
-| # | gate | state at this commit |
+Gate 1 has two halves: the **source** says 2.4.0 (static) and the **packaged build** carries it
+(dynamic). The source half is now green; the packaged-build half is **still unproven**.
+
+| # | gate | state |
 |---|---|---|
-| 1 | **R-01** — `origin/main`'s `src/FileAction.App/FileAction.App.csproj` says `<Version>2.4.0</Version>` **and** a `package` run on that commit uploads an artifact named `DropWheel-Setup-2.4.0` containing `DropWheel-2.4.0-Setup.exe` **and** `--diagnose` reports `version: 2.4.0.x` | **FAIL.** Run `39375412602` built `DropWheel-2.3.0-Setup.exe`, artifact `DropWheel-Setup-2.3.0`, diagnose `version: 2.3.0.0`. The fix exists as **PR #34** (`audit/version`, commit `c7d0ddd`); not merged, not re-proven. |
+| **1a** | **R-01 source** — `origin/main` `<Version>` and the `.iss` default | **PASS.** `main` @ `bc204c4` carries `<Version>2.4.0</Version>` (`src/FileAction.App/FileAction.App.csproj:24`) and `#define AppVersion "2.4.0"` (`installer/DropWheel.iss:16`); PR #34 merged. |
+| **1b** | **R-01 packaged build** — a `package` run uploads artifact `DropWheel-Setup-2.4.0` containing `DropWheel-2.4.0-Setup.exe`, the zip carries 2.4.0, and `--diagnose` prints `version: 2.4.0.x` with `strings: 1094 keys` | **NOT PROVEN — the remaining gate gap.** No `main` run has *completed* the `package` job since the bump: run `39378492942` (`cf8a1a6`) reached the package job and was **cancelled** by concurrency before it uploaded anything, and the three runs after it (`39380442643`, `39380463329`, `39380472013`) were cancelled too. `39380479876` (`bc204c4`) then **failed** in `Build + test` at *Self-contained UI self-test (shipped publish)* — see below — so `Package` was skipped. No `DropWheel-Setup-2.4.0` artifact exists on any run. |
+| *history* | *2.3.0 observation, kept as the reason this gate exists* | *Run `39375412602` built `DropWheel-2.3.0-Setup.exe`, artifact `DropWheel-Setup-2.3.0`, `--diagnose` `version: 2.3.0.0` — the FAIL this audit raised as R-01.* |
 | 2 | **R-05** — all 26 tools reachable | **PASS on `main`** (`4f23c9c`). |
-| 3 | **R-02 / R-03** — 2.4.0 release notes (EN + AR) in `CHANGES.md`, download page says 2.4.0 | **FAIL** at this commit (`CHANGES.md:1,3`; `docs/site/index.html:7,40,97`). |
-| 4 | Size budget on the release commit | **PASS** here (+0.50 MiB setup, +0.67 MiB zip); re-confirm on the tag run. |
+| 3 | **R-02 / R-03** — 2.4.0 release notes (EN + AR) in `CHANGES.md`, download page says 2.4.0 | **FAIL at the audit commit** (`CHANGES.md:1,3`; `docs/site/index.html:7,40,97`); re-check on `main` before the tag. |
+| 4 | Size budget on the release commit | **PASS** on the audited build (+0.50 MiB setup, +0.67 MiB zip); **must be re-stated by the same run that proves 1b**, because the version bump changes the asset names the gate looks up. |
 
-After PR #34 merges, one `workflow_dispatch` `package` run on the new `main` re-proves gate 1 and
-re-states gate 4 for the exact bytes that will be tagged. `--diagnose` printing `version: 2.4.0.x` is
-the cheapest single check that the bump reached the packaged build.
+**And `main` is currently red, which is why 1b cannot close yet.** Run `39380479876` (`bc204c4`, the
+current `main` head) failed the shipped `--self-test`, so `Package` never ran:
+
+```
+ok tools/redact (preview, 26 registered)
+perf tools.redact: 20 open/close, working set 234.9 -> 231.0 MB …
+FAILED: System.ArgumentException: Value does not fall within the expected range.
+   at ...Shell.Protection.ShellIcon.SHCreateItemFromParsingName(...)
+   at ...Shell.Protection.ShellIcon.Get(...)
+   at ...Shell.Protection.LockIcons.Compose(...)
+   at ...Shell.Protection.LockIcons.PreviewForPath(...)
+self-contained --self-test failed with 1
+```
+
+That is a `Lock` tool icon-preview crash on the runner, and it is a **tag blocker in its own right**
+(a red `main`, and the exact gate the 2.2.0 postmortem installed). It is not this lane's code and this
+lane does not fix it.
+
+**Fastest way to close 1b, once `main` is green again:** let a normal `main` push run the `package` job
+to completion, then read the artifact name and the `diagnose` artifact. `--diagnose` printing
+`version: 2.4.0.x` plus artifact `DropWheel-Setup-2.4.0` is the whole proof. Do **not** dispatch on
+`main` for this; a normal push already triggers `package` (`ci.yml:151`). Until that artifact exists,
+the tag would ship assets whose version has never been observed in a packaged build.
