@@ -9,14 +9,6 @@ namespace FileAction.Tests;
 /// <c>settings.bad-&lt;timestamp&gt;.json</c> before the defaults are used, a first run stays silent, and a
 /// failed save leaves no <c>.tmp</c> orphan behind.
 /// </summary>
-/// <summary>
-/// The recovery tests read the process-wide `last load kept a backup` flag, so they must not run beside
-/// another test that loads settings.
-/// </summary>
-[CollectionDefinition(nameof(SettingsRecovery), DisableParallelization = true)]
-public sealed class SettingsRecovery;
-
-[Collection(nameof(SettingsRecovery))]
 public class SettingsRecoveryTests
 {
     /// <summary>Corrupt JSON: the original bytes survive in a backup and the caller gets defaults.</summary>
