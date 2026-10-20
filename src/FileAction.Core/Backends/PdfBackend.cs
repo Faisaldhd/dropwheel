@@ -211,6 +211,10 @@ public static class PdfBackend
 
     public static async Task<IEnumerable<string>> SplitAsync(FileItem item, OperationContext ctx, IProgress<double> progress)
     {
+        // Check before creating the output folder, so a zero-page PDF cannot leave an empty "(pages)".
+        if (PageCount(item.Path) <= 0)
+            throw new ConversionException(T("error.pdf.noPages"));
+
         var dir = ctx.OutputDirFor(item.Path);
         string? folder = null;
         try
