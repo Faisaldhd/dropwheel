@@ -20,7 +20,7 @@ motion language, and password protection for your files — all local, all purpl
   with a Rescuer password and a one-time recovery key.
 - **Light and fast, and measured.** The `--self-test` motion gate fails CI above 16.7 ms UI frame p95,
   5 % idle CPU or 12 MB retained; the recorded run on the merge head is 0.02–0.07 ms p95, 0.39 % idle
-  and 0.0 MB retained ([docs/PERF.md](PERF.md)).
+  and 0.0 MB retained ([PERF.md](PERF.md), CI run `39351795353`).
 
 ## New tools
 
@@ -63,14 +63,19 @@ app before anything runs.
 
 ## Known limits
 
+Every gap names its owner, so a limit is never mistaken for something forgotten.
+
 - **Lock is Beta.** The container, Rescuer envelope, auto-relock and crash recovery are covered by tests,
-  but the owner has not signed the format off yet.
+  but the format has not been signed off. **Owner: owner sign-off, a release gate.**
 - **Redact image has no face detection** in this build; manual areas and Windows OCR text detection do
-  ship.
-- **QR Code is read-only** — it decodes a code, it does not create one.
-- Video and audio tools need **FFmpeg**; without it their slices show the helper-tool prompt.
+  ship. **Owner: none assigned** (`docs/BACKLOG.md`).
+- **QR Code is read-only** — it decodes a code, it does not create one. **Owner: none**, not planned for
+  2.4.x.
+- Video and audio tools need **FFmpeg**; without it their slices show the helper-tool prompt (by design —
+  the tools stay out of the package).
 - The **per-window bilingual rendering gate** (every tool window in English and Arabic at 100/150/200 %
-  DPI) is still landing in `audit/selftest`. What is enforced today: both string tables are complete and
-  identical in structure (1,094 keys each) and the self-test renders the shipped build in English and
-  Arabic, light and dark.
-- Deferred, non-blocking work is tracked in [docs/BACKLOG.md](BACKLOG.md).
+  DPI) is **`audit/selftest`, PR #37, in flight**. What is enforced today: both string tables are
+  complete and identical in structure (1,094 keys each), with parity enforced by `LocalizationTests` in
+  CI, and the self-test renders the shipped build in English and Arabic, light and dark.
+- **Light-mode contrast and the video timer** are **`audit/amotion` / `audit/adesign`, in flight**.
+- Deferred, non-blocking work is tracked in [BACKLOG.md](BACKLOG.md).

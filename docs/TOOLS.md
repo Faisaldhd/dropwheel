@@ -374,8 +374,23 @@ and keep the source format when FFmpeg can write it (a WMA source becomes MP3).
 
 ## Not shipped in 2.4.0
 
+Every gap below names who owns it, so nobody reads a limit as "forgotten".
+
 - **Redact image: face detection.** Manual areas and OCR text detection ship; a face detector needs
   either the Windows SDK projection this build does not carry or a new third-party package.
-- **QR: code creation.** The tool only reads codes.
+  **Owner: none assigned** (recorded in `RedactTool`'s own remarks and in `docs/BACKLOG.md`).
+- **QR: code creation.** The tool only reads codes. **Owner: none**, not planned for 2.4.x — the
+  append-only `tool.qr.copyClose` key (copy-then-close label) is an additive string for the reader, not a
+  generator.
 - **Lock is Beta.** The container format, the Rescuer envelope and crash recovery are covered by tests,
-  but the owner has not signed the feature off yet.
+  but the owner has not signed the feature off. **Owner: owner sign-off, tracked as a release gate.**
+- **Per-window bilingual rendering gate** (every window in English and Arabic at 100/150/200 % DPI):
+  **`audit/selftest`, PR #37, in flight.** Until it is green the provable claim is the one used in this
+  document: 1,094 keys per table, with key-set and placeholder parity enforced by `LocalizationTests` in
+  CI. No document claims per-window Arabic rendering before that gate exists.
+- **Light-mode contrast and the video timer:** **`audit/amotion` / `audit/adesign`, in flight** — they do
+  not change how a tool is opened or what it writes.
+- **Title Case of five existing tool labels** (`Redact image`, `Redact video`, `Save frames`,
+  `Password protection`, `Remove password`) **and the `Annotate` / `Bleep Audio` primaries** that still
+  say "Apply": **deferred to `docs/BACKLOG.md`** (the string tables are append-only this close to the
+  tag and the pass needs an Arabic review).

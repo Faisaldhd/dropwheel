@@ -107,7 +107,7 @@ writes none — and leaves the source alone, except Lock, which transforms the i
 
 - **One floating tool, 26 times.** Each tool lives in its own file and registers itself; the registry is
   the single list, and a slice opens its own window by tool id, so Crop, Annotate and Edit Photos never
-  compete for the same photo.
+  compete for the same photo. All 26 slices are wired into the wheel in `4f23c9c`.
 - **Windows adapt to the media.** A tool opens at its default size, probes the file asynchronously and
   animates in 180 ms to a size that fits the media's aspect ratio inside the tool's preview bounds,
   clamped to 95 % of the work-area width and 90 % of its height on the monitor under the cursor; tiny
@@ -128,25 +128,31 @@ writes none — and leaves the source alone, except Lock, which transforms the i
 
 - The `--self-test` motion gate fails CI when the UI frame p95 exceeds **16.7 ms**, idle CPU exceeds
   **5 %** or the motion surfaces retain more than **12 MB** after closing. The recorded run on the merge
-  head: UI frame p95 **0.02–0.07 ms**, idle CPU **0.39 %**, retained **0.0 MB** (`docs/PERF.md`).
+  head (CI run `39351795353`): UI frame p95 **0.02–0.07 ms**, idle CPU **0.39 %**, retained **0.0 MB**
+  (`docs/PERF.md`).
 - Compress caps its video two-pass average with `maxrate`/`bufsize` so a target size is reached honestly,
   and a cancelled video run cleans its temporary files without touching the source.
-- Both string tables carry **1,094 keys each** with identical key sets and placeholders, enforced by the
-  localization tests in CI; the self-test renders the app in English and Arabic, light and dark.
+- Both string tables carry **1,094 keys each** with identical key sets and placeholders, enforced by
+  `LocalizationTests` in CI; the self-test renders the app in English and Arabic, light and dark.
 
 #### Not in this release
 
 - **Redact image has no face detection.** Manual areas and OCR text detection ship; a face detector needs
   either the Windows SDK projection this build does not carry or a new third-party package.
-- **QR decoding is read-only** and only `http`/`https` can be opened from a code.
-- **Lock is Beta** until the owner signs the container format off.
+  **Owner: none assigned** (`docs/BACKLOG.md`).
+- **QR decoding is read-only** and only `http`/`https` can be opened from a code. **Owner: none**, not
+  planned for 2.4.x.
+- **Lock is Beta** until the owner signs the container format off. **Owner: owner sign-off, a release
+  gate.**
+- **Light-mode contrast and the video timer:** `audit/amotion` / `audit/adesign`, in flight.
+- **Title Case of five existing tool labels and two primaries:** deferred to `docs/BACKLOG.md` (the string
+  tables are append-only this close to the tag).
 - The binaries are still Authenticode-unsigned (SmartScreen may ask once); auto-updates are separately
   signed with ECDSA P-256.
 - Both string tables are complete and enforced (1,094 keys each, identical key sets and placeholders,
   parity tests in CI) and the self-test renders the shipped build. The per-window bilingual rendering
-  gate — every tool window in English and Arabic at 100/150/200 % DPI — is still landing in
-  `audit/selftest`; until it is green, no claim is made that every window has been rendered in both
-  languages.
+  gate — every tool window in English and Arabic at 100/150/200 % DPI — is **`audit/selftest`, PR #37,
+  in flight**; until it is green, no claim is made that every window has been rendered in both languages.
 
 ### العربية
 
@@ -248,7 +254,8 @@ writes none — and leaves the source alone, except Lock, which transforms the i
 #### نوافذ الأدوات والعجلة والحركة
 
 - **أداة عائمة واحدة، ⁦26⁩ مرة.** كل أداة في ملفها وتُسجّل نفسها؛ والسجل هو القائمة الوحيدة، ويفتح القطاع
-  نافذته بحسب معرّف الأداة، فلا تتنافس أدوات القصّ والتعليقات وتعديل الصور على الصورة نفسها.
+  نافذته بحسب معرّف الأداة، فلا تتنافس أدوات القصّ والتعليقات وتعديل الصور على الصورة نفسها. وجميع
+  القطاعات الست والعشرين موصولة بالعجلة في ⁦4f23c9c⁩.
 - **النوافذ تتكيّف مع الوسائط.** تُفتح الأداة بحجمها الافتراضي، وتفحص الملف في الخلفية، ثم تتحرك في ⁦180⁩
   مللي ثانية إلى حجم يناسب نسبة أبعاد الوسائط داخل حدود معاينتها، مقيَّدًا بـ⁦95⁩٪ من عرض مساحة العمل
   و⁦90⁩٪ من ارتفاعها على شاشة المؤشر؛ ولا تُكبَّر الوسائط الصغيرة أكثر من ⁦200⁩٪. وحدود المعاينة وحجم
@@ -268,25 +275,32 @@ writes none — and leaves the source alone, except Lock, which transforms the i
 
 - تفشّل بوابة الحركة في `--self-test` الاختبار إذا تجاوز الإطار p95 في خيط الواجهة **⁦16.7⁩ مللي ثانية**،
   أو تجاوز خمول المعالج **⁦5⁩٪**، أو احتفظت أسطح الحركة بأكثر من **⁦12⁩ ميغابايت** بعد الإغلاق. وفي
-  التشغيل المسجّل على رأس الدمج: p95 للواجهة **⁦0.02–0.07⁩ مللي ثانية**، وخمول المعالج **⁦0.39⁩٪**،
-  والاحتفاظ **⁦0.0⁩ ميغابايت** (`docs/PERF.md`).
+  التشغيل المسجّل على رأس الدمج (تشغيل CI رقم ⁦39351795353⁩): p95 للواجهة **⁦0.02–0.07⁩ مللي ثانية**،
+  وخمول المعالج **⁦0.39⁩٪**، والاحتفاظ **⁦0.0⁩ ميغابايت** (`docs/PERF.md`).
 - يقيّد ضغط الفيديو متوسط مروره المزدوج بـ`maxrate`/`bufsize` ليبلغ الحجم المستهدف بأمانة، والتشغيل الملغى
   ينظّف ملفاته المؤقتة دون المساس بالمصدر.
-- يحمل جدولا النصوص **⁦1,094⁩ مفتاحًا لكل منهما** بمجموعات مفاتيح وعناصر بديلة متطابقة، تفرضها اختبارات
-  التوطين في CI؛ ويعرض الاختبار الذاتي التطبيق بالإنجليزية والعربية بالوضعين الفاتح والداكن.
+- يحمل جدولا النصوص **⁦1,094⁩ مفتاحًا لكل منهما** بمجموعات مفاتيح وعناصر بديلة متطابقة، يفرضها اختبار
+  `LocalizationTests` في CI؛ ويعرض الاختبار الذاتي التطبيق بالإنجليزية والعربية بالوضعين الفاتح والداكن.
 
 #### ليس في هذا الإصدار
 
+كل ثغرة هنا مذكورة مع جهة مالكتها، حتى لا تُقرأ الحدود على أنها نسيان.
+
 - **لا كشف وجوه في حجب الصورة.** المخرَج يشمل المناطق اليدوية وكشف النص بالتعرف الضوئي؛ أما كاشف الوجوه
   فيحتاج إمّا إسقاط Windows SDK الذي لا تحمله هذه النسخة أو حزمة خارجية جديدة.
-- **قراءة رمز QR للقراءة فقط**، ولا يُفتح من الرمز إلا `http` و`https`.
-- **قفل الملفات إصدار تجريبي** حتى يعتمده المالك نهائيًّا.
+  **المالك: لا أحد بعد** (`docs/BACKLOG.md`).
+- **قراءة رمز QR للقراءة فقط**، ولا يُفتح من الرمز إلا `http` و`https`. **المالك: لا أحد**، وغير مخطط له
+  في ⁦2.4.x⁩.
+- **قفل الملفات إصدار تجريبي** حتى يعتمده المالك نهائيًّا. **المالك: اعتماد المالك، وهو بوابة إصدار.**
+- **تباين الوضع الفاتح ومؤقّت الفيديو:** `audit/amotion` / `audit/adesign`، قيد التنفيذ.
+- **كتابة العناوين (Title Case) في خمسة عناوين أدوات وزرّين أساسيين:** مؤجّلة إلى `docs/BACKLOG.md`
+  (جداول النصوص ملحَقة فقط هذا القرب من الإصدار).
 - الملفات التنفيذية ما زالت غير موقّعة بـAuthenticode (قد يسأل SmartScreen مرة واحدة)؛ أما التحديثات
   التلقائية فموقّعة منفصلًا بـ⁦ECDSA P-256⁩.
 - جدولا النصوص مكتملان ومفروضان (⁦1,094⁩ مفتاحًا لكل منهما، بمجموعات مفاتيح وعناصر بديلة متطابقة،
-  واختبارات تطابق في CI)، والاختبار الذاتي يعرض النسخة المُسلَّمة. أما بوابة عرض كل نافذة بالعربية
-  والإنجليزية بدقة ⁦100⁩٪ و⁦150⁩٪ و⁦200⁩٪ فهي قيد الإنجاز في `audit/selftest`؛ وإلى أن تصبح خضراء لا
-  يُدَّعى أن كل نافذة عُرضت باللغتين.
+  والتطابق مفروض باختبار `LocalizationTests` في CI)، والاختبار الذاتي يعرض النسخة المُسلَّمة. أما بوابة
+  عرض كل نافذة بالعربية والإنجليزية بدقة ⁦100⁩٪ و⁦150⁩٪ و⁦200⁩٪ فهي لدى **`audit/selftest`، العلاقات
+  العامة ⁦#37⁩، قيد التنفيذ**؛ وإلى أن تصبح خضراء لا يُدَّعى أن كل نافذة عُرضت باللغتين.
 
 ## 2.3.0
 
