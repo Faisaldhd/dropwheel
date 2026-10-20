@@ -72,13 +72,33 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Verify the static origin serves robots.txt at /
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8081 --directory docs/site --bind 127.0.0.1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 50); do
+            if curl -fsS http://127.0.0.1:8081/ >/dev/null; then break; fi
+            sleep 0.1
+          done
+          CODE=$(curl -s -o "$RUNNER_TEMP/robots.txt" -w '%{http_code}' http://127.0.0.1:8081/robots.txt)
+          TYPE=$(curl -s -o /dev/null -w '%{content_type}' http://127.0.0.1:8081/robots.txt)
+          echo "robots.txt -> HTTP $CODE, content-type $TYPE"
+          cat "$RUNNER_TEMP/robots.txt"
+          test "$CODE" = "200"
+          echo "$TYPE" | grep -qi 'text/plain'
+          grep -q '^User-agent:' "$RUNNER_TEMP/robots.txt"
       - name: Write Lighthouse CI config
         run: |
           cat > lighthouserc.json <<'JSON'
           {
             "ci": {
               "collect": {
-                "staticDistDir": "./docs/site",
+                "startServerCommand": "python3 -m http.server 8080 --directory docs/site --bind 127.0.0.1",
+                "startServerReadyPattern": "Serving HTTP",
+                "startServerReadyTimeout": 15000,
+                "url": ["http://127.0.0.1:8080/"],
                 "numberOfRuns": 2,
                 "settings": {
                   "preset": "desktop",
@@ -104,7 +124,7 @@ jobs:
           artifactName: lighthouse-report
 
   screenshots:
-    name: Page screenshots (1440 / 390)
+    name: Page screenshots (1440/390 x EN/AR x dark/light)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -123,35 +143,95 @@ jobs:
           cat > "$RUNNER_TEMP/capture.cjs" <<'JS'
           const { chromium } = require('playwright');
 
+          const BASE = 'http://127.0.0.1:8080/';
+          const STATES = [
+            { lang: 'en', theme: 'dark', suffix: 'en-dark' },
+            { lang: 'en', theme: 'light', suffix: 'en-light' },
+            { lang: 'ar', theme: 'dark', suffix: 'ar-dark' },
+            { lang: 'ar', theme: 'light', suffix: 'ar-light' },
+          ];
+          const VIEWPORTS = [
+            { width: 1440, height: 900, prefix: 'home-1440' },
+            { width: 390, height: 844, prefix: 'home-390' },
+          ];
+
+          async function applyState(page, state) {
+            await page.evaluate(({ lang, theme }) => {
+              const root = document.documentElement;
+              if (root.lang !== lang) {
+                const button = document.querySelector(`[data-lang-button="${lang}"]`);
+                if (!button) throw new Error(`language button missing: ${lang}`);
+                button.click();
+              }
+              if (root.getAttribute('data-theme') !== theme) {
+                const toggle = document.querySelector('[data-theme-toggle]');
+                if (!toggle) throw new Error('theme toggle missing');
+                toggle.click();
+              }
+            }, state);
+            await page.waitForTimeout(350);
+            const actual = await page.evaluate(() => ({
+              lang: document.documentElement.lang,
+              dir: document.documentElement.dir,
+              theme: document.documentElement.getAttribute('data-theme'),
+            }));
+            if (actual.lang !== state.lang || actual.theme !== state.theme) {
+              throw new Error(`state mismatch for ${state.suffix}: ${JSON.stringify(actual)}`);
+            }
+          }
+
+          async function reveal(page) {
+            // IntersectionObserver only reveals sections that enter the viewport.
+            // Walk the document in ~800px steps, return to the top and let the
+            // one-shot transitions settle before the full-page capture.
+            await page.evaluate(async () => {
+              const step = 800;
+              const scrolling = document.scrollingElement || document.documentElement;
+              for (let y = 0; y < scrolling.scrollHeight; y += step) {
+                window.scrollTo(0, y);
+                await new Promise((resolve) => setTimeout(resolve, 60));
+              }
+              window.scrollTo(0, 0);
+              await new Promise((resolve) => setTimeout(resolve, 300));
+            });
+            await page.waitForTimeout(300);
+          }
+
+          async function assertNoHorizontalOverflow(page, viewport, state) {
+            if (viewport.width !== 390) return;
+            const result = await page.evaluate(() => ({
+              scrollWidth: document.scrollingElement.scrollWidth,
+              innerWidth: window.innerWidth,
+            }));
+            if (result.scrollWidth > result.innerWidth + 1) {
+              throw new Error(
+                `horizontal overflow at 390 (${state.suffix}): ` +
+                  `${result.scrollWidth} > ${result.innerWidth}`,
+              );
+            }
+          }
+
           (async () => {
             const browser = await chromium.launch();
-            const targets = [
-              { width: 1440, height: 900, file: 'home-1440-dark.png' },
-              { width: 390, height: 844, file: 'home-390-dark.png' },
-            ];
-            for (const target of targets) {
-              const page = await browser.newPage({
-                viewport: { width: target.width, height: target.height },
-                colorScheme: 'dark',
-              });
-              await page.goto('http://127.0.0.1:8080/', { waitUntil: 'load' });
-              await page.waitForTimeout(500);
-              // The page reveals sections with IntersectionObserver; scroll the
-              // whole document so the full-page capture is not blank below the fold.
-              await page.evaluate(async () => {
-                const step = Math.max(200, window.innerHeight * 0.8);
-                for (let y = 0; y < document.body.scrollHeight; y += step) {
-                  window.scrollTo(0, y);
-                  await new Promise((resolve) => setTimeout(resolve, 80));
-                }
-                window.scrollTo(0, 0);
-              });
-              await page.waitForTimeout(800);
-              await page.screenshot({
-                path: `site-artifacts/screenshots/${target.file}`,
-                fullPage: true,
-              });
-              await page.close();
+            for (const viewport of VIEWPORTS) {
+              for (const state of STATES) {
+                const context = await browser.newContext({
+                  viewport: { width: viewport.width, height: viewport.height },
+                  colorScheme: state.theme,
+                  reducedMotion: 'no-preference',
+                });
+                const page = await context.newPage();
+                await page.goto(BASE, { waitUntil: 'load' });
+                await page.waitForTimeout(400);
+                await applyState(page, state);
+                await reveal(page);
+                await assertNoHorizontalOverflow(page, viewport, state);
+                await page.screenshot({
+                  path: `site-artifacts/screenshots/${viewport.prefix}-${state.suffix}.png`,
+                  fullPage: true,
+                });
+                await context.close();
+              }
             }
             await browser.close();
           })().catch((error) => {
