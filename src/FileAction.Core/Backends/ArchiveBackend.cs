@@ -114,9 +114,22 @@ public static class ArchiveBackend
     /// <summary>Rejects entries like "../../evil.exe" that would escape the target folder.</summary>
     public static string SafeTarget(string fullDestination, string entryKey)
     {
+        // The separator is added here so the guard does not depend on the caller remembering it: without
+        // it, "..\dest-evil\pwn.txt" starts with "…\dest" and slips out of the destination.
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(fullDestination)) + Path.DirectorySeparatorChar;
         var relative = entryKey.Replace('\\', '/').TrimStart('/');
-        var path = Path.GetFullPath(Path.Combine(fullDestination, relative));
-        if (!path.StartsWith(fullDestination, StringComparison.OrdinalIgnoreCase))
+        string path;
+        try
+        {
+            path = Path.GetFullPath(Path.Combine(root, relative));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            // A name the file system cannot represent (an embedded NUL, a device path) is unsafe too.
+            throw new ConversionException(T("error.archive.unsafePath", entryKey), ex);
+        }
+
+        if (!path.StartsWith(root, StringComparison.OrdinalIgnoreCase))
             throw new ConversionException(T("error.archive.unsafePath", entryKey));
         return path;
     }

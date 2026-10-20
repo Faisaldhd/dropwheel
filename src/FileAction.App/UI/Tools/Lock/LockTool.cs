@@ -386,7 +386,7 @@ internal sealed class LockProtectView
             try
             {
                 var directory = LockOutput.DirectoryFor(item, _targets);
-                var icon = item.IsDirectory ? LockRuntime.Icons.FolderIcon : string.Empty;
+                var icon = item.IsDirectory ? LockIconCache.EnsureItemIcon(item.Path, folder: true) : string.Empty;
                 var outcome = await Task.Run(() => LockRuntime.Service.Protect(
                     item.Path, directory, credentials, string.IsNullOrEmpty(icon) ? null : icon, progress));
                 outputs.Add(outcome.OutputPath);
@@ -703,6 +703,7 @@ internal sealed class LockUnlockView
         {
             var outcome = LockRuntime.Service.Unprotect(_item.Path, _secret.Text,
                 LockRuntime.Settings.RecycleContainerAfterUnlock);
+            LockIconCache.RemoveItem(outcome.RestoredPath);
             var text = T("tool.lock.removeDone", Bidi.Value(outcome.RestoredPath));
             if (!outcome.ContainerRemoved)
                 text += Environment.NewLine + T("tool.lock.removeLeftover", Bidi.Value(outcome.ContainerError ?? ""));

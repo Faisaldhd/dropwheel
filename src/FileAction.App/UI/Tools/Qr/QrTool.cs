@@ -27,6 +27,12 @@ internal sealed class QrTool : IToolWindowSpec
 
     public string TitleKey => "tool.qr.title";
 
+    /// <summary>
+    /// The window is read-only: the bottom-right action copies the decoded text and closes. Naming it
+    /// "Copy and Close" keeps it from looking like an "Apply" that would write a file.
+    /// </summary>
+    public string PrimaryLabelKey => "tool.qr.copyClose";
+
     public ToolSpecLayout Layout => QrLayout;
 
     public bool Applies(IReadOnlyList<FileItem> items) =>

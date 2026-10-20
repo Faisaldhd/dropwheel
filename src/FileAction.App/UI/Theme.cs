@@ -71,6 +71,23 @@ internal static class Theme
     public static readonly SolidColorBrush Error = Freeze(new SolidColorBrush(Color.FromRgb(0xF0, 0x5A, 0x5A)));
     public static readonly SolidColorBrush Success = Freeze(new SolidColorBrush(Color.FromRgb(0x3C, 0xC3, 0x6E)));
 
+    /// <summary>
+    /// Text for a <see cref="Controls.Badge"/>: the badge paints a 15 % tint of the same hue, and
+    /// <see cref="Success"/>/<see cref="Error"/> only reach 2.02:1 and 2.79:1 on that tint in light mode
+    /// (and the error pair 3.94:1 in dark) — below the 4.5:1 body-text requirement. These are the
+    /// readable variants: 5.44:1 / 6.31:1 light, 5.32:1 / 6.45:1 dark (WCAG 2.1 relative luminance).
+    /// <see cref="Success"/>/<see cref="Error"/> stay the mark colours for icons, strokes and the lock
+    /// badge.
+    /// </summary>
+    public static Brush BadgeSuccessText => IsDark ? BadgeSuccessDark : BadgeSuccessLight;
+
+    public static Brush BadgeErrorText => IsDark ? BadgeErrorDark : BadgeErrorLight;
+
+    private static readonly SolidColorBrush BadgeSuccessDark = Freeze(new SolidColorBrush(Color.FromRgb(0x3C, 0xC3, 0x6E)));
+    private static readonly SolidColorBrush BadgeErrorDark = Freeze(new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x9A)));
+    private static readonly SolidColorBrush BadgeSuccessLight = Freeze(new SolidColorBrush(Color.FromRgb(0x17, 0x70, 0x3C)));
+    private static readonly SolidColorBrush BadgeErrorLight = Freeze(new SolidColorBrush(Color.FromRgb(0xA6, 0x1B, 0x1B)));
+
     /// <summary>2.4.0 lock badge: the app accent purple with a lavender highlight, both themes.</summary>
     public static readonly Color LockBadgeColor = Color.FromRgb(0x82, 0x24, 0xD4);
 

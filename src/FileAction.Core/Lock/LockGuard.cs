@@ -21,8 +21,14 @@ public enum LockRefusal
 public sealed record LockEnvironment(
     IReadOnlyList<string> SystemFolders,
     IReadOnlyList<string> ProtectedFolders,
-    string? ProfileRoot = null)
+    string? ProfileRoot = null,
+    string? RestoreTempFolder = null)
 {
+    /// <summary>Where restore staging files live; never the user folder. Not part of the refusal rules.</summary>
+    public string RestoreTempPath => string.IsNullOrWhiteSpace(RestoreTempFolder)
+        ? Path.Combine(Path.GetTempPath(), "DropWheel", "restore")
+        : RestoreTempFolder;
+
     /// <summary>The folders that are always refused: Windows, Program Files, ProgramData, the install and data folders.</summary>
     public static LockEnvironment Default()
     {
