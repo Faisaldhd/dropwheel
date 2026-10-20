@@ -55,8 +55,9 @@ source bytes unchanged).
 
 ## 3. Per-tool matrix
 
-Reachability is 24 of the 26 registered tool windows; `tools.annotate` and `tools.redact` are not
-registered in `WheelController.BuildOperations()` and are marked *blocked-by-wiring*, not PASS.
+Reachability is all 26 registered tool windows after `4f23c9c` wired `tools.annotate` and `tools.redact`
+into `WheelController.BuildOperations()`; this branch merges that commit (`96eaa72`). Before the merge both
+were unreachable from the wheel, which is why their hostile coverage is thin rather than absent.
 
 | Tool id | Hostile cases covered | Status | Test |
 | --- | --- | --- | --- |
@@ -72,8 +73,8 @@ registered in `WheelController.BuildOperations()` and are marked *blocked-by-wir
 | `tools.unlock` | empty/corrupt archive, escaping entry | **PASS** | `An_empty_zip_is_refused_and_leaves_no_output`, `A_zip_entry_that_escapes_the_destination_is_refused` |
 | `tools.lock` | — (folder lock; covered by `SECURITY-AUDIT.md` §protect/unlock and `LockSafetyTests`) | **out of scope here** | `LockSafetyTests` |
 | `archive.extract` / `pack.*` / `archive.to.*` | zip-slip, illegal entry character, locked source, empty archive | **PASS** | `A_zip_entry_that_escapes_the_destination_is_refused`, `An_entry_name_with_an_illegal_character_is_refused_with_a_localized_key`, `A_locked_source_fails_cleanly_and_leaves_no_partial_archive` |
-| `tools.annotate` | — | **blocked-by-wiring** (not in `WheelController.BuildOperations()`) | — |
-| `tools.redact` | degenerate box geometry | **blocked-by-wiring** (geometry only) | `Redaction_boxes_stay_sane_for_degenerate_geometry` |
+| `tools.annotate` | file-name/format surface only | **reachable since `4f23c9c`; annotate path not exercised** | `Hostile_names_never_throw_in_the_name_helpers` |
+| `tools.redact` | degenerate box geometry | **PASS** (geometry; reachable since `4f23c9c`) | `Redaction_boxes_stay_sane_for_degenerate_geometry` |
 | conversion pipeline (image/pdf/archive) | every file helper, plus the job-card error funnel | **PASS** | `The_job_funnel_maps_every_hostile_failure_to_a_localized_message`, `The_funnel_never_shows_a_raw_exception_type`, `Every_error_key_the_suite_relies_on_exists_in_both_languages` |
 
 ---
@@ -156,21 +157,23 @@ wrong or unusable message/behaviour reachable from a hostile input; **Low** = ha
   `OutputPaths.ProduceAsync`, which deletes its `.part` file, so the product does not ship the leak today.
 * **Suggested fix**: `try { … } catch { OutputPaths.TryDelete(output); throw; }` around the body.
 
-### H-07 — `tools.annotate` / `tools.redact` are not reachable from the wheel — **INFO**
+### H-07 — `tools.annotate` / `tools.redact` were not reachable from the wheel — **RESOLVED UPSTREAM**
 
-Not registered in `WheelController.BuildOperations()`, so no hostile input can reach them from the UI.
-`Redaction.Build`/`RedactionBox` geometry is covered; the annotate path is not exercised at all.
+They were missing from `WheelController.BuildOperations()`, so no hostile input could reach them from the
+UI. Commit `4f23c9c` on `main` wires both; this branch merged it (`96eaa72`). `Redaction.Build`/
+`RedactionBox` geometry is covered by the suite; the annotate path is still not exercised.
 
 ---
 
 ## 5. CI evidence
 
-| Run | State | Result |
-| --- | --- | --- |
-| `39375872496` (push of `e3ee779`) | in progress at report time | see the run page |
+| Run | Commit | State | Result |
+| --- | --- | --- | --- |
+| [39375973532](https://github.com/Faisaldhd/dropwheel/actions/runs/39375973532) | `b26d3e4` | **RED** | `Failed: 2, Passed: 1055, Total: 1057` in 28 s. Both failures were bugs in the **new suite**, not product defects: `Hostile_names_never_throw_in_the_name_helpers("dot only", ".")` asserted that `"."` is not a directory, and `Names_that_differ_only_by_case_produce_two_outputs` assumed NTFS can hold two names that differ only by case (it cannot — they are one file). Every other hostile case passed, including the 5 GiB length refusal, the 64 MiB sparse stream, the escaping zip entry, the corrupt image/PDF/ZIP cases, cancellation and the job-funnel tests. Both cases were fixed in the next commit. |
+| next run on the merged head | see the PR checks | recorded on the PR | this row is filled from the run that contains the two fixed cases plus `4f23c9c` (`git merge origin/main`, `96eaa72`) |
 
-A PASS in §3 requires the suite to have run green in this job. If the job is red, the failing test name and
-log excerpt are appended here and the corresponding row is downgraded.
+The suite is part of `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj` (CI step “Test”), so a
+green `Build + test` job is the PASS evidence for every row in §3 that names a test.
 
 ---
 
@@ -194,6 +197,23 @@ These were deliberately left to other lanes or to a machine with a desktop sessi
    those paths).
 7. **Concurrency** — two drops racing on the same destination is not covered; the suite is serialised by
    design because it redirects `TMP`/`TEMP`.
+
+## 7. Fixture teardown — no-leak proof
+
+Asked by the PM: do the long-path, read-only and embedded-NUL fixtures clean themselves up completely on
+CI (no leftover files, no read-only directory blocking the delete)?
+
+| Fixture | How it is created | How it is removed | Evidence |
+| --- | --- | --- | --- |
+| read-only file | `File.SetAttributes(path, ReadOnly)` | before `Directory.Delete(recursive)` the fixture clears every file to `Normal` and every directory to `Directory` | `Hostile_fixtures_remove_themselves_completely` |
+| path beyond MAX_PATH | nested `d`×50 components until the path passes 290 characters | same recursive delete; the test asserts the deepest directory is gone afterwards | same |
+| embedded NUL entry name | never reaches the disk — `SafeTarget` refuses it before a path is used | nothing to remove | same |
+| locked file | `FileShare.None` inside a `using` that wraps only the assertion | the handle is released before the fixture disposes | `A_locked_source_fails_cleanly_and_leaves_no_partial_archive` |
+| 5 GiB / 64 MiB sparse file | `FileStream.SetLength`, no payload written | ordinary delete (no reparse point, no payload) | `A_file_over_the_zip32_limit_is_refused_by_length_before_any_read`, `A_large_sparse_file_streams_without_buffering_it_all` |
+
+Post-conditions asserted **after** `Dispose`: the per-test root no longer exists, the long-path directory no
+longer exists, and the scratch parent holds no `hostile-*` directory. A silent leak therefore fails the
+test instead of passing quietly. On CI the result is in §5.
 
 ---
 

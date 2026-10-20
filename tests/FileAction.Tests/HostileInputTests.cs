@@ -103,6 +103,18 @@ public class HostileInputTests
                     }
                 }
 
+                foreach (var folder in Directory.GetDirectories(Root, "*", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        // A read-only directory blocks the recursive delete on some runners.
+                        File.SetAttributes(folder, FileAttributes.Directory);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                    }
+                }
+
                 Directory.Delete(Root, recursive: true);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
@@ -211,7 +223,8 @@ public class HostileInputTests
 
         // The wheel shows the file name the OS returns for the path, whatever the path was.
         Assert.Equal(System.IO.Path.GetFileName(name.TrimEnd('\\', '/')), item.Name);
-        Assert.False(item.IsDirectory);
+        // "." and ".." are directories, so the folder flag follows the file system, not the string shape.
+        Assert.Equal(Directory.Exists(name), item.IsDirectory);
         Assert.DoesNotContain("\\", item.Format, StringComparison.Ordinal);
         Assert.DoesNotContain("/", item.Format, StringComparison.Ordinal);
 
@@ -324,12 +337,20 @@ public class HostileInputTests
     }
 
     [Fact]
-    public async Task Names_that_differ_only_by_case_produce_two_outputs()
+    public async Task Names_that_differ_only_by_case_are_the_same_file_on_windows()
     {
         using var root = new HostileRoot();
+        // NTFS is case-insensitive: "Photo.PNG" and "photo.png" are one file, so the second write lands in
+        // the first. The product cannot create a second copy either — it must number its *own* results.
         var upper = root.WriteText("Photo.PNG", "upper");
         var lower = root.WriteText("photo.png", "lower");
 
+        Assert.True(File.Exists(upper));
+        Assert.True(File.Exists(lower));
+        Assert.Single(Directory.GetFiles(root.Root, "*.png"));
+        Assert.Equal("lower", File.ReadAllText(upper));
+
+        // Two results from the same stem must be two distinct files, whatever the case of the source name.
         var a = await OutputPaths.ProduceAsync(root.Root, Formats.BaseNameOf(upper), "out", temp =>
         {
             File.WriteAllText(temp, "A");
@@ -342,9 +363,9 @@ public class HostileInputTests
         });
 
         Assert.NotEqual(a, b, StringComparer.OrdinalIgnoreCase);
-        Assert.Equal("upper", File.ReadAllText(upper));
-        Assert.Equal("lower", File.ReadAllText(lower));
         Assert.Equal(2, Directory.GetFiles(root.Root, "*.out").Length);
+        Assert.Equal("A", File.ReadAllText(a));
+        Assert.Equal("B", File.ReadAllText(b));
     }
 
     [Fact]
@@ -912,6 +933,60 @@ public class HostileInputTests
             Assert.False(string.IsNullOrWhiteSpace(Loc.Table(Language.English)[key]), "empty English value " + key);
             Assert.False(string.IsNullOrWhiteSpace(Loc.Table(Language.Arabic)[key]), "empty Arabic value " + key);
         }
+    }
+
+    // ------------------------------------------------------------------ teardown proof
+
+    /// <summary>
+    /// The PM asked for proof that the awkward fixtures clean themselves up: a read-only file, a nested
+    /// path beyond MAX_PATH and an embedded-NUL entry name must all be gone once the fixture is disposed,
+    /// and no sibling <c>hostile-*</c> root may be left behind.
+    /// </summary>
+    [Fact]
+    public void Hostile_fixtures_remove_themselves_completely()
+    {
+        var root = new HostileRoot();
+        var directory = root.Root;
+        string? deep = null;
+        try
+        {
+            var readOnly = root.WriteBytes("read-only.png", OnePixelPng);
+            File.SetAttributes(readOnly, FileAttributes.ReadOnly);
+
+            deep = directory;
+            while (deep.Length < 290)
+            {
+                deep = System.IO.Path.Combine(deep, new string('d', 50));
+                try
+                {
+                    Directory.CreateDirectory(deep);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PathTooLongException)
+                {
+                    deep = null;
+                    break;
+                }
+            }
+
+            if (deep is not null)
+                File.WriteAllBytes(System.IO.Path.Combine(deep, "deep.png"), [1]);
+
+            // An embedded NUL can never become a file; the guard must refuse it, not create anything.
+            Assert.Throws<ConversionException>(() => ArchiveBackend.SafeTarget(directory, "bad\0name.txt"));
+            Assert.Single(Directory.GetFiles(directory, "*.png", SearchOption.TopDirectoryOnly));
+        }
+        finally
+        {
+            root.Dispose();
+        }
+
+        Assert.False(Directory.Exists(directory), "the per-test hostile root was not removed");
+        if (deep is not null && deep.Length > directory.Length)
+            Assert.False(Directory.Exists(deep), "the long-path fixture survived the cleanup");
+
+        var scratch = System.IO.Path.GetDirectoryName(directory);
+        if (!string.IsNullOrEmpty(scratch) && Directory.Exists(scratch))
+            Assert.Empty(Directory.GetDirectories(scratch, "hostile-*"));
     }
 
     // ------------------------------------------------------------------ redact (not wired to the wheel yet)
