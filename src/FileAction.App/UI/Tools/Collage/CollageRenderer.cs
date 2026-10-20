@@ -7,8 +7,8 @@ namespace FileAction.App.UI.Tools.Collage;
 
 /// <summary>
 /// Draws the collage at the output resolution from the original files (never from the preview), then
-/// writes it next to the first input as <c>Collage.png</c> or <c>Collage.jpg</c>. The file name is unique
-/// via <see cref="OutputPaths.ProduceAsync"/>, so an existing collage is never overwritten.
+/// writes it into the resolved output folder as <c>Collage.png</c> or <c>Collage.jpg</c>. The file name is
+/// unique via <see cref="OutputPaths.ProduceAsync"/>, so an existing collage is never overwritten.
 /// </summary>
 internal static class CollageRenderer
 {

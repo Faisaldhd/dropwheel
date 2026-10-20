@@ -48,6 +48,7 @@ internal sealed class CollageView
     ];
 
     private readonly IReadOnlyList<FileItem> _items;
+    private readonly DropTargets? _targets;
     private readonly Task<LoadedImage[]> _loadTask;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CollageOrder _order;
@@ -84,9 +85,10 @@ internal sealed class CollageView
     private bool _dragActive;
     private FrameworkElement? _dragTile;
 
-    public CollageView(IReadOnlyList<FileItem> items)
+    public CollageView(IReadOnlyList<FileItem> items, DropTargets? targets)
     {
         _items = items;
+        _targets = targets;
         _order = new CollageOrder(items.Count);
         _placeholder = new Border
         {
@@ -476,9 +478,7 @@ internal sealed class CollageView
 
         var ordered = _order.Apply(_items);
         var paths = ordered.Select(item => item.Path).ToList();
-        var directory = Path.GetDirectoryName(_items[0].Path);
-        if (string.IsNullOrEmpty(directory))
-            directory = Environment.CurrentDirectory;
+        var directory = OutputDirectoryFor(_items[0].Path, _targets);
 
         var options = new CollageOptions
         {
@@ -490,6 +490,26 @@ internal sealed class CollageView
             Background = CollageBackground.For(CollagePalette.Colors[_paletteIndex], _backgroundKind),
         };
         return await CollageRenderer.RenderAsync(paths, options, directory);
+    }
+
+    /// <summary>
+    /// The folder a collage writes into: the folder detected under the cursor when this drop started,
+    /// then the remembered drop folder, then beside the first input — the same 2.2.3 rules the Crop tool
+    /// uses. The first input decides the fallback, so a reordered collage still writes beside the file
+    /// the user dropped first.
+    /// </summary>
+    internal static string OutputDirectoryFor(string firstPath, DropTargets? targets)
+    {
+        var detected = OutputTarget.Resolve(firstPath, targets?.UnderCursor, Directory.Exists, OutputTarget.CanWrite);
+        if (!detected.UsesDetectedFolder && targets?.Remembered is { } remembered)
+        {
+            var fallback = OutputTarget.Resolve(firstPath, remembered, Directory.Exists, OutputTarget.CanWrite);
+            if (fallback.UsesDetectedFolder)
+                return fallback.Directory!;
+        }
+        return detected.Directory
+            ?? OutputTarget.SourceFolder(firstPath)
+            ?? Environment.CurrentDirectory;
     }
 
     private void PrepareBox(TextBox box, string tooltip)
