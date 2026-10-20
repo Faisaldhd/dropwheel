@@ -214,9 +214,9 @@ public class PhotoEditTests
         Assert.Equal(1, PhotoEdit.VignetteStrength(100), 9);
         AssertStrictlyIncreasing(Enumerable.Range(0, 101).Select(PhotoEdit.VignetteStrength).ToArray());
 
-        // Noise reduction is a median radius, so it steps 1…4 and never decreases.
+        // Noise reduction is a median radius, so it steps 1…2 and never decreases.
         Assert.Equal(1u, PhotoEdit.NoiseRadius(0));
-        Assert.Equal(4u, PhotoEdit.NoiseRadius(100));
+        Assert.Equal(2u, PhotoEdit.NoiseRadius(100));
         var radii = Enumerable.Range(0, 101).Select(value => (int)PhotoEdit.NoiseRadius(value)).ToArray();
         AssertNonDecreasing(radii.Select(value => (double)value).ToArray());
     }

@@ -43,7 +43,9 @@ internal static class EditPhotoRenderer
     {
         using var image = new MagickImage(previewBytes);
         PhotoEdit.Apply(image, parameters);
-        return ToBitmap(image.ToByteArray(MagickFormat.Png));
+        // BMP is lossless and uncompressed: a noisy (grain) preview would cost hundreds of milliseconds
+        // to PNG-encode on every slider move, and WPF decodes BMP instantly.
+        return ToBitmap(image.ToByteArray(MagickFormat.Bmp));
     }
 
     /// <summary>

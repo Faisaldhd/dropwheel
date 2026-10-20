@@ -129,11 +129,15 @@ public static class PhotoEdit
 
     private static readonly PhotoParameterSpec[] ByParameter = Index();
 
-    /// <summary>Largest side of the intermediate preview; the live preview never edits full resolution.</summary>
-    public const int PreviewMaxSide = 1200;
+    /// <summary>
+    /// Largest side of the intermediate preview; the live preview never edits full resolution. 1000 px
+    /// still covers the 440 DIP preview card at 200% display scaling, while a 24 MP photo keeps each
+    /// live render well under the responsive budget.
+    /// </summary>
+    public const int PreviewMaxSide = 1000;
 
     /// <summary>Highest side of the vignette mask; it is resized up instead of looping over every pixel.</summary>
-    private const int VignetteMaskMaxSide = 512;
+    private const int VignetteMaskMaxSide = 256;
 
     /// <summary>X positions of the five tone-curve knots (black, lower mid, mid, upper mid, white).</summary>
     private static readonly double[] CurveKnots = [0.0, 0.25, 0.5, 0.75, 1.0];
@@ -191,14 +195,14 @@ public static class PhotoEdit
     /// <summary>Dehaze as a sigmoidal contrast amount: 0 at 0, 2.5 at 100.</summary>
     public static double DehazeContrast(int dehaze) => 2.5 * Clamp(dehaze, 0, 100) / 100.0;
 
-    /// <summary>Median-filter radius for noise reduction: 1 (no-op radius kept honest) to 4.</summary>
+    /// <summary>Median-filter radius for noise reduction: 1 (a light 3×3 pass) to 2 (a 5×5 pass).</summary>
     public static uint NoiseRadius(int noiseReduction) =>
-        (uint)Math.Clamp(1 + (int)Math.Round(Clamp(noiseReduction, 0, 100) / 100.0 * 3), 1, 4);
+        (uint)Math.Clamp(1 + (int)Math.Round(Clamp(noiseReduction, 0, 100) / 100.0), 1, 2);
 
     /// <summary>Unsharp amount for clarity: local contrast, independent of the fine sharpening.</summary>
     public static double ClarityAmount(int clarity) => 1.7 * Clamp(clarity, 0, 100) / 100.0;
 
-    /// <summary>Sharpening sigma; the radius stays at one pixel so only fine detail is affected.</summary>
+    /// <summary>Sharpening sigma; the radius stays below one pixel so only fine detail is affected.</summary>
     public static double SharpenSigma(int sharpness) => 0.4 + 1.1 * Clamp(sharpness, 0, 100) / 100.0;
 
     /// <summary>Grain attenuation handed to <c>AddNoise</c>: 0 to 0.2.</summary>
@@ -435,10 +439,12 @@ public static class PhotoEdit
                     image.MedianFilter((uint)step.Amount);
                     break;
                 case PhotoEditOperation.Clarity:
-                    image.UnsharpMask(12.0, 8.0, step.Amount, 0.0);
+                    // A medium-radius unsharp is the local contrast. Radius 2 keeps a 24 MP save fast;
+                    // radius 4 took five seconds for that operation alone and radius 8 seven seconds.
+                    image.UnsharpMask(2.0, 1.5, step.Amount, 0.0);
                     break;
                 case PhotoEditOperation.Sharpness:
-                    image.Sharpen(1.0, step.Amount);
+                    image.Sharpen(0.8, step.Amount);
                     break;
                 case PhotoEditOperation.Vignette:
                     ApplyVignette(image, step.Amount);
