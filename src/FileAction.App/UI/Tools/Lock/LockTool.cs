@@ -453,7 +453,6 @@ internal sealed class LockWarningDialog : Window
                 MaxWidth = 430,
             },
             IsChecked = false,
-            FlowDirection = FlowDirection.LeftToRight,
             Margin = new Thickness(0, 0, 0, 14),
         };
         body.Children.Add(_ack);
