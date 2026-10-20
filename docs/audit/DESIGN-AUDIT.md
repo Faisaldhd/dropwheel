@@ -123,7 +123,7 @@ clipping, missing control the reference has, misleading label). `PR` names the f
 
 | # | Tool (id) | Title / primary | Status | Deviations vs reference | Fix PR |
 |---|---|---|---|---|---|
-| 1 | Crop `tools.crop` | Crop Image / Apply | **deviations** | chips row has **no `Aspect ratio` label** (reference: label + 6 chips); `W`/`H` row has **no trailing `px`** (reference `… 2674 px`); control rows sit at the card edge (no 18 DIP inset) — `W` visually touches the border in `_local\selftest-art\tools\en\crop-landscape.png`; chips do not wrap → clip at 336 DIP; `Enter` in W/H also applies | D2, D3 |
+| 1 | Crop `tools.crop` | Crop Image / Apply | **deviations** | chips row has **no `Aspect ratio` label** (reference: label + 6 chips); `W`/`H` row has **no trailing `px`** (reference `… 2674 px`); control rows sit at the card edge (no 18 DIP inset) — the leading **`W` is clipped** in `_local\selftest-art\tools\en\crop-landscape.png`; chips do not wrap → clip at 336 DIP; `Enter` in W/H also applies | D2, D3 |
 | 2 | Add Background `tools.addbackground` | Add BG / Save with Background | **deviations** | **`Background im…` is truncated** in the shipped capture `docs/screenshots/motion/tool-addbackground-light-poster.png` (label column too narrow for “Background image”); units are in the label (`Padding (px)`) instead of with the value (`160 px`) as in `addbg.png` | D4 |
 | 3 | Annotate `tools.annotate` | Annotate Image / **Apply** | **deviations** | controls are **above** the preview (every reference sheet and every other tool put the preview first); the `Fill` toggle is styled exactly like the colour chips and sits **inside the colour row** (`Color` + 7 swatches + `Fill`), so it reads as an eighth colour; the stroke-width and font-size single-selects share one row separated only by the muted `Font` caption, so the row reads as one six-value selector; no behaviour hint (reference: “Drag from the tail toward the arrowhead…”); primary is `Apply` where the reference says `Save Annotated Copy` (`tool.annotate.suffix` already exists) | D5, D9 |
 | 4 | Redact image `tools.redact` | **Redact image** / Save Redacted Copy | **deviations** | reference control set is `Style` / `Color` / `Detect [Faces, Text]`; ours has `Detect text` only, while the wheel card advertises “Detect faces and text locally” — affordance promised and absent; sentence-case title (one of three, F-12) | D7, D9 |
@@ -205,16 +205,18 @@ The title bar and action bar are inset 18 DIP (`ToolWindow.cs:322, 350`) but the
 the views disagree: `crop`, `videotrim`, `videocrop`, `videospeed`, `videosplit`, `videojoin`,
 `videoframes` declare **no horizontal inset**; `editphotos`, `compress`, `metadata`, `qr` use 18;
 `audionormalize/trim` 18; `addbackground`, `annotate`, `collage`, `redact` use 16–18 on inner
-containers. Observed consequence in `crop-landscape.png`: the chip and `W/H` rows start on the card
-border while `Reset`, `Apply` and the title sit 18 DIP in. The reference aligns all three.
+containers. Observed consequence in `crop-landscape.png`: the leading **`W` of the width box is cut
+off** at the card edge (its left stroke is missing), while `Reset`, `Apply` and the title sit 18 DIP
+in. The reference aligns all three.
 *Fix:* give the content row `Margin = new Thickness(18, 0, 18, 0)` in `ToolWindow.Build()` and delete
 the per-view insets (or standardise a `ToolView.Pad` helper). Acceptance: preview, controls, title and
 action bar share one 18 DIP gutter in all 26 windows, at 100/125/150 %.
 
 ### F-04 — `Background image` is truncated, and units live in labels · **medium**
 `docs/screenshots/motion/tool-addbackground-light-poster.png` shows `Background im…` because the
-label column is fixed while the row (label + `Choose image…` + `Blur`) needs more width.
-`addbg.png` shows `Background` on its own line with an icon button at the row end.
+label column is fixed while the row (label + `Choose image…` + `Blur`) needs more width. The reference
+keeps the label to one short word (`Background`) and puts the image picker in a small icon at the end
+of the swatch row.
 *Fix:* let the label column wrap to two lines (`ToolControls.Label` already wraps) or move
 `Choose image…`/`Blur` to their own row; print units with the value (`160 px`) and drop `(px)` from
 the labels. Acceptance: no `…` in any 150 % capture; slider values read like the reference.
@@ -316,8 +318,9 @@ desktop tool-window reference frames live inside `_reference\tangerine-demo-fram
    (`docs/FUNCTION-MATRIX.md` C-9, E-5).
 5. **Proportions** — 29–49 % of a 1920 screen wide, 43–78 % of the work area tall, inside the
    reference's 36–46 % band; smallest window 316 DIP (`redact`, `audiovisualizer` at 150 %).
-6. **Reset on every tool** — the PDF hides `Reset` on four sheets (Compress, Trim Video, Edit Photo,
-   Change Speed) but the desktop frames always show it; our uniform `Reset` matches the desktop frame.
+6. **Reset on every tool** — the PDF's bottom bar shows `Reset` only on a minority of sheets
+   (Annotate, Add BG, Crop, Redact photo, Video crop, Audio trim, Collage's in-content `Reset Layout`),
+   while the desktop frames always show it; our uniform `Reset` matches the desktop frame.
 7. **Primary-action vocabulary** — `Save with Background`, `Save Redacted Copy`, `Save Edited Copy`,
    `Create Collage`, `Save Organized PDF`, `Save N Frames` match the reference wording where the
    reference has one.
@@ -344,7 +347,7 @@ Applied:
 |---|---|---|
 | Floating topmost card instead of an attached sheet; no dimmed scrim | justified | Windows has no sheet concept; a tray app must stay above Explorer |
 | `Topmost` + no taskbar button | justified | keeps the tool visible after the drop; Alt+Tab is not the route |
-| `Reset` on every tool while 4 mobile sheets hide it | justified | the desktop frames show `Reset`; consistency wins |
+| `Reset` on every tool while most mobile sheets hide it | justified | the desktop frames show `Reset`; consistency wins |
 | Tabs in Edit Photos vs stacked sections | justified (noted) | 16 sliders at 500 DIP need the shorter surface |
 | 2-column audio body vs stacked sheet | justified | desktop width |
 | `Select`, `Highlighter`, `Front/Back` tools in Annotate | justified | our features; superset, same order after `Select` |
