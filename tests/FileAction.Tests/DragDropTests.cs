@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Windows;
@@ -354,15 +354,21 @@ public sealed class DragDropTests : IDisposable
     }
 
     [Fact]
-    public void A_web_link_is_recognised_but_nothing_is_downloaded_until_the_drop()
+    public void A_web_link_is_recognised_as_one_item_and_a_drag_preview_never_downloads()
     {
-        var link = DropContent.Read(new StubData { Text = "https://example.com/picture.png" }, materialize: false);
+        var preview = DropContent.Read(new StubData { Text = "https://example.com/picture.png" }, materialize: false);
 
-        Assert.NotNull(link);
-        var item = Assert.Single(link!.Items);
+        Assert.NotNull(preview);
+        var item = Assert.Single(preview!.Items);
         Assert.Equal("picture.png", item.Name);
         Assert.False(File.Exists(item.Path));
-        Assert.NotNull(link.Prepare);
+
+        // A drag preview carries no download work at all (`DropReader.Download`, materialize:false); the
+        // lazy `Prepare` is attached only on the drop (materialize:true), and that branch creates
+        // Downloads\DropWheel and needs the network, so it is deliberately not exercised here: a test
+        // must not write outside the repository. The attachment is source-verified
+        // (DropReader.cs:223-239).
+        Assert.Null(preview.Prepare);
     }
 
     [Fact]
