@@ -51,8 +51,8 @@ and on mode switch only, never per frame.
 
 **Pitch.** The three wheel tabs (Convert / Tools / Actions) become small keycaps, so "Shift switches the
 wheel" is legible without a tooltip.
-**Why it fits.** The reference puts the shortcut in a keycap chip at the bottom of the disc
-(`_reference/tangerine-shift-convert-frames.zip`, frames 26–40), and its control order is
+**Why it fits.** The reference puts the shortcut in a keycap chip under the disc (present in almost
+every frame of `_reference/tangerine-shift-convert-frames.zip`), and its control order is
 *hint → disc → action*. We already have the hint text (`Shift`, `Ctrl`, `Alt` from `AppSettings.KeyName`),
 just set as bare 10.5 px text.
 **Where.** `src/FileAction.App/Wheel/WheelWindow.cs:941-973` (`BuildHub`, the tab loop).
@@ -161,8 +161,8 @@ Then it needs a measurement; LATER, not SHIP-NOW.
 ### W8. Wheel: type-to-filter in the hub — **LATER**
 
 **Pitch.** In click mode, typing filters the slices by label.
-**Why it fits.** A 24-operation product eventually needs it, and the reference avoids it by keeping each
-wheel small.
+**Why it fits.** A product with dozens of operations eventually needs it, and the reference avoids it by
+keeping each wheel small.
 **Cost.** A `TextBox` in the hub is a **focus-grabbing control inside a `WS_EX_NOACTIVATE` drag window**
 (`WheelWindow.cs:132-136`): in drag mode it can never work, and in click mode it would take keyboard focus
 away from the wheel's own key handling (`OnKeyDown`, `:598-641`). Rendering cost is zero; the interaction
@@ -204,13 +204,13 @@ the hot path for the remaining 10 %.
 
 ## 2. Tool windows
 
-The chrome is shared (`ToolWindow.Build`, `:225-259`), so a change here lands on all 26 tools at once and needs one
-measurement, not 26.
+The chrome is shared (`ToolWindow.Build`, `:225-259`), so a change here lands on all 26 tools at once
+and needs one measurement, not 26.
 
 ### T1. Category eyebrow above the tool title — **SHIP-NOW (M)**
 
 **Pitch.** A 10.5 px muted line above the centred title: `IMAGES`, `VIDEO`, `AUDIO`, `PDF`, `DOCUMENTS`,
-`SECURITY`. The user always knows which family of tool they are in, and 24 windows stop feeling
+`SECURITY`. The user always knows which family of tool they are in, and 26 windows stop feeling
 undifferentiated.
 **Why it fits.** It is the reference sheet grammar (`_reference/tangerine-tools.pdf`: category eyebrow
 above the headline) translated into app chrome — and the tool title bar is exactly the place it belongs.
