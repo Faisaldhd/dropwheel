@@ -10,3 +10,4 @@
 | #11 | Video trim/crop/speed | 5da0b89 | CI green 39352799362 |
 | #12 | Split/Join | 0c462a9 | CI green 39354842668 |
 | #15 | Audio FX | bdb7e89 | CI green 39355507301 |
+| checkpoint 2026-10-20 07:44 | merged: #16 audiotrim, #14 pdfpages, #18 qr, #22 compressmeta | remaining: #19 protect, #21 lock, #24 perf, #23 sheet | agents: protect re-merging main 3d32231; lock badge done pending merge; perf/sheet waiting | no tag |
