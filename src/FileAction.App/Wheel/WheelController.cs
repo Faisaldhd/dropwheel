@@ -100,6 +100,7 @@ internal sealed class WheelController
         new UI.Tools.Video.VideoTrimOperation(),
         new UI.Tools.Video.VideoCropOperation(),
         new UI.Tools.Video.VideoSpeedOperation(),
+        new UI.Tools.Qr.QrOperation(),
         new UI.Tools.Pdf.PdfMergeOperation(),
         new UI.Tools.Pdf.PdfOrganizeOperation(),
         new UI.Tools.Audio.AudioNormalizeOperation(),
