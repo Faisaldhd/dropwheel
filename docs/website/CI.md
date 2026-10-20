@@ -92,10 +92,10 @@ Below-the-fold assets are deliberately excluded:
 - anything outside `docs/site/index.html`'s initial document (for example
   `docs/site/README.md`).
 
-At the time of writing (commit `6b63171`, 2026-10-20) the measured payload is
-**406,994 bytes**: 131,986 HTML + 51,820 CSS + 16,995 app JS + 1,244 boot JS +
+At the time of writing (commit `5ee9c1d`, 2026-10-20) the measured payload is
+**408,228 bytes**: 131,986 HTML + 53,054 CSS + 16,995 app JS + 1,244 boot JS +
 1,983 favicon + 52,660 apple-touch-icon + 3,644 brand mark + 146,662 hero
-candidates. That is 81.4% of the 500,000 byte budget, with 93,006 bytes of
+candidates. That is 81.6% of the 500,000 byte budget, with 91,772 bytes of
 headroom. The script prints the per-file table and the total on every run and
 writes the same table to the job summary.
 
@@ -202,7 +202,7 @@ Before anything is uploaded, the deploy job:
 markers themselves stay). Version, MiB, bytes and SHA-256 may repeat — the
 page uses them in the release bar, hero facts, For IT commands, release card,
 download card and installer filenames — and every occurrence is replaced.
-At commit `6b63171` the page has 8 version, 4 MiB, 2 SHA-256, 1 bytes and 1
+At commit `5ee9c1d` the page has 8 version, 4 MiB, 2 SHA-256, 1 bytes and 1
 status pair; the status pair must appear exactly once. There is no note marker
 to stamp: the top status strip is the only status surface.
 
