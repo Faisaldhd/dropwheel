@@ -95,11 +95,16 @@ internal sealed class WheelController
         new UI.Tools.Collage.CollageOperation(),
         new UI.Tools.Video.VideoFramesOperation(),
         new UI.Tools.Video.VideoRedactOperation(),
+        new UI.Tools.Video.VideoSplitOperation(),
+        new UI.Tools.Video.VideoJoinOperation(),
         new UI.Tools.Video.VideoTrimOperation(),
         new UI.Tools.Video.VideoCropOperation(),
         new UI.Tools.Video.VideoSpeedOperation(),
         new UI.Tools.Pdf.PdfMergeOperation(),
         new UI.Tools.Pdf.PdfOrganizeOperation(),
+        new UI.Tools.Audio.AudioChannelsOperation(),
+        new UI.Tools.Audio.AudioBleepOperation(),
+        new UI.Tools.Audio.AudioVisualizerOperation(),
     ];
 
     /// <summary>
