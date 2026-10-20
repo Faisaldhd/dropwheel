@@ -66,6 +66,7 @@ internal sealed class ToolWindow : Window
 
     private readonly IToolWindowSpec _spec;
     private readonly ToolContent _content;
+    private readonly ToolApplyState _applyState = new();
     private Border? _applyButton;
     private Border? _chrome;
     private Motion.Handle? _motion;
@@ -261,6 +262,15 @@ internal sealed class ToolWindow : Window
     /// <summary>Closes with a 120 ms fade, then releases every animation clock the window held.</summary>
     protected override void OnClosing(CancelEventArgs e)
     {
+        // RC-01: a close during Apply would orphan the running write and can leave a partial final file.
+        // Defer the close; ApplyAsync closes the window itself once the write has completed or failed.
+        if (_applyState.BlocksClose)
+        {
+            e.Cancel = true;
+            base.OnClosing(e);
+            return;
+        }
+
         if (!_closeMotionRunning && _chrome is not null && _motion is not null
             && Motion.Enabled && IsVisible && !Dispatcher.HasShutdownStarted)
         {
@@ -366,11 +376,15 @@ internal sealed class ToolWindow : Window
 
     private async Task ApplyAsync()
     {
+        if (!_applyState.Begin())
+            return;
+
         if (_applyButton is not null)
             _applyButton.IsEnabled = false;
+        string? created = null;
         try
         {
-            var created = await _content.Apply();
+            created = await _content.Apply();
             if (!string.IsNullOrEmpty(created))
             {
                 Notifications.Show(T("tool.window.done.title"), T("tool.window.done", Bidi.Value(Path.GetFileName(created))));
@@ -382,7 +396,6 @@ internal sealed class ToolWindow : Window
                     await Task.Delay((int)(Motion.PulseMs * 0.55));
                 }
             }
-            Close();
         }
         catch (Exception ex)
         {
@@ -390,9 +403,14 @@ internal sealed class ToolWindow : Window
         }
         finally
         {
+            _applyState.End();
             if (_applyButton is not null)
                 _applyButton.IsEnabled = true;
         }
+
+        // Only close after the apply state has ended, so OnClosing cannot defer this success close.
+        if (!string.IsNullOrEmpty(created))
+            Close();
     }
 
     private readonly record struct WorkArea(double Left, double Top, double Width, double Height, double Scale)
