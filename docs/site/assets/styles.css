@@ -1897,3 +1897,12 @@ h1 {
 @media print {
   html.reveal-ready [data-reveal] { opacity: 1; transform: none; transition: none; }
 }
+
+/* The 64-character hash must wrap inside the hero column at 320-390 px, not run off-screen. */
+.hero-hash { min-width: 0; }
+.hero-hash code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  white-space: normal;
+}
