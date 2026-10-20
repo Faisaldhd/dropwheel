@@ -528,6 +528,58 @@ jobs:
             throw "portable zip grew by $portableDelta bytes (>= $budget); the 2.4.0 size budget is +6 MiB over the v2.3.0 portable asset"
           }
 
+      # docs/PERF.md makes "the installer and the portable zip may not grow by 6 MiB or more over
+      # v2.3.0" a hard budget, but until now the two sizes were only PRINTED, so a regression could
+      # ship with a green job. This asserts the documented rule on the exact files that are uploaded.
+      # Baseline = the published v2.3.0 release assets (bytes), i.e.
+      # https://github.com/Faisaldhd/dropwheel/releases/tag/v2.3.0 -> DropWheel-2.3.0-Setup.exe
+      # 62,967,948 B and DropWheel-2.3.0-portable-win-x64.zip 89,266,161 B.
+      - name: Package size budget (v2.3.0 baseline, +6 MiB fails)
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $baselines = [ordered]@{
+            'setup'        = 62967948
+            'portable zip' = 89266161
+          }
+          # "6 MiB or more" is the fail rule, so a delta >= 6 MiB fails and exactly +6 MiB is red.
+          $limitBytes = 6MB
+          $assets = [ordered]@{
+            'setup'        = "release/DropWheel-$version-Setup.exe"
+            'portable zip' = "release/DropWheel-$version-portable-win-x64.zip"
+          }
+
+          $rows = @()
+          $breached = @()
+          foreach ($name in $baselines.Keys) {
+            $path = $assets[$name]
+            if (-not (Test-Path -LiteralPath $path)) { throw "size budget: $path does not exist" }
+            $bytes = (Get-Item -LiteralPath $path).Length
+            $base = $baselines[$name]
+            $delta = $bytes - $base
+            $deltaMb = [math]::Round($delta / 1MB, 2)
+            $deltaPct = [math]::Round(($delta / $base) * 100, 2)
+            $verdict = if ($delta -ge $limitBytes) { 'FAIL' } else { 'PASS' }
+            Write-Host ("{0}: {1:N0} B vs v2.3.0 {2:N0} B -> {3} MiB ({4} %) {5}" -f `
+              $name, $bytes, $base, $deltaMb, $deltaPct, $verdict)
+            $rows += "| $name | $bytes | $base | $deltaMb MiB | $deltaPct % | $verdict |"
+            if ($verdict -eq 'FAIL') { $breached += $name }
+          }
+
+          $summary = @(
+            '### Package size budget (v2.3.0 baseline)',
+            '',
+            'Fail rule: a delta of **+6 MiB or more** over v2.3.0 (`docs/PERF.md`).',
+            '',
+            '| asset | bytes | v2.3.0 bytes | delta | delta % | verdict |',
+            '| --- | ---: | ---: | ---: | ---: | --- |'
+          ) + $rows
+          $summary | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+
+          if ($breached.Count -gt 0) {
+            throw ("package size budget breached for {0}: grew by 6 MiB or more over v2.3.0" -f ($breached -join ', '))
+          }
+
       - name: SHA256SUMS
         if: always()
         shell: pwsh
