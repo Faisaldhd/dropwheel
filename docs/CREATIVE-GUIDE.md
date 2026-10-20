@@ -8,7 +8,7 @@ duration and string below was read out of the source and is cited as `path:line`
 exist yet and is being proposed, the line says **PROPOSED** and gives the reason; nothing in this file
 invents a token name and presents it as real.
 
-**Verified against** `origin/main` `268a2d7` (branch `audit/acreative`). If a citation no longer matches,
+**Verified against** `origin/main` `4f23c9c` (branch `audit/acreative`). If a citation no longer matches,
 the code changed: fix the citation before you follow the rule.
 
 **The one-sentence stance.** Purple, dark-first, Arabic-first-ready, *light and fast*: quiet surfaces, one
@@ -55,10 +55,10 @@ Two consequences worth stating because contributors get them wrong:
 - `AccentGradient` is a gradient *type* filled with one colour (`Theme.cs:67` passes `AccentColor` for both
   stops). Treat it as "the accent fill". Do not add a second stop without a measured need and a screenshot in
   both themes.
-- The accent is an **indicator**, not a surface. It fills one slice, one pill, one primary button,
-  one toggle knob track. Large accent areas are forbidden: on the light page the accent reaches only
-  **2.75:1** as text on the dark page and reads fine as a fill, but as a big block it destroys the hierarchy
-  the whole app is built on.
+- The accent is an **indicator**, not a surface. It fills one slice, one pill, one primary button, one
+  toggle track. A large accent block is never allowed: it destroys the hierarchy that makes the accent
+  mean "selected". Accent-coloured *text* passes only on the light page (5.96:1); on dark, accent text
+  must use the lavender `#B48AE0` (6.68:1), never `#8224D4` (2.75:1).
 
 Measured contrast of the accent (sRGB, WCAG 2.x relative luminance):
 
@@ -148,7 +148,7 @@ rather than glance at.
 
 Rule: the site may have *fewer* tokens, never *different* values. When you touch either file, copy the
 value from `Theme.cs` and note the pair in the PR. (A docs-only sync is a zero-cost change; see
-`docs/IDEAS.md` X3.)
+`docs/IDEAS.md` X1.)
 
 ### 2.6 PROPOSED tokens (not in the source yet)
 
@@ -163,7 +163,7 @@ Each is a **static** addition: a frozen brush or two constants, resolved at star
 
 Do **not** add `Theme.Primary`, `Theme.Secondary`, `Theme.Background`, `Theme.Foreground` or Material-style
 naming. The palette is named by *where it is used* (Backdrop, Slice, Hub, Panel, Page, Card, Track), and that
-is why one a second contributor can read `WheelWindow.Build` and know what each brush means.
+is why a second contributor can read `WheelWindow.Build` and know what each brush means.
 
 ---
 
@@ -221,7 +221,7 @@ without a screenshot of a 12-slice wheel in Arabic.
 | 4 | checkbox box | `ToolControls.cs:96` |
 | 6 | status badge | `Controls.cs:288` |
 | 7 | segmented pill, chip pill | `Controls.cs:109`, `ToolControls.cs:166` |
-| 8 | button, wheel tab, text box (via control height) | `Controls.cs:262`, `WheelWindow.cs:950` |
+| 8 | button, wheel tab | `Controls.cs:262`, `WheelWindow.cs:950` |
 | 9 | segmented/chipping track | `Controls.cs:129`, `ToolControls.cs:187` |
 | 10 | card, toggle track | `Controls.cs:82`, `:143`; `ToolControls.cs:53` |
 | 16 | round close button (32×32) | `ToolWindow.cs:295` |
@@ -276,13 +276,14 @@ No custom font ships. That is a package-size decision (the +6 MiB installer budg
 | Wheel tab / keycap | 10.5 SemiBold | `Muted` → `TextOnAccent` active | `WheelWindow.cs:958-960` |
 | Destination line | 10.5 | `Muted`, `Error` when the folder refuses | `WheelWindow.cs:57`, `:1042` |
 | Status badge | 11.5 SemiBold | `Success` / `Error` | `Controls.cs:291` |
-| Tools-only large number | 48/26/24/20 | depends | prefer 20 max outside the wheel hub |
+| Largest in-window type | 20 Normal | `Text` | the Compress estimate readout (`CompressView.cs:197`); 24 appears only as the hub glyph (`WheelWindow.cs:54`) |
 
 ### 4.3 Rules
 
 - **Sentence case everywhere.** "Save next to the file", not "Save Next To The File". The only uppercase
   strings are format identifiers (`MP4`, `PNG`, `PDF`) and the wheel's slice codes, which are *data*
-  (`WheelWindow.cs:864`). PROPOSED eyebrows (§11, X5) are the sole stylistic exception.
+  (`WheelWindow.cs:864`). Section eyebrows inside tools are the sole exception, and they are still sentence case underneath
+  (`docs/IDEAS.md` T6).
 - **Wrap or elide, never clip.** `Controls.Text` wraps by default and switches to
   `TextTrimming.CharacterEllipsis` when `wrap: false` (`Controls.cs:22-23`). A single-line `TextBlock`
   created by hand must set trimming itself.
@@ -440,7 +441,7 @@ not by review alone.
   every plural key (`docs/glossary-ar.md:63-76`). Use `Loc.Plural`, never string concatenation.
 - **Directional arrows** use `←` in the logical direction of the text; do not mirror an arrow glyph in code.
 - **Test both.** The self-test renders `en`, `en-light`, `ar`, `ar-light`
-  `STATUS.md:233-237`); a change that only looks right in LTR is not done.
+  (`STATUS.md:233-237`); a change that only looks right in LTR is not done.
 
 ---
 
@@ -517,8 +518,8 @@ The reference is an influence, not a template. These are off the table:
    for a Windows utility that never uploads a file.
 9. **Long, preview-first windows that push the action below the fold.** Our action bar is pinned
    (`ToolWindow.cs:334-355`); the preview may scroll, the primary action may not.
-10. **Any decorative motion** — sheen sweeps, idle breathing, particle confirmations (§7 Law 2, §11
-    rejection list in `docs/IDEAS.md`).
+10. **Any decorative motion** — sheen sweeps, idle breathing, particle confirmations (§7 Law 2; the
+    rejection table is `docs/IDEAS.md` §4).
 
 ---
 
@@ -546,8 +547,8 @@ Before a UI PR is reviewable:
 
 ## 12. Adding a surface (recipes)
 
-**A new tool window** (26 registered, all 26 reachable from the wheel as of `4f23c9c` — see `docs/IDEAS.md` §0): implement
-`IToolWindowSpec` and register it; build the view as a vertical stack of `ToolControls.Card`/`Section`
+**A new tool window** (26 registered, all 26 reachable from the wheel as of `4f23c9c` — see
+`docs/IDEAS.md` §0): implement `IToolWindowSpec` and register it; build the view as a vertical stack of `ToolControls.Card`/`Section`
 cards with the preview first; put the primary action in the window's own bottom bar by returning a primary
 label. You inherit open/close/resize/reduced-motion from `ToolWindow` (`ToolWindow.cs:99-123`) and the
 motion hook at `:125-137`; you must not add your own storyboards. Measure the surface: it appears in the
