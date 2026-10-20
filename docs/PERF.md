@@ -99,19 +99,20 @@ variance into a red PR. The same reasoning applies to the idle baseline (77.0 MB
 
 ## Measured on this branch (2.4.0)
 
-Merge-prep CI runs [39372348098](https://github.com/Faisaldhd/dropwheel/actions/runs/39372348098) (PR
-check) and [39372345469](https://github.com/Faisaldhd/dropwheel/actions/runs/39372345469) (push) at
-commit `29de7cb`, with main merged in and all 25 registered tools present. The PR check prints the same
+Merge-prep CI runs [39376378245](https://github.com/Faisaldhd/dropwheel/actions/runs/39376378245) (PR
+check) and [39376373373](https://github.com/Faisaldhd/dropwheel/actions/runs/39376373373) (push) at
+commit `73bd6f7`, with main merged in and all 26 registered tools present. The PR check prints the same
 baseline/current/delta table in the job summary and the per-tool table in `self-test.txt`.
 
 | metric | v2.3.0 baseline | current | delta | budget |
 | --- | ---: | ---: | ---: | ---: |
-| installer | 62,967,948 B (60.05 MiB) | 63,377,572 B (60.44 MiB) | +409,624 B (+0.39 MiB) | +6 MiB |
-| portable zip | 89,266,161 B (85.13 MiB) | 89,832,917 B (85.67 MiB) | +566,756 B (+0.54 MiB) | +6 MiB |
-| cold start | 1,500 ms recorded (759–1,290 ms observed) | 755 ms (1,038 ms on the concurrent push run) | −745 ms | 1,575 ms (−5 % rule) |
-| idle memory | 77.0 MB | 76.7 MB | −0.3 MB | 92.0 MB (−15 MB rule) |
+| installer | 62,967,948 B (60.05 MiB) | 63,486,766 B (60.55 MiB) | +518,818 B (+0.49 MiB) | +6 MiB |
+| portable zip | 89,266,161 B (85.13 MiB) | 89,967,516 B (85.80 MiB) | +701,355 B (+0.67 MiB) | +6 MiB |
+| cold start | 1,500 ms recorded (759–1,290 ms observed) | 839 ms (945 ms on the concurrent push run) | −661 ms | 1,575 ms (−5 % rule) |
+| idle memory | 77.0 MB | 76.5 MB (76.7 MB on the push run) | −0.5 MB | 92.0 MB (−15 MB rule) |
 
-The two packages grew by ~0.4–0.5 MiB for all 25 tools and their strings; the budget is +6 MiB.
+The two packages grew by ~0.5–0.7 MiB for all 26 tools, their strings and the lock assets; the budget
+is +6 MiB.
 
 ### Per-tool open/close (20 cycles after one warm-up)
 
@@ -120,35 +121,36 @@ run; the push run differs only by collection timing (the largest deltas repeat w
 
 | tool | opens | baseline MB | final MB | delta | peak MB | result |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `tools.audiobleep` | 20 | 225.7 | 216.7 | −8.9 | 225.7 | ok |
-| `tools.audiochannels` | 20 | 217.2 | 217.2 | 0.0 | 217.2 | ok |
-| `tools.audionormalize` | 20 | 215.7 | 220.1 | +4.4 | 221.3 | ok |
-| `tools.audiotrim` | 20 | 220.9 | 220.9 | −0.1 | 220.9 | ok |
-| `tools.audiovisualizer` | 20 | 221.5 | 223.2 | +1.8 | 223.2 | ok |
-| `tools.collage` | 20 | 225.1 | 227.9 | +2.8 | 229.1 | ok |
-| `tools.compress` | 20 | 228.8 | 229.2 | +0.4 | 229.2 | ok |
-| `tools.annotate` | 20 | 230.0 | 227.6 | −2.4 | 230.3 | ok |
-| `tools.crop` | 20 | 229.4 | 224.4 | −5.1 | 229.4 | ok |
-| `tools.editphotos` | 20 | 225.6 | 230.7 | +5.1 | 230.7 | ok |
-| `tools.addbackground` | 20 | 231.1 | 222.5 | −8.6 | 231.2 | ok |
-| `tools.redact` | 20 | 223.2 | 221.2 | −1.9 | 223.6 | ok |
-| `tools.metadata` | 20 | 221.8 | 231.2 | +9.5 | 231.2 | ok |
-| `tools.protect` | 20 | 231.6 | 231.0 | −0.7 | 231.6 | ok |
-| `tools.unlock` | 20 | 231.8 | 227.4 | −4.4 | 231.8 | ok |
-| `tools.pdfmerge` | 20 | 229.7 | 232.3 | +2.5 | 232.5 | ok |
-| `tools.pdforganize` | 20 | 233.5 | 231.8 | −1.7 | 233.5 | ok |
-| `tools.qr` | 20 | 233.7 | 226.4 | −7.3 | 233.7 | ok |
-| `tools.videocrop` | 20 | 227.2 | 226.6 | −0.6 | 227.7 | ok |
-| `tools.videoframes` | 20 | 227.3 | 226.6 | −0.7 | 227.3 | ok |
-| `tools.videojoin` | 20 | 227.5 | 235.6 | +8.2 | 235.6 | ok |
-| `tools.videoredact` | 20 | 236.1 | 236.3 | +0.2 | 236.3 | ok |
-| `tools.videospeed` | 20 | 236.9 | 232.0 | −4.9 | 236.9 | ok |
-| `tools.videosplit` | 20 | 232.6 | 231.4 | −1.1 | 232.6 | ok |
-| `tools.videotrim` | 20 | 232.1 | 236.1 | +4.0 | 236.1 | ok |
+| `tools.audiobleep` | 20 | 226.3 | 219.2 | −7.1 | 226.3 | ok |
+| `tools.audiochannels` | 20 | 219.7 | 217.1 | −2.5 | 220.2 | ok |
+| `tools.audionormalize` | 20 | 228.7 | 225.9 | −2.7 | 228.7 | ok |
+| `tools.audiotrim` | 20 | 226.7 | 232.1 | +5.3 | 232.1 | ok |
+| `tools.audiovisualizer` | 20 | 232.6 | 225.5 | −7.1 | 232.6 | ok |
+| `tools.collage` | 20 | 228.4 | 233.2 | +4.8 | 233.2 | ok |
+| `tools.compress` | 20 | 233.9 | 230.7 | −3.1 | 233.9 | ok |
+| `tools.annotate` | 20 | 231.8 | 227.8 | −4.0 | 231.8 | ok |
+| `tools.crop` | 20 | 229.5 | 231.5 | +2.0 | 231.5 | ok |
+| `tools.editphotos` | 20 | 232.5 | 235.7 | +3.3 | 235.8 | ok |
+| `tools.addbackground` | 20 | 236.1 | 230.7 | −5.5 | 236.3 | ok |
+| `tools.redact` | 20 | 231.6 | 226.7 | −4.9 | 231.6 | ok |
+| `tools.lock` | 20 | 228.4 | 232.6 | +4.1 | 232.6 | ok |
+| `tools.metadata` | 20 | 233.6 | 238.9 | +5.2 | 239.1 | ok |
+| `tools.protect` | 20 | 238.8 | 233.0 | −5.7 | 239.2 | ok |
+| `tools.unlock` | 20 | 233.8 | 233.3 | −0.6 | 233.8 | ok |
+| `tools.pdfmerge` | 20 | 236.6 | 238.2 | +1.6 | 238.2 | ok |
+| `tools.pdforganize` | 20 | 239.4 | 230.3 | −9.1 | 239.5 | ok |
+| `tools.qr` | 20 | 232.2 | 232.1 | −0.1 | 232.6 | ok |
+| `tools.videocrop` | 20 | 232.9 | 233.5 | +0.5 | 233.6 | ok |
+| `tools.videoframes` | 20 | 233.9 | 233.2 | −0.8 | 234.0 | ok |
+| `tools.videojoin` | 20 | 233.5 | 238.3 | +4.7 | 238.9 | ok |
+| `tools.videoredact` | 20 | 238.6 | 228.5 | −10.1 | 238.6 | ok |
+| `tools.videospeed` | 20 | 230.1 | 233.1 | +3.0 | 234.3 | ok |
+| `tools.videosplit` | 20 | 232.9 | 225.9 | −7.1 | 232.9 | ok |
+| `tools.videotrim` | 20 | 228.0 | 235.2 | +7.3 | 235.3 | ok |
 
-All 25 tools stay within the +16 MB tolerance (the largest healthy delta is `tools.metadata`, +9.5 MB
-here and +11.3 MB on the push run), with no leaked `ffmpeg.exe` and no temp file. The working set
-fluctuates with collection timing; the tolerance is +16 MB.
+All 26 tools stay within the +16 MB tolerance (the largest delta here is `tools.videotrim`, +7.3 MB;
+earlier 26-tool runs measured up to +11.3 MB for `tools.metadata`), with no leaked `ffmpeg.exe` and no
+temp file. The working set fluctuates with collection timing; the tolerance is +16 MB.
 
 The loop is data-driven from `ToolRegistry.All`: every tool merged into main is exercised automatically.
 A tool that grows the working set by more than 16 MB, leaves `ffmpeg.exe` running, or leaves a file in
@@ -217,8 +219,10 @@ shipped-payload guard runs again in the package job on the exact packaged folder
 2. **Idle working set** — after the dispatcher reaches `ApplicationIdle` and a forced full GC, right
    after launch. Fails when `actual > baseline + 15 MB` (92.0 MB).
 3. **Per-tool open/close** — one warm-up cycle (which pays the one-time renderer/native load and
-   renders the tool's preview), then 20 create → prepare → show offscreen → close cycles. Working set is
-   sampled after a forced GC on every cycle; the final reading must stay within **+16 MB** of the
+   renders the tool's preview), then 20 create → show offscreen → prepare → close cycles. The window is
+   shown before it is prepared because a tool may complete its `Ready` task from `Loaded`
+   (`tools.lock` does); motion is forced off for the loop so `Close()` is synchronous and the working
+   set is sampled after a forced GC on every cycle. The final reading must stay within **+16 MB** of the
    post-warm-up baseline. `TEMP`/`TMP` are redirected to a private folder for the loop, and the folder
    must be empty afterwards. New `ffmpeg` PIDs are a failure.
 4. **Lazy registration** — the checks described above.
