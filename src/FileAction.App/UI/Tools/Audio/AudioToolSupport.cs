@@ -102,7 +102,7 @@ internal sealed class WaveformView : FrameworkElement
 {
     private const double LaneGap = 6;
 
-    private static readonly Brush HitBrush = CreateHitBrush();
+    private static readonly Brush HitBrush = AudioTheme.HitBrush;
 
     private readonly Brush _waveBrush = Theme.Accent;
     private readonly Brush _laneBrush = Theme.Track;
@@ -219,13 +219,6 @@ internal sealed class WaveformView : FrameworkElement
                 return true;
         }
         return false;
-    }
-
-    private static Brush CreateHitBrush()
-    {
-        var brush = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
-        brush.Freeze();
-        return brush;
     }
 }
 
