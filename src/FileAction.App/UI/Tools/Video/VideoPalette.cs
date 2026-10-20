@@ -21,6 +21,12 @@ internal static class VideoPalette
         new("0x8224D4", Color.FromRgb(0x82, 0x24, 0xD4)),
     ];
 
+    /// <summary>Opaque black and white for dim overlays and the playhead; frozen once and shared.</summary>
+    public static readonly Brush Black = Freeze(new SolidColorBrush(Colors.Black));
+    public static readonly Brush White = Freeze(new SolidColorBrush(Colors.White));
+
+    /// <summary>The same colour at a lower alpha (colour form of <see cref="Tint"/>).</summary>
+    public static Color WithAlpha(Color color, byte alpha) => Color.FromArgb(alpha, color.R, color.G, color.B);
     /// <summary>A brush that is hit-testable but paints nothing (panels need this for mouse input).</summary>
     public static readonly Brush Transparent = Freeze(new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)));
 

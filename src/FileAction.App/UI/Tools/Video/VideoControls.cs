@@ -191,7 +191,7 @@ internal sealed class VideoRateSlider : Grid
         {
             Width = ThumbSize,
             Height = ThumbSize,
-            Fill = Brushes.White,
+            Fill = VideoPalette.White,
             Stroke = Theme.PanelBorder,
             StrokeThickness = 1,
             HorizontalAlignment = HorizontalAlignment.Left,
@@ -202,7 +202,7 @@ internal sealed class VideoRateSlider : Grid
         {
             Width = SurfaceWidth,
             Height = 26,
-            Background = Brushes.Transparent,
+            Background = VideoPalette.Transparent,
             Cursor = Cursors.Hand,
         };
         _surface.Children.Add(track);

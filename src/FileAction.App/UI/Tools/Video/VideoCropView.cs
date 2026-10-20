@@ -32,7 +32,7 @@ internal sealed class VideoCropView
     private readonly DropTargets? _targets;
     private readonly VideoEditPreview _preview;
     private readonly VideoTimeline _timeline = new(compact: true);
-    private readonly Canvas _canvas = new() { ClipToBounds = true, Background = Brushes.Transparent, Visibility = Visibility.Collapsed };
+    private readonly Canvas _canvas = new() { ClipToBounds = true, Background = VideoPalette.Transparent, Visibility = Visibility.Collapsed };
     private readonly Border _frame = new()
     {
         BorderBrush = Theme.Accent,
@@ -41,14 +41,14 @@ internal sealed class VideoCropView
     };
     private readonly Rectangle[] _dims =
     [
-        new() { Fill = Brushes.Black, Opacity = 0.55, IsHitTestVisible = false },
-        new() { Fill = Brushes.Black, Opacity = 0.55, IsHitTestVisible = false },
-        new() { Fill = Brushes.Black, Opacity = 0.55, IsHitTestVisible = false },
-        new() { Fill = Brushes.Black, Opacity = 0.55, IsHitTestVisible = false },
+        new() { Fill = VideoPalette.Black, Opacity = 0.55, IsHitTestVisible = false },
+        new() { Fill = VideoPalette.Black, Opacity = 0.55, IsHitTestVisible = false },
+        new() { Fill = VideoPalette.Black, Opacity = 0.55, IsHitTestVisible = false },
+        new() { Fill = VideoPalette.Black, Opacity = 0.55, IsHitTestVisible = false },
     ];
     private readonly Border _moveSurface = new()
     {
-        Background = Brushes.Transparent,
+        Background = VideoPalette.Transparent,
         Cursor = Cursors.SizeAll,
     };
     private readonly List<(CropHandle Handle, Border Element)> _handles = [];

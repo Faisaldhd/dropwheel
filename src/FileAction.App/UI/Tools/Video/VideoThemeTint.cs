@@ -33,7 +33,7 @@ internal readonly record struct VideoThemePalette(
             ColorOf(Theme.Page),
             panel,
             // The shared ToolWindow paints its glass as Panel with a fixed alpha; derive the same colour.
-            Color.FromArgb(0xE6, panel.R, panel.G, panel.B));
+            VideoPalette.WithAlpha(panel, 0xE6));
     }
 
     private static Color ColorOf(Brush brush) => (brush as SolidColorBrush)?.Color ?? default;

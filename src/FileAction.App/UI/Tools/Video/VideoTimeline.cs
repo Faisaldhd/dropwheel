@@ -25,8 +25,8 @@ internal sealed class VideoTimeline : Grid
     private readonly Canvas _track = new() { ClipToBounds = true };
     private readonly Grid _ruler = new() { Height = RulerHeight };
     private readonly List<WpfImage> _frames = [];
-    private readonly Rectangle _dimLeft = new() { Fill = Brushes.Black, Opacity = 0.55, IsHitTestVisible = false };
-    private readonly Rectangle _dimRight = new() { Fill = Brushes.Black, Opacity = 0.55, IsHitTestVisible = false };
+    private readonly Rectangle _dimLeft = new() { Fill = VideoPalette.Black, Opacity = 0.55, IsHitTestVisible = false };
+    private readonly Rectangle _dimRight = new() { Fill = VideoPalette.Black, Opacity = 0.55, IsHitTestVisible = false };
     private readonly Border _selection = new()
     {
         BorderBrush = Theme.Accent,
@@ -38,7 +38,7 @@ internal sealed class VideoTimeline : Grid
     };
     private readonly Border _startHandle;
     private readonly Border _endHandle;
-    private readonly Rectangle _playhead = new() { Width = 2, Fill = Brushes.White, Opacity = 0.92, IsHitTestVisible = false };
+    private readonly Rectangle _playhead = new() { Width = 2, Fill = VideoPalette.White, Opacity = 0.92, IsHitTestVisible = false };
     private readonly TextBlock[] _rulerLabels = new TextBlock[5];
 
     private TimeSpan _duration;
