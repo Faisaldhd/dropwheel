@@ -3,6 +3,20 @@
 **The release that makes the Tools wheel a set of real instruments.** 26 floating tool windows, one
 motion language, and password protection for your files — all local, all purple, English and Arabic.
 
+## What changed since v2.3.0
+
+Six pull requests were merged into `main` after the v2.3.0 tag. Each row names the merge commit and the
+evidence that the change is in this build.
+
+| PR | Merge | What it changed | Evidence |
+|---|---|---|---|
+| #39 | `3ba599cc` | The bilingual website (`docs/site`) rebuilt for 2.4.0 — English and Arabic, release markers stamped at deploy, real UI captures, social cards/robots/sitemap, the redrawn brand icon with an icon CI gate, and site CI gates (page weight, links, Lighthouse) | 72 commits; `docs/site/index.html`, `scripts/site/*`, `.github/workflows/site-ci.yml`, `.github/workflows/icon-ci.yml` |
+| #55 | `8a5d7804` | The six separate bug hunts consolidated into `docs/audit/BUG-HUNT.md`, with RC-01 and UP-01 acceptance tests specified for the fix lanes | `docs/audit/BUG-HUNT.md`, `docs/audit/BUG-HUNT-RACES.md` |
+| #45 | `e0c8ca05` | Audit fixes group 1 — F-02 the PDF tools open their own window again, F-03 "repeat last action" remembers interactive tools, F-04 Video Split/Join honour the drop folder, F-07 a zero-page PDF fails with a message instead of an empty folder | `PdfToolOperations.cs:35,60`; `WheelController.cs:256-268`; `VideoSplitTool.cs:137`, `VideoJoinTool.cs:114`; `PdfBackend.cs:27,65` (`error.pdf.noPages`) |
+| #57 | `8e903be6` | RC-01, first part: a tool window can no longer close while its Apply is still writing, so the write always has an owner until it ends | `ToolWindow.cs:265-272`; `ToolCloseDuringApplyTests` |
+| #48 | `2dcb59c4` | Lock: a relock is refused when the unlocked file or folder changed since the last save (the good container is kept), and a file is deleted before it is zeroed so a failed delete can never re-encrypt zeros over the container | `LockService.cs:282,288,897-898` |
+| #58 | `7c6587e6` | UP-01: an unreadable or corrupt `settings.json` is copied to `settings.bad-<timestamp>.json` before the app falls back to defaults, and the user is told once — settings are never silently destroyed | `AppSettings.cs:63-72,160`; `edfacaa0` (tests) |
+
 ## Highlights
 
 - **26 tool windows.** Choosing a tool on the Tools wheel (Ctrl) now opens a card over the file instead
@@ -18,10 +32,11 @@ motion language, and password protection for your files — all local, all purpl
 - **Password protection.** AES-256 for a ZIP or a PDF copy, and **Remove password** to get back in.
   **Lock** (Beta) goes further: a file becomes one `.dwenc` container and a folder a `.dwdir`, in place,
   with a Rescuer password and a one-time recovery key.
-- **Light and fast, and measured.** Motion gate drives the wheel + 11 image-family tool windows (15
-  media-family tools skipped and named in `motion/report.md`), en-LTR, runner theme; all 26 share the
-  animated chrome code path; UI p95 0.02-0.04 ms, idle CPU 0.00 %, retention 0.0 MB
-  ([PERF.md](PERF.md), run `39376236166`).
+- **Light and fast, and measured.** The motion gate drives the wheel plus the **11 image-family tool
+  windows** (the 15 media-family tools are skipped and named in `motion/report.md`), en-LTR, runner
+  theme; all 26 windows share the animated chrome code path the gate covers. In run
+  `39376236166` the UI frame p95 stayed at or under **0.04 ms**, idle CPU at **0.00 %** and retention at
+  **0.0 MB**, against gates of 16.7 ms, 5 % and 12 MB (`docs/PERF.md`).
 
 ## New tools
 
@@ -36,7 +51,8 @@ motion language, and password protection for your files — all local, all purpl
 | Reading | **QR Code** — decodes offline and only ever opens `http`/`https` |
 
 The full reference — id, English and Arabic title, inputs, output names and controls — is in
-[docs/TOOLS.md](TOOLS.md).
+[docs/TOOLS.md](TOOLS.md). The 26 tool ids registered in `ToolRegistry` are the single list every slice
+opens from.
 
 ## Also in this release
 
@@ -49,6 +65,9 @@ The full reference — id, English and Arabic title, inputs, output names and co
   Copy", "Encrypt"…); **Reset** restores the defaults, **Esc** closes without writing, **Enter** applies.
 - Settings keeps its six tabs and gains **Animations** under General. An in-place upgrade keeps your
   settings and your chosen install mode.
+- Both string tables carry **1,111 keys each** with identical key sets and placeholders, enforced by
+  `LocalizationTests` in CI; the self-test renders the shipped build in English and Arabic, light and
+  dark, and the independent `ui-coverage` gate rasterises every window in both languages.
 
 ## Install or upgrade
 
@@ -62,21 +81,45 @@ The binaries are Authenticode-unsigned for now, so Windows SmartScreen may ask o
 **Run anyway**). Auto-updates are separately signed and verified against the public key built into the
 app before anything runs.
 
-## Known limits
+The website publishes only after a verified release: the Pages workflow is manual, resolves the newest
+stable release, refuses to stamp unless the setup is listed in that release's `SHA256SUMS.txt`, stamps
+the version/size/SHA-256 into every marker, and uploads the stamped copy — never the repository file.
+Until then the download page keeps pointing at the last signed release.
+
+## Known issues
 
 Every gap names its owner, so a limit is never mistaken for something forgotten.
 
-- **Lock is Beta.** The container, Rescuer envelope, auto-relock and crash recovery are covered by tests,
-  but the format has not been signed off. **Owner: owner sign-off, a release gate.**
+- **RC-01 — partial fix shipped; the remaining partial-file-on-cancel risk is deferred to 2.4.1.**
+  Shipped in 2.4.0: closing a tool window while Apply is writing is now blocked until the write
+  finishes — `ToolApplyState` keeps the close deferred until the write ends (`ToolWindow.cs`, test
+  `ToolCloseDuringApplyTests`, commit `27350fe`, PR #57). Still open: a partial output file can still
+  remain when an operation is **cancelled or fails mid-write**, because the four writers that write the
+  final name directly — Crop, Edit Photos, Annotate, Redact (e.g. `CropTool.cs:461-462`) — do not go
+  through `OutputPaths.ProduceAsync`, which is what deletes the temporary file; the residual row is
+  still open in `docs/audit/BUG-HUNT-RACES.md`. **Owner: release gate for 2.4.1.**
+- **Cold start is over its budget with all 26 tools registered.** The measured start was **3,118 ms**
+  against the **1,575 ms** gate (1,500 ms baseline + the 5 % rule, `LaunchBudget.ColdStartMs`). The gate
+  itself is correct and unchanged; the measured number is tracked in [BACKLOG.md](BACKLOG.md) for
+  **2.4.1**.
+- **Lock is Beta.** The container, Rescuer envelope, auto-relock and crash recovery are covered by
+  tests, but the format has not been signed off. **Owner: owner sign-off, a release gate.**
 - **Redact image has no face detection** in this build; manual areas and Windows OCR text detection do
   ship. **Owner: none assigned** (`docs/BACKLOG.md`).
 - **QR Code is read-only** — it decodes a code, it does not create one. **Owner: none**, not planned for
   2.4.x.
-- Video and audio tools need **FFmpeg**; without it their slices show the helper-tool prompt (by design —
-  the tools stay out of the package).
-- The **per-window bilingual rendering gate** (every tool window in English and Arabic at 100/150/200 %
-  DPI) is **`audit/selftest`, PR #37, in flight**. What is enforced today: both string tables are
-  complete and identical in structure (1,107 keys each), with parity enforced by `LocalizationTests` in
-  CI, and the self-test renders the shipped build in English and Arabic, light and dark.
-- **Light-mode contrast and the video timer** are **`audit/amotion` / `audit/adesign`, in flight**.
+- Video and audio tools need **FFmpeg**; without it their slices show the helper-tool prompt (by
+  design — the tools stay out of the package).
+- **The `ui-coverage` gate asserts 100 % and 150 % DPI; the 200 % case is still missing** and is tracked
+  in [BACKLOG.md](BACKLOG.md). What is enforced today: every window rasterised in English and Arabic
+  with localized-title, raw-key, bidi and RTL-root assertions, plus string-table parity.
 - Deferred, non-blocking work is tracked in [BACKLOG.md](BACKLOG.md).
+
+## Credits
+
+DropWheel is based on [FileAction](https://github.com/Metamorfolog/file_action) by **Metamorfolog**,
+released under the MIT licence. The MIT text is kept verbatim with `Copyright (c) 2026 Metamorfolog`
+plus `Copyright (c) 2026 DropWheel` in [LICENSE](LICENSE); [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
+lists the other libraries (Magick.NET, SkiaSharp, PDFium, FFmpeg, Pandoc and the .NET runtime) with their
+own licences. DropWheel is an independent continuation and is not affiliated with the upstream project
+or with Tangerine.
