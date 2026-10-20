@@ -1092,5 +1092,15 @@
   "tool.protect.warn.checkbox": "I understand; I want to encrypt",
   "tool.protect.warn.leftover": "The file is encrypted, but the plaintext could not be removed: {0}",
   "tool.protect.warn.protect": "Encrypt",
-  "tool.protect.warn.title": "The file will be encrypted"
+  "tool.protect.warn.title": "The file will be encrypted",
+  "settings.protection.open": "Open protection settings",
+  "settings.protection.section": "Protection",
+  "settings.protection.detail": "Rescuer password, auto-lock grace, file associations and updating protected files.",
+  "settings.protection.title": "Lock settings",
+  "tool.lock.recovery.tempTitle": "Leftover temporary files",
+  "tool.lock.recovery.incompleteBody": "DropWheel stopped while unlocking {0}. The unfinished temporary copy can be discarded; the protected file is unchanged.",
+  "tool.lock.recovery.tempBody": "DropWheel found leftover temporary restore files. Delete them? They are not needed and the protected files are unchanged.",
+  "tool.lock.recovery.incompleteTitle": "Incomplete unlock",
+  "tool.lock.rescuer.keyOnlyTitle": "Use the Rescuer key",
+  "tool.lock.rescuer.keyOnlyBody": "Enter the 24-character recovery key to reset the Rescuer password. The key is not stored."
 }

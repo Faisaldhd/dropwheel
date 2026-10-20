@@ -1,3 +1,4 @@
+using FileAction.App.Shell.Protection;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -71,7 +72,7 @@ internal static class SelfTest
 
             log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
             // Saved after every step, so a hard crash (which skips the catch below) still shows where it stopped.
-            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestOcr(outDir, log), () => TestToolWindows(outDir, log), () => MotionSelfTest.Run(outDir, log), () => RenderMotionClips(outDir, log) })
+            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestOcr(outDir, log), () => TestToolWindows(outDir, log), () => MotionSelfTest.Run(outDir, log), () => RenderMotionClips(outDir, log), () => LockWiring.RunSelfTest(outDir, log) })
             {
                 File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
                 step();

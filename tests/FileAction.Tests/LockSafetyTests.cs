@@ -62,6 +62,9 @@ public class LockSafetyTests
     {
         public List<(string Path, bool Recycle)> Removed { get; } = [];
         public List<string> Notified { get; } = [];
+        public bool SessionOpen { get; set; }
+
+        public bool IsSessionOpen(string protectedPath) => SessionOpen;
 
         public void RemoveContainer(string protectedPath, bool recycleBin)
         {
@@ -1374,6 +1377,91 @@ public class LockSafetyTests
         var pixels = new byte[stride * converted.PixelHeight];
         converted.CopyPixels(pixels, stride, 0);
         return pixels;
+    }
+    [Fact]
+    public void Protect_writes_three_slots_that_each_open_the_same_container()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var file = Path.Combine(directory, "slots.txt");
+            WriteFile(file, "slots");
+            var credentials = Credentials();
+            var container = NewService().Protect(file, directory, credentials).OutputPath;
+            using var stream = new FileStream(container, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var header = LockContainer.ReadHeader(stream);
+            foreach (var secret in new[] { credentials.FilePassword, credentials.RescuerPassword,
+                         credentials.RescuerKey })
+            {
+                Assert.True(LockContainer.TryUnwrap(header, secret, out var key, out _));
+                LockSecrets.Wipe(key);
+            }
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void Protect_refuses_when_the_folder_changes_after_the_archive_started()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var folder = Path.Combine(directory, "Changing");
+            Directory.CreateDirectory(folder);
+            WriteFile(Path.Combine(folder, "big.bin"), new string('x', 2 * 1024 * 1024));
+            var added = 0;
+            var progress = new ActionProgress(value =>
+            {
+                if (value.Stage == LockStage.Encrypting && value.Done > 0 && Interlocked.Exchange(ref added, 1) == 0)
+                    WriteFile(Path.Combine(folder, "late.txt"), "late");
+            });
+            Assert.Throws<LockChangedException>(() =>
+                NewService().Protect(folder, directory, Credentials(), progress: progress));
+            Assert.True(Directory.Exists(folder));
+            Assert.True(File.Exists(Path.Combine(folder, "late.txt")));
+            Assert.Empty(Directory.GetFiles(directory, "*.dwdir*"));
+            Assert.Empty(Directory.GetFiles(directory, "*.tmp*"));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void Unprotect_refuses_the_key_alone_and_an_open_session()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var file = Path.Combine(directory, "policy.txt");
+            WriteFile(file, "policy");
+            var credentials = Credentials();
+            var host = new FakeHost();
+            var service = new LockService(new LockEnvironment([], []), host, minimumIterations: 1000,
+                newSlotIterations: 1000);
+            var container = service.Protect(file, directory, credentials).OutputPath;
+
+            Assert.Throws<LockPolicyException>(() =>
+                service.Unprotect(container, credentials.RescuerKey, recycleContainer: false));
+            Assert.True(File.Exists(container));
+            Assert.False(File.Exists(file));
+
+            host.SessionOpen = true;
+            Assert.Throws<LockPolicyException>(() =>
+                service.Unprotect(container, credentials.FilePassword, recycleContainer: false));
+            Assert.True(File.Exists(container));
+            host.SessionOpen = false;
+            Assert.True(File.Exists(service.Unprotect(container, credentials.FilePassword,
+                recycleContainer: false).RestoredPath));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
     }
     // ------------------------------------------------------------------ helpers
 

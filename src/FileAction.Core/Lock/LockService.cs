@@ -59,6 +59,9 @@ public interface ILockHost
     void RemoveContainer(string protectedPath, bool recycleBin);
 
     void NotifyShell(string path);
+
+    /// <summary>True when an open DropWheel session still owns this container; defaults to false for tests.</summary>
+    bool IsSessionOpen(string protectedPath) => false;
 }
 
 /// <summary>The host used by tests and by callers that only need the file operations.</summary>
@@ -96,8 +99,12 @@ public sealed class LockService(
     private readonly ILockHost _host = host ?? NullLockHost.Instance;
     private readonly int _minimumIterations = Math.Max(1, minimumIterations);
     private readonly int _newSlotIterations = Math.Max(1, newSlotIterations);
+    private readonly string _restoreTemp = (environment ?? LockEnvironment.Default()).RestoreTempPath;
 
     public LockEnvironment Environment => _environment;
+
+    /// <summary>Where in-progress restore staging files live, so callers can sweep orphans.</summary>
+    public string RestoreTempFolder => _restoreTemp;
 
     // ------------------------------------------------------------------ protect
 
@@ -194,7 +201,13 @@ public sealed class LockService(
                 destination.Flush(flushToDisk: true);
             }
 
-            VerifyContainer(temp, dataKey, result.Digest, credentials.FilePassword, progress, cancellationToken);
+            if (isDirectory && !keepSource)
+            {
+                var currentEntries = LockArchive.CountEntries(full);
+                if (currentEntries != meta.EntryCount)
+                    throw new LockChangedException($"{meta.EntryCount} entries were archived but the folder now has {currentEntries}");
+            }
+            VerifyContainer(temp, dataKey, result.Digest, credentials, progress, cancellationToken);
             progress?.Report(new LockProgress(LockStage.Finalizing, result.Digest.Length, result.Digest.Length));
             File.Move(temp, target); // never overwrites: fail closed instead of losing an existing container
 
@@ -239,7 +252,8 @@ public sealed class LockService(
         string plaintextPath,
         string? folderIconPath = null,
         IProgress<LockProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int expectedEntryCount = 0)
     {
         ArgumentNullException.ThrowIfNull(header);
         ArgumentNullException.ThrowIfNull(dataKey);
@@ -257,6 +271,12 @@ public sealed class LockService(
         }
 
         var isDirectory = Directory.Exists(plaintextPath);
+        if (isDirectory && expectedEntryCount > 0)
+        {
+            var currentEntries = LockArchive.CountEntries(plaintextPath);
+            if (currentEntries != expectedEntryCount)
+                throw new LockChangedException($"{expectedEntryCount} entries were expected but the folder now has {currentEntries}");
+        }
         var meta = isDirectory
             ? BuildFolderMeta(plaintextPath, folderIconPath)
             : LockMeta.ForFile(plaintextPath);
@@ -322,6 +342,13 @@ public sealed class LockService(
         var full = LockPaths.Normalize(protectedPath);
         if (!File.Exists(full))
             throw new FileNotFoundException("The protected file is gone.", full);
+        if (_host.IsSessionOpen(full))
+            throw new LockPolicyException("Lock this file first: it is open in a DropWheel session.");
+        var (header, dataKey, kind) = OpenHeader(full, secret);
+        LockSecrets.Wipe(dataKey);
+        if (kind == LockSecretKind.RescuerKey)
+            throw new LockPolicyException("The Rescuer key opens a file, but it cannot remove protection by itself. " +
+                "Use the file password or the Rescuer password.");
         var directory = Path.GetDirectoryName(full)!;
 
         var extracted = ExtractTo(full, secret, directory, progress, cancellationToken);
@@ -407,7 +434,8 @@ public sealed class LockService(
         IProgress<LockProgress>? progress,
         CancellationToken cancellationToken)
     {
-        var staging = Path.Combine(destinationDirectory, ".dwrestore-" + Guid.NewGuid().ToString("N") + ".tmp");
+        Directory.CreateDirectory(_restoreTemp);
+        var staging = Path.Combine(_restoreTemp, ".dwrestore-" + Guid.NewGuid().ToString("N") + ".tmp");
         LockReadResult read;
         try
         {
@@ -422,7 +450,7 @@ public sealed class LockService(
             }
 
             var final = UniqueRestored(destinationDirectory, read.Meta.Name, File.Exists, Directory.Exists);
-            File.Move(staging, final);
+            MoveFile(staging, final);
             FolderAppearance.RestoreTimes(final, read.Meta, directory: false);
             ApplyFileAttributes(final, read.Meta.Attributes);
             return new ExtractOutcome(final, read, header, dataKey);
@@ -442,8 +470,9 @@ public sealed class LockService(
         IProgress<LockProgress>? progress,
         CancellationToken cancellationToken)
     {
-        var archive = Path.Combine(destinationDirectory, ".dwrestore-" + Guid.NewGuid().ToString("N") + ".archive");
-        var staging = Path.Combine(destinationDirectory, ".dwrestore-" + Guid.NewGuid().ToString("N") + ".dir");
+        Directory.CreateDirectory(_restoreTemp);
+        var archive = Path.Combine(_restoreTemp, ".dwrestore-" + Guid.NewGuid().ToString("N") + ".archive");
+        var staging = Path.Combine(_restoreTemp, ".dwrestore-" + Guid.NewGuid().ToString("N") + ".dir");
         LockReadResult read;
         try
         {
@@ -468,7 +497,7 @@ public sealed class LockService(
             FolderAppearance.Restore(staging, read.Meta.PreviousDesktopIni, read.Meta.PreviousDesktopIniAttributes);
 
             var final = UniqueRestored(destinationDirectory, read.Meta.Name, File.Exists, Directory.Exists);
-            Directory.Move(staging, final);
+            MoveDirectory(staging, final);
             FolderAppearance.RestoreFolderAttributes(final, read.Meta.Attributes);
             FolderAppearance.RestoreTimes(final, read.Meta, directory: true);
             progress?.Report(new LockProgress(LockStage.Done, read.Digest.Length, read.Digest.Length));
@@ -619,6 +648,12 @@ public sealed class LockService(
             journal.Delete(record.Id);
             return;
         }
+        if (record.IsDirectory && record.EntryCount > 0)
+        {
+            var currentEntries = LockArchive.CountEntries(plaintext);
+            if (currentEntries != record.EntryCount)
+                throw new LockChangedException($"{record.EntryCount} entries were expected but the session now has {currentEntries}");
+        }
 
         var stagingTarget = container + ".recover";
         var containerExists = File.Exists(container);
@@ -722,7 +757,7 @@ public sealed class LockService(
         string path,
         byte[] dataKey,
         LockDigest expected,
-        string? filePassword,
+        LockCredentials? credentials,
         IProgress<LockProgress>? progress,
         CancellationToken cancellationToken)
     {
@@ -735,11 +770,23 @@ public sealed class LockService(
             cancellationToken);
         if (read.Digest.Length != expected.Length || !LockSecrets.SameHash(read.Digest.Sha256, expected.Sha256))
             throw new LockDamagedException("the new container does not match the source");
-        if (filePassword is not null)
+        if (credentials is not null)
         {
-            if (!LockContainer.TryUnwrap(header, filePassword, out var check, out _))
-                throw new LockDamagedException("the file password slot does not open the new container");
-            LockSecrets.Wipe(check);
+            foreach (var secret in new[] { credentials.FilePassword, credentials.RescuerPassword,
+                         credentials.RescuerKey })
+            {
+                using var slotStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                    256 * 1024, FileOptions.SequentialScan);
+                var slotHeader = LockContainer.ReadHeader(slotStream);
+                if (!LockContainer.TryUnwrap(slotHeader, secret, out var check, out _))
+                    throw new LockDamagedException("a written slot does not open the new container");
+                if (!LockSecrets.SameHash(check, dataKey))
+                {
+                    LockSecrets.Wipe(check);
+                    throw new LockDamagedException("a written slot opens a different data key");
+                }
+                LockSecrets.Wipe(check);
+            }
         }
     }
 
@@ -873,6 +920,40 @@ public sealed class LockService(
         }
     }
 
+    private static void MoveFile(string source, string destination)
+    {
+        try
+        {
+            File.Move(source, destination);
+        }
+        catch (IOException)
+        {
+            File.Copy(source, destination, overwrite: false);
+            File.Delete(source);
+        }
+    }
+    /// <summary>Moves a restore folder to its destination, falling back to copy+delete across volumes.</summary>
+    private static void MoveDirectory(string source, string destination)
+    {
+        try
+        {
+            Directory.Move(source, destination);
+        }
+        catch (IOException)
+        {
+            CopyDirectory(source, destination);
+            Directory.Delete(source, recursive: true);
+        }
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var file in Directory.EnumerateFiles(source))
+            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: false);
+        foreach (var directory in Directory.EnumerateDirectories(source))
+            CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
+    }
     private static void DeleteStale(string path)
     {
         try

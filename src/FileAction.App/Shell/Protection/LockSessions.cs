@@ -89,12 +89,41 @@ internal sealed class LockSessionManager
         var id = Guid.NewGuid().ToString("N");
         var tempRoot = Path.Combine(ProtectionPaths.SessionsFolder, id);
         Directory.CreateDirectory(tempRoot);
-        // Extraction can take seconds for a large file; the UI thread stays responsive and the
-        // continuation returns to it before any window or journal work happens.
-        var extracted = await Task.Run(() => _service.ExtractTo(containerPath, secret, tempRoot));
-        var record = new LockSessionRecord(id, LockPaths.Normalize(containerPath), extracted.Path,
-            extracted.Read.Meta.Name, extracted.Read.Meta.IsDirectory, DateTimeOffset.Now, LockSessionState.Open, null);
-        _journal.Create(record);
+        // Journal before extraction: a crash during a long extraction leaves a clear Extracting entry that
+        // startup can discard, never an untracked partial plaintext.
+        var provisional = new LockSessionRecord(id, LockPaths.Normalize(containerPath), tempRoot,
+            LockPaths.DisplayName(containerPath), false, DateTimeOffset.Now, LockSessionState.Extracting, null);
+        _journal.Create(provisional);
+        ExtractOutcome extracted;
+        try
+        {
+            // Extraction can take seconds for a large file; the UI thread stays responsive and the
+            // continuation returns to it before any window or journal work happens.
+            extracted = await Task.Run(() => _service.ExtractTo(containerPath, secret, tempRoot));
+        }
+        catch
+        {
+            try
+            {
+                if (Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, recursive: true);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+                // The journal is still removed below; a leftover empty folder is harmless.
+            }
+            _journal.Delete(id);
+            throw;
+        }
+        var record = provisional with
+        {
+            PlaintextPath = extracted.Path,
+            OriginalName = extracted.Read.Meta.Name,
+            IsDirectory = extracted.Read.Meta.IsDirectory,
+            State = LockSessionState.Open,
+            EntryCount = extracted.Read.Meta.EntryCount,
+        };
+        _journal.Write(record);
         var session = new LockSession(record, extracted.Header, extracted.DataKey, extracted.Read.Meta.IsDirectory)
         {
             LastChange = DateTimeOffset.Now,
@@ -133,7 +162,7 @@ internal sealed class LockSessionManager
         try
         {
             await Task.Run(() => _service.RelockFromSession(session.Record.ContainerPath, session.Header,
-                session.DataKey, session.Record.PlaintextPath));
+                session.DataKey, session.Record.PlaintextPath, expectedEntryCount: session.Record.EntryCount));
             _journal.Delete(session.Record.Id);
             NotifyLocked(session.Record);
             lock (_gate)
@@ -277,11 +306,36 @@ internal sealed class LockSessionManager
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            Dialogs.Show(owner, ex.Message, T("tool.lock.recovery.title"), MessageBoxButton.OK,
+                MessageBoxImage.Warning);
             return;
         }
 
+        SweepRestoreTemp(owner);
         foreach (var record in records)
         {
+            if (record.State == LockSessionState.Extracting)
+            {
+                var discard = Dialogs.Show(owner, T("tool.lock.recovery.incompleteBody", Bidi.Value(record.OriginalName)),
+                    T("tool.lock.recovery.incompleteTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (discard == MessageBoxResult.Yes)
+                {
+                    try
+                    {
+                        if (Directory.Exists(record.PlaintextPath))
+                            Directory.Delete(record.PlaintextPath, recursive: true);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        Dialogs.Show(owner, ex.Message, T("tool.lock.recovery.title"), MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                        continue;
+                    }
+                    _journal.Delete(record.Id);
+                }
+                continue;
+            }
+
             var containerExists = File.Exists(record.ContainerPath);
             var plaintextExists = File.Exists(record.PlaintextPath) || Directory.Exists(record.PlaintextPath);
             var action = LockRecoveryPlan.For(containerExists, plaintextExists);
@@ -317,6 +371,25 @@ internal sealed class LockSessionManager
         }
     }
 
+    /// <summary>Deletes leftover .dwrestore staging from an interrupted extraction after an explicit prompt.</summary>
+    private void SweepRestoreTemp(Window? owner)
+    {
+        var folder = _service.RestoreTempFolder;
+        try
+        {
+            if (!Directory.Exists(folder) || !Directory.EnumerateFileSystemEntries(folder).Any())
+                return;
+            var discard = Dialogs.Show(owner, T("tool.lock.recovery.tempBody"), T("tool.lock.recovery.tempTitle"),
+                MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (discard == MessageBoxResult.Yes)
+                Directory.Delete(folder, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Dialogs.Show(owner, ex.Message, T("tool.lock.recovery.title"), MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
     /// <summary>Locks everything still open, used on a clean exit; failures keep their journal entries.</summary>
     public async Task LockAllAsync()
     {

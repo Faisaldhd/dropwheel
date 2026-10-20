@@ -240,7 +240,7 @@ internal static class LockSelfTest
             LockRuntime.Icons.FolderIcon).OutputPath;
         if (Directory.Exists(folder))
             throw new InvalidOperationException("self-test: the folder was left behind");
-        var folderResult = service.Unprotect(protectedFolder, credentials.RescuerKey, recycleContainer: false);
+        var folderResult = service.Unprotect(protectedFolder, credentials.RescuerPassword, recycleContainer: false);
         if (!Directory.Exists(folderResult.RestoredPath))
             throw new InvalidOperationException("self-test: the folder was not restored");
         if (File.ReadAllText(Path.Combine(folderResult.RestoredPath, "nested", "two.txt")) != "two")

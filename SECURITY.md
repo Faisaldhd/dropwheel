@@ -106,6 +106,34 @@ programs. The installer is separate: if the .NET 10 Desktop Runtime is missing, 
 `scripts/verify-authenticode.ps1` to check that its Authenticode signature is valid and the signer is
 Microsoft Corporation, and runs it elevated.
 
+## Lock (2.4.0)
+
+The Lock tool transforms one file or folder **in place** into one self-contained `.dwenc` / `.dwdir`
+container. It does not create a vault, a virtual drive or a stub file.
+
+- **Crypto:** a random 256-bit data key per item, wrapped in three slots (file password, Rescuer password,
+  one-time 24-character Rescuer key) with PBKDF2-SHA256 (at least 600,000 iterations in production). The
+  fixed header is authenticated and has its own MAC; content is chunked AES-256-GCM with a trailing
+  length + SHA-256 footer. A folder is a tar-like stream with an encrypted name/size/time index. The
+  file password, Rescuer password and key are **never written to disk**; the Rescuer password and key are
+  held in memory for the current session only (a legacy DPAPI `rescuer.dat` is deleted on first use).
+- **No copies:** the plaintext is removed only after the sibling temp container is flushed, fully
+  test-decrypted, compared by size/SHA-256, and atomically moved into place. A failure leaves the original
+  untouched. `RecycleContainerAfterUnlock` defaults **off**; the Recycle Bin is used only when the user
+  explicitly enables it.
+- **HKCU only:** `.dwenc` and `.dwdir` are per-user `HKCU\Software\Classes` associations with a composed
+  multi-size icon and `--lock-open`. There is no shell extension, icon-overlay handler, HKLM write, admin
+  requirement or security-software interaction. `Remove file association` deletes the keys and the
+  composed icon cache.
+- **Files it writes while Lock is used:** `%LOCALAPPDATA%\DropWheel\protection.json` (non-secret
+  preferences), `%LOCALAPPDATA%\DropWheel\icons` (composed system-icon + padlock cache),
+  `%LOCALAPPDATA%\DropWheel\sessions` (private unlocked session while auto-lock is active; journal and
+  plaintext are kept until a verified relock), and `%TEMP%\DropWheel\restore` (staging only, deleted on
+  failure; startup offers to remove leftovers). The encrypted container stays next to the original item.
+- **Auto-lock:** opens the item in a private session, watches the program / Explorer tabs / file handles,
+  re-encrypts into the same container after the configured grace (default 8 s, 3-60), and has a 15-minute
+  idle fallback. A failed relock keeps the plaintext and the journal for startup recovery.
+
 ## What it does not do
 
 - No telemetry, analytics, crash upload, usage counters or “phone home”.

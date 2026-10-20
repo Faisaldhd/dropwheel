@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using FileAction.App.Diagnostics;
 using FileAction.App.Shell;
 using FileAction.App.UI;
 using FileAction.Core;
@@ -98,6 +99,37 @@ internal static class LockRuntime
         return secrets;
     }
 
+    /// <summary>True once the runtime has created its journal/service; used by the exit hook.</summary>
+    public static bool IsInitialized => _initialized;
+
+    /// <summary>Re-encrypts every open session on a clean exit; failures keep their journal entries.</summary>
+    public static void RelockOnExit()
+    {
+        if (!_initialized)
+            return;
+        try
+        {
+            Sessions.LockAllAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            // The journal keeps the plaintext and the next startup offers recovery; never hide the app exit.
+            AppLog.Error("lock exit relock", ex);
+        }
+    }
+    /// <summary>Asks for the recovery key alone, for a key-only Rescuer password reset. Never stores the key.</summary>
+    public static string? RequireRescuerKey(Window? owner)
+    {
+        Initialize();
+        var stored = Vault.Load();
+        if (stored is not null && !string.IsNullOrEmpty(stored.Key))
+            return stored.Key;
+        var window = new RescuerKeyWindow { Owner = owner };
+        if (window.ShowDialog() != true || string.IsNullOrEmpty(window.RecoveryKey))
+            return null;
+        Vault.Save(new RescuerSecrets(window.RecoveryKey, null));
+        return window.RecoveryKey;
+    }
     /// <summary>Registers the per-user file types once, after the first successful protection.</summary>
     public static void EnsureAssociation()
     {

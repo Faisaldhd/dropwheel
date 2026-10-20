@@ -22,6 +22,29 @@ public class PasswordProtectionTests
     private static readonly Regex Placeholder = new(@"\{(\d+)\}", RegexOptions.Compiled);
 
     [Fact]
+    public void Cumulative_multi_entry_size_is_rejected_before_writing()
+    {
+        var plan = new ProtectedZipPlan(
+        [
+            new ProtectedZipEntry("a.bin", "a.bin", IsDirectory: false, Length: 2_000_000_000),
+            new ProtectedZipEntry("b.bin", "b.bin", IsDirectory: false, Length: 2_000_000_000),
+        ], 0);
+        var path = Path.Combine(Path.GetTempPath(), "zip-multi-" + Guid.NewGuid().ToString("N") + ".zip");
+        try
+        {
+            var error = Assert.Throws<PasswordProtectionException>(() =>
+                AesZipWriter.Create(plan, path, Password));
+            Assert.Equal(PasswordProtectionFailure.TooLarge, error.Failure);
+            Assert.False(File.Exists(path));
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Validation_rejects_short_mismatched_and_overlong_passwords()
     {
         Assert.Equal(PasswordProblem.Empty, PasswordRules.Validate(null, null));
