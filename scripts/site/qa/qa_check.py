@@ -586,7 +586,6 @@ def main(argv=None):
             "img-src": {"'self'"},
             "object-src": {"'none'"},
             "base-uri": {"'none'"},
-            "connect-src": {"'none'"},
         }
         for name, allowed in required.items():
             values = directives.get(name)
@@ -598,7 +597,52 @@ def main(argv=None):
             for value in directives.get(name, []):
                 if value in ("*", "http:", "https:", "data:") or "unsafe-inline" in value or "unsafe-eval" in value:
                     check.fail(f"{rel(index_path, cwd)}:{csp_node.line}: {name} allows {value}")
-        check.set_evidence("; ".join(f"{k}={' '.join(v)}" for k, v in directives.items()))
+
+        # connect-src: 'none' is always acceptable. 'self' is acceptable only when
+        # the page proves it still makes no outbound request: no absolute resource
+        # URL and no outbound browser API in the document or local scripts.
+        # (Chrome enforces the document CSP on Lighthouse's own protocol fetch, so
+        # 'none' can block the audit's /robots.txt read; see lighthouse#16597.)
+        connect_note = ""
+        connect = directives.get("connect-src")
+        if not connect:
+            check.fail(f"{rel(index_path, cwd)}:{csp_node.line}: missing connect-src")
+        elif connect == ["'none'"]:
+            connect_note = "connect-src 'none'"
+        elif connect == ["'self'"]:
+            proof = []
+            if external_resources:
+                for url, line, where in external_resources[:5]:
+                    proof.append(f"external resource {where} -> {url}")
+                if len(external_resources) > 5:
+                    proof.append(f"... and {len(external_resources) - 5} more external resource(s)")
+            api_re = re.compile(
+                r"fetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|navigator\.serviceWorker"
+            )
+            scan = [(rel(index_path, cwd), html)]
+            for path in js_paths:
+                if os.path.isfile(path):
+                    scan.append((rel(path, cwd), open(path, encoding="utf-8").read()))
+            for label, text in scan:
+                code = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+                match = api_re.search(code)
+                if match:
+                    proof.append(f"{label}:{code.count(chr(10), 0, match.start()) + 1} {match.group(0)}")
+            if proof:
+                check.fail(f"{rel(index_path, cwd)}:{csp_node.line}: connect-src 'self' but the no-outbound "
+                           f"proof failed: " + "; ".join(proof))
+            else:
+                connect_note = (f"connect-src 'self' accepted: 0 external resource refs; "
+                                f"0 fetch/XHR/WebSocket/EventSource/sendBeacon/serviceWorker uses "
+                                f"in index.html + {len(scan) - 1} local script(s)")
+        else:
+            check.fail(f"{rel(index_path, cwd)}:{csp_node.line}: connect-src is {' '.join(connect)!r}; "
+                       f"expected 'none' or exactly 'self'")
+
+        evidence = "; ".join(f"{k}={' '.join(v)}" for k, v in directives.items())
+        if connect_note:
+            evidence += "; " + connect_note
+        check.set_evidence(evidence)
 
     check = report.add(Check("CSP-3", "style-src 'self' can allow the page as written"))
     style_attrs = [n for n in all_nodes if "style" in n.attrs]
