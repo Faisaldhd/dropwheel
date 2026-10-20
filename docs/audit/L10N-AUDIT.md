@@ -1,4 +1,4 @@
-# DropWheel 2.4.0 — Localization & RTL audit
+﻿# DropWheel 2.4.0 — Localization & RTL audit
 
 Lane: **TEAM B lane 2 (Localization / RTL)** · Branch `audit/al10n` · Base `origin/main 268a2d7`
 Scope: all 1,094 string keys in `src/FileAction.Core/Strings/en.json` + `ar.json`, every WPF window and
@@ -279,7 +279,7 @@ literal was found anywhere in `FileAction.App`/`FileAction.Core`: the only strin
 
 ## 6. Findings
 
-### F-01 — P2 — Checkboxes forced LTR around Arabic text — **FIXED in `60552b4`**
+### F-01 — P2 — Checkboxes forced LTR around Arabic text — **FIXED in `4b8c8cd`**
 
 - `src/FileAction.App/UI/Tools/Lock/LockTool.cs:456` — protect-warning acknowledgement checkbox
   (`tool.protect.warn.checkbox`) had `FlowDirection = FlowDirection.LeftToRight`.
