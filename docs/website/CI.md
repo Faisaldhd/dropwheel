@@ -92,10 +92,10 @@ Below-the-fold assets are deliberately excluded:
 - anything outside `docs/site/index.html`'s initial document (for example
   `docs/site/README.md`).
 
-At the time of writing (commit `7531907`, 2026-10-20) the measured payload is
-**398,420 bytes**: 128,295 HTML + 47,651 CSS + 16,281 app JS + 1,244 boot JS +
+At the time of writing (commit `6b63171`, 2026-10-20) the measured payload is
+**406,994 bytes**: 131,986 HTML + 51,820 CSS + 16,995 app JS + 1,244 boot JS +
 1,983 favicon + 52,660 apple-touch-icon + 3,644 brand mark + 146,662 hero
-candidates. That is 79.7% of the 500,000 byte budget, with 101,580 bytes of
+candidates. That is 81.4% of the 500,000 byte budget, with 93,006 bytes of
 headroom. The script prints the per-file table and the total on every run and
 writes the same table to the job summary.
 
@@ -131,9 +131,17 @@ External checks:
 - network errors after retries are warnings in normal mode.
 
 The script prints counts for internal links, checked fragments, unique external
-URLs and warnings. Current page: **103 internal links, 83 fragments, 19
+URLs and warnings. Current page: **102 internal links, 81 fragments, 19
 external references (12 unique URLs), 0 dead**. The link gate is run online in
 CI; `--offline` exists only for local work and is never used by the workflow.
+
+Release marker tokens are stripped from a URL before it is resolved
+(`<!--release-version:start-->…<!--release-version:end-->` and the other four
+marker kinds), because the deploy stamp rewrites or removes them before the
+page is served. This keeps a template href such as
+`…/DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-Setup.exe.sig`
+from being mistaken for a literal 404. The script reports how many URLs needed
+that normalization.
 
 ## Screenshots
 
@@ -192,9 +200,11 @@ Before anything is uploaded, the deploy job:
 
 `stamp_release.py` replaces the **contents** of every marker pair below (the
 markers themselves stay). Version, MiB, bytes and SHA-256 may repeat — the
-page uses them in the release bar, hero facts, release card, download card and
-installer filenames — and every occurrence is replaced. The status pair must
-appear exactly once.
+page uses them in the release bar, hero facts, For IT commands, release card,
+download card and installer filenames — and every occurrence is replaced.
+At commit `6b63171` the page has 8 version, 4 MiB, 2 SHA-256, 1 bytes and 1
+status pair; the status pair must appear exactly once. There is no note marker
+to stamp: the top status strip is the only status surface.
 
 | Marker pair | Written value |
 | --- | --- |
@@ -265,6 +275,7 @@ release or from `SHA256SUMS.txt`, any marker is missing, or a stale
 | Symptom | Meaning | Action |
 | --- | --- | --- |
 | Lighthouse category < 0.95 | page regression | report the failing audit from `lighthouse-report` to the lead; do not lower the threshold |
+| SEO 0.92 with `robots-txt` score 0 | `docs/site/robots.txt` is missing or unreadable | page owner adds a valid `robots.txt` (User-agent / Allow / Sitemap) |
 | `size_budget.py` exits 1 | initial payload > 500,000 B | identify the added file in the per-file table; report to the lead |
 | `check_links.py` DEAD 404/410 | broken internal path or external URL | report the exact `file:line` to the lead; do not delete the check |
 | stamp exits 2 "marker(s) missing" | page lacks one of the five marker pairs | page owner adds the marker; deploy stays blocked |

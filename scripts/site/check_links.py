@@ -55,6 +55,14 @@ USER_AGENT = (
     "DropWheel-site-link-check/1.0 "
     "(+https://github.com/Faisaldhd/dropwheel; static-site CI)"
 )
+# The page is a template: release markers may sit inside filename text (and, in
+# one historical case, inside an href).  The deploy step rewrites/removes them,
+# so link checking resolves the URL as the stamped artifact will serve it.
+RELEASE_MARKER_RE = re.compile(r"<!--release-[a-z0-9-]+:(?:start|end)-->")
+
+
+def normalize_url(url: str) -> str:
+    return RELEASE_MARKER_RE.sub("", url)
 
 
 class _LinkParser(HTMLParser):
@@ -129,6 +137,7 @@ class Checker:
         self.fragments_checked = 0
         self.external_checked = 0
         self.external_skipped = 0
+        self.markers_stripped = 0
         self._ids: dict[Path, set[str]] = {}
         self._external_cache: dict[str, tuple[str, str]] = {}
 
@@ -246,6 +255,10 @@ def main(argv: list[str] | None = None) -> int:
     for html_file in html_files:
         parser_result = _parse_html(html_file)
         for url, source, line in parser_result.links:
+            normalized = normalize_url(url)
+            if normalized != url:
+                checker.markers_stripped += 1
+            url = normalized
             if not url or url.startswith("//"):
                 if url.startswith("//") and not args.offline:
                     if url not in external_seen:
@@ -271,6 +284,10 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Site root       : {root.resolve()}")
     print(f"HTML documents  : {len(html_files)}")
+    if checker.markers_stripped:
+        print(
+            f"Marker tokens   : {checker.markers_stripped} URL(s) resolved after stripping deploy-stamp markers"
+        )
     print(f"Internal links  : {checker.internal_checked} checked, {checker.fragments_checked} fragments")
     print(
         "External links  : "
