@@ -13,7 +13,7 @@
 ; re-applies the two default tasks to an existing install (see ApplyInstallDefaults in [Code]).
 
 #ifndef AppVersion
-#define AppVersion "2.3.0"
+#define AppVersion "2.4.0"
 #endif
 
 [Setup]
