@@ -1576,6 +1576,14 @@ public class LockSafetyTests
             Cleanup(directory);
         }
     }
+    [Fact]
+    public void Reset_key_prefers_the_key_from_the_just_opened_container()
+    {
+        var stored = new RescuerSecrets("stored-key", "stored-password");
+        Assert.Equal("known-key", LockSecrets.ChooseResetKey("known-key", stored));
+        Assert.Equal("stored-key", LockSecrets.ChooseResetKey(null, stored));
+        Assert.Null(LockSecrets.ChooseResetKey(null, null));
+    }
     // ------------------------------------------------------------------ helpers
 
     private static string ReadContent(LockService service, string container, string secret)
