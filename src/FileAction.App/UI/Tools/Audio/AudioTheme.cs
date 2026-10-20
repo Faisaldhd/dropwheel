@@ -101,6 +101,38 @@ internal static class AudioTheme
             RepaintTree(VisualTreeHelper.GetChild(node, i));
     }
 
+    /// <summary>Invisible hit-test brush for the waveform and bleep lanes.</summary>
+    public static readonly Brush HitBrush = Freeze(new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)));
+
+    /// <summary>The white bleep handles and the selected-clip outline.</summary>
+    public static readonly Brush HandleBrush = Freeze(new SolidColorBrush(Color.FromArgb(0xD8, 0xFF, 0xFF, 0xFF)));
+    public static readonly Pen SelectedHandlePen = CreatePen(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF), 1.5);
+
+    /// <summary>The visualizer's fixed dark stage and its wave drawing pens (content colours, not chrome).</summary>
+    public static readonly Brush VisualizerBackdrop = CreateBackdrop();
+    public static readonly Brush VisualizerWaveFill = Freeze(new SolidColorBrush(Color.FromArgb(0x66, 0x82, 0x24, 0xD4)));
+    public static readonly Pen VisualizerWavePen = CreatePen(Color.FromRgb(0xB4, 0x8A, 0xE0), 2);
+
+    /// <summary>A frozen brush for a computed colour; drawing code never builds one itself.</summary>
+    public static Brush Frozen(Color color) => Freeze(new SolidColorBrush(color));
+
+    private static Pen CreatePen(Color color, double thickness)
+    {
+        var pen = new Pen(Frozen(color), thickness);
+        pen.Freeze();
+        return pen;
+    }
+
+    private static Brush CreateBackdrop()
+    {
+        var brush = new LinearGradientBrush(
+            Color.FromRgb(0x18, 0x12, 0x20),
+            Color.FromRgb(0x35, 0x1B, 0x50),
+            new Point(0, 0),
+            new Point(1, 1));
+        brush.Freeze();
+        return brush;
+    }
     private static T Freeze<T>(T brush)
         where T : Freezable
     {
