@@ -1,0 +1,8 @@
+# DropWheel — https://faisaldhd.github.io/dropwheel/
+# Static GitHub Pages site. One URL, English and Arabic via the in-page switch.
+# No tracking, no analytics, no crawling restrictions beyond the defaults.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://faisaldhd.github.io/dropwheel/sitemap.xml

@@ -1,0 +1,42 @@
+name: icon
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  icon-contract:
+    name: icon assets / ICO contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Pillow (generator toolchain only)
+        run: python -m pip install --disable-pip-version-check "pillow==12.3.0"
+
+      - name: Regenerate-and-compare + ICO contract + alpha fringe
+        # --verify fails if a committed asset does not reproduce byte-for-byte,
+        # if the ICO directory is not exactly 16/20/24/32/40/48/64/96/128/256,
+        # if a frame's dimensions differ, if 256 is not PNG, or if any frame
+        # carries a dark translucent fringe (alpha matte / premultiplication bug).
+        run: python tools/icon/generate.py --verify
+
+      - name: ICO directory dump
+        run: python tools/icon/generate.py --dump
+
+      - name: Build QA sheet
+        run: python tools/icon/generate.py --sheet --out "$RUNNER_TEMP/icon-qa"
+
+      - name: Upload QA sheet
+        uses: actions/upload-artifact@v4
+        with:
+          name: dropwheel-icon-quality-sheet
+          path: ${{ runner.temp }}/icon-qa/docs/screenshots/icon/icon-quality-sheet.png
+          if-no-files-found: error
