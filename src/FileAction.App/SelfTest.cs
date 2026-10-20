@@ -579,8 +579,12 @@ internal static class SelfTest
                 // Warm up once: the first open of a tool is where its lazily loaded renderer (for the
                 // image tools, Magick's native library) and the one preview PNG are paid for. The leak
                 // budget applies to the repeated open/close cycles after that one-time cost.
+                // The window is shown before it is prepared: some tools (tools.lock) complete their
+                // Ready task only from Loaded, which runs when the window is shown.
                 var warmup = new ToolWindow(spec, items, null);
+                ShowOffscreen(warmup);
                 var prepared = PumpTool(() => warmup.PrepareAsync(animate: false), TimeSpan.FromSeconds(20));
+                PumpFor(TimeSpan.FromMilliseconds(300));
                 if (!prepared)
                     log.Add($"skipped perf/{spec.Id} (the preview did not prepare within 20 s; " +
                             "open/close leak cycles are not measured for this tool)");
@@ -599,10 +603,11 @@ internal static class SelfTest
                 for (var i = 0; i < LaunchBudget.ToolOpenCloseIterations; i++)
                 {
                     var window = new ToolWindow(spec, items, null);
+                    ShowOffscreen(window);
                     // A tool that prepared once must prepare again; a bounded wait keeps one slow
                     // implementation from turning 20 cycles into a 10 minute hang.
                     PumpTool(() => window.PrepareAsync(animate: false), TimeSpan.FromSeconds(10));
-                    ShowOffscreen(window);
+                    PumpFor(TimeSpan.FromMilliseconds(60));
                     CloseToolWindow(window);
                     TrimMemory();
                     peak = Math.Max(peak, WorkingSetMb());
@@ -885,6 +890,20 @@ internal static class SelfTest
         {
             SynchronizationContext.SetSynchronizationContext(previous);
         }
+    }
+
+    /// <summary>Pumps the dispatcher for a bounded time, so queued Loaded handlers and preview continuations run.</summary>
+    private static void PumpFor(TimeSpan duration)
+    {
+        var frame = new DispatcherFrame();
+        var timer = new DispatcherTimer { Interval = duration };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            frame.Continue = false;
+        };
+        timer.Start();
+        Dispatcher.PushFrame(frame);
     }
 
     /// <summary>
