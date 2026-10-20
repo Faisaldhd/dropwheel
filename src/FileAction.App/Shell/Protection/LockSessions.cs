@@ -390,6 +390,33 @@ internal sealed class LockSessionManager
                 MessageBoxImage.Warning);
         }
     }
+    /// <summary>
+    /// Synchronous clean-exit relock: does not touch the dispatcher or the panel, so it cannot deadlock the
+    /// UI thread. Failures write the journal and are recovered at next start.
+    /// </summary>
+    public void LockAllNow()
+    {
+        List<LockSession> sessions;
+        lock (_gate)
+            sessions = _sessions.Values.ToList();
+        foreach (var session in sessions)
+        {
+            try
+            {
+                _service.RelockFromSession(session.Record.ContainerPath, session.Header, session.DataKey,
+                    session.Record.PlaintextPath, expectedEntryCount: session.Record.EntryCount);
+                _journal.Delete(session.Record.Id);
+                lock (_gate)
+                    _sessions.Remove(session.Record.Id);
+                session.Dispose();
+            }
+            catch (Exception ex)
+            {
+                session.Record = session.Record.WithState(LockSessionState.Error, ex.Message);
+                _journal.Write(session.Record);
+            }
+        }
+    }
     /// <summary>Locks everything still open, used on a clean exit; failures keep their journal entries.</summary>
     public async Task LockAllAsync()
     {

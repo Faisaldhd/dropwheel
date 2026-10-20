@@ -109,7 +109,7 @@ internal static class LockRuntime
             return;
         try
         {
-            Sessions.LockAllAsync().GetAwaiter().GetResult();
+            Sessions.LockAllNow();
         }
         catch (Exception ex)
         {
