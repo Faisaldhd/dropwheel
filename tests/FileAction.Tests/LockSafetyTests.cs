@@ -1478,9 +1478,13 @@ public class LockSafetyTests
             var credentials = Credentials();
             service.ProtectTo(folder, container, credentials, keepSource: true);
 
-            using var source = new FileStream(container, FileMode.Open, FileAccess.Read, FileShare.Read);
-            var header = LockContainer.ReadHeader(source);
-            var dataKey = LockContainer.Unwrap(header, credentials.FilePassword, out _);
+            LockHeader header;
+            byte[] dataKey;
+            using (var source = new FileStream(container, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                header = LockContainer.ReadHeader(source);
+                dataKey = LockContainer.Unwrap(header, credentials.FilePassword, out _);
+            }
             try
             {
                 WriteFile(Path.Combine(folder, "added.txt"), "added");
@@ -1518,9 +1522,13 @@ public class LockSafetyTests
             var credentials = Credentials();
             service.ProtectTo(folder, container, credentials, keepSource: true);
 
-            using var source = new FileStream(container, FileMode.Open, FileAccess.Read, FileShare.Read);
-            var oldHeader = LockContainer.ReadHeader(source);
-            var dataKey = LockContainer.Unwrap(oldHeader, credentials.FilePassword, out _);
+            LockHeader oldHeader;
+            byte[] dataKey;
+            using (var source = new FileStream(container, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                oldHeader = LockContainer.ReadHeader(source);
+                dataKey = LockContainer.Unwrap(oldHeader, credentials.FilePassword, out _);
+            }
             try
             {
                 service.SetRescuerPassword(container, credentials.FilePassword, "rescuer-reset-during-session");
