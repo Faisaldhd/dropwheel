@@ -23,7 +23,7 @@ dark halo and the mush at 16-32 px.
 
 ```sh
 python tools/icon/generate.py            # rewrites every asset + the sheet
-python tools/icon/generate.py --verify   # byte-compares committed files, checks the ICO contract
+python tools/icon/generate.py --verify   # re-renders, pixel-compares committed files, checks the ICO contract
 python tools/icon/generate.py --sheet    # rewrites only docs/screenshots/icon/
 python tools/icon/generate.py --dump     # directory dump + per-frame alpha-fringe numbers
 ```

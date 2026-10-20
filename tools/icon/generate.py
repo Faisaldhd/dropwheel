@@ -254,6 +254,21 @@ def decode_entry(e) -> Image.Image:
     return im.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
 
 
+def _same_frame(a: bytes, b: bytes) -> bool:
+    ia = Image.open(io.BytesIO(a)).convert("RGBA")
+    ib = Image.open(io.BytesIO(b)).convert("RGBA")
+    return ia.size == ib.size and ia.tobytes() == ib.tobytes()
+
+
+def _same_ico(a: bytes, b: bytes) -> bool:
+    ea, eb = parse_ico(a), parse_ico(b)
+    ka = [(e["size"], e["w"], e["h"], e["bpp"], e["fmt"]) for e in ea]
+    kb = [(e["size"], e["w"], e["h"], e["bpp"], e["fmt"]) for e in eb]
+    if ka != kb:
+        return False
+    return all(decode_entry(x).tobytes() == decode_entry(y).tobytes() for x, y in zip(ea, eb))
+
+
 def verify() -> int:
     problems: list[str] = []
     generated = assets()
@@ -261,10 +276,25 @@ def verify() -> int:
         path = ROOT / rel
         if not path.is_file():
             problems.append(f"missing {rel}")
-        elif path.read_bytes() != data:
-            problems.append(f"stale {rel} (regenerate with tools/icon/generate.py)")
-    if not (ROOT / "branding/dropwheel-icon.svg").is_file():
+            continue
+        committed = path.read_bytes()
+        # Compare decoded pixels rather than encoder bytes: PNG/zlib/WebP
+        # encoders can differ by platform while the artwork is identical.
+        if rel.endswith(".ico"):
+            if not _same_ico(committed, data):
+                problems.append(f"stale {rel} (pixels or directory differ)")
+        elif not _same_frame(committed, data):
+            problems.append(f"stale {rel} (pixels differ)")
+    svg_path = ROOT / "branding/dropwheel-icon.svg"
+    if not svg_path.is_file():
         problems.append("missing branding/dropwheel-icon.svg")
+    else:
+        svg = svg_path.read_text(encoding="utf-8")
+        if svg.count("<path") != 6:
+            problems.append("SVG must contain exactly 6 slice paths")
+        for token in ("#8224D4", "#B48AE0", "#F5F1FB"):
+            if token not in svg:
+                problems.append(f"SVG missing brand colour {token}")
 
     ico_path = ROOT / "src/FileAction.App/Assets/DropWheel.ico"
     if ico_path.is_file():
