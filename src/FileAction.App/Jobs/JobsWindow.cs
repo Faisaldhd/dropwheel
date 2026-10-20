@@ -302,6 +302,15 @@ internal sealed class JobCard : Border
         _badge.Text = glyph;
         ((Ellipse)_badgeHost.Children[0]).Fill = color;
         _badgeHost.Visibility = Visibility.Visible;
+        // Badge pop (260 ms): the status change lands with a small settle instead of a hard cut.
+        if (Motion.Enabled)
+        {
+            _badgeHost.Opacity = 1;
+            if (_badgeHost.RenderTransform is null)
+                _badgeHost.RenderTransform = new ScaleTransform(1, 1);
+            _badgeHost.RenderTransformOrigin = new Point(0.5, 0.5);
+            Motion.Play(Motion.PopBadge(_badgeHost), _badgeHost);
+        }
     }
 
     private void AddButton(Border button)

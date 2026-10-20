@@ -70,6 +70,12 @@ public sealed class AppSettings
     public ThemeMode Theme { get; set; } = ThemeMode.System;
 
     /// <summary>
+    /// 2.4.0: sliding/fading transitions (see <c>docs/MOTION.md</c>). Default ON; Windows' own
+    /// "Animation effects" accessibility setting is always honoured on top of this.
+    /// </summary>
+    public bool Animations { get; set; } = true;
+
+    /// <summary>
     /// 2.2.0: check GitHub once a day for a newer release (it only checks; downloading always needs a click).
     /// Default ON, as the spec requires.
     /// </summary>
