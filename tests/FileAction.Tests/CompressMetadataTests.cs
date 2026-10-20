@@ -2,6 +2,8 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using FileAction.App.UI.Tools.Compress;
+using FileAction.App.UI.Tools.Meta;
 using FileAction.Core;
 
 namespace FileAction.Tests;
@@ -785,5 +787,42 @@ public class CompressMetadataStringTests
             directory = directory.Parent;
         return directory?.FullName
             ?? throw new DirectoryNotFoundException("FileAction.sln not found above the test output folder.");
+    }
+}
+
+/// <summary>The two tools' identity, primary labels and which dropped files they open for.</summary>
+public class CompressMetadataToolTests
+{
+    private static string Temp(string name) => Path.Combine(Path.GetTempPath(), name);
+
+    [Fact]
+    public void Tool_identity_primary_labels_and_applicability()
+    {
+        Assert.Equal("tools.compress", CompressTool.Instance.Id);
+        Assert.Equal("tool.compress.title", CompressTool.Instance.TitleKey);
+        Assert.Equal("tool.compress.apply", CompressTool.Instance.PrimaryLabelKey);
+
+        Assert.Equal("tools.metadata", MetadataTool.Instance.Id);
+        Assert.Equal("tool.metadata.title", MetadataTool.Instance.TitleKey);
+        Assert.Equal("tool.metadata.save", MetadataTool.Instance.PrimaryLabelKey);
+
+        foreach (var format in new[] { "jpg", "png", "mp3", "m4a", "mp4", "mkv", "pdf" })
+        {
+            var item = new FileItem(Temp("sample." + format));
+            Assert.True(CompressTool.Instance.Applies([item]), $"compress should accept {format}");
+            Assert.True(MetadataTool.Instance.Applies([item]), $"metadata should accept {format}");
+        }
+
+        var document = new FileItem(Temp("sample.docx"));
+        Assert.False(CompressTool.Instance.Applies([document]));
+        Assert.False(MetadataTool.Instance.Applies([document]));
+
+        var folder = new FileItem(Path.GetTempPath());
+        Assert.False(CompressTool.Instance.Applies([folder]));
+        Assert.False(MetadataTool.Instance.Applies([folder]));
+
+        Assert.False(CompressTool.Instance.Applies([]));
+        Assert.False(MetadataTool.Instance.Applies([]));
+        Assert.False(CompressTool.Instance.Applies([new FileItem(Temp("a.jpg")), new FileItem(Temp("b.jpg"))]));
     }
 }
