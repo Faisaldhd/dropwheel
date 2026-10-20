@@ -8,6 +8,30 @@ Downloads are built and tested by GitHub Actions (`.github/workflows/ci.yml`): e
 
 DropWheel is based on [FileAction](https://github.com/Metamorfolog/file_action) by Metamorfolog (MIT). It is an independent Windows take on the idea and is not affiliated with Tangerine.
 
+## What's new in 2.4.0
+
+- **26 floating tool windows.** The Tools wheel (Ctrl) no longer runs a job for the work that needs eyes
+  on it: dropping a file on a tool slice opens a card over the file, and nothing is written until you
+  press its own button ("Create Collage", "Merge PDFs", "Save Edited Copy", "Encrypt"…). Images, video,
+  audio, PDF, compression, metadata, password protection and a QR reader are all in there.
+- **Every window fits its media.** A tool opens at its default size, probes the file in the background
+  and animates to the media's aspect ratio inside its own preview bounds, clamped to the screen under the
+  cursor and DPI-aware. Tiny media is never blown up past 200 %.
+- **One motion vocabulary.** A single token set owns every duration and easing; only transforms and
+  opacity are animated, nothing polls, and **Settings → General → Animations** (or Windows' own animation
+  setting) turns every transition off.
+- **Protection in the app.** AES-256 ZIP or PDF copies with **Password protection**, **Remove password**
+  to get back in, and **Lock** (Beta) that turns a file into one self-contained `.dwenc` container or a
+  folder into `.dwdir` — in place, with a Rescuer password and a recovery key.
+- **Light and fast, and measured.** The `--self-test` motion gate fails CI above 16.7 ms UI frame p95,
+  5 % idle CPU or 12 MB retained. Run `39376236166` drove the wheel + 11 image-family tool windows (the
+  15 media-family tools are skipped and named in `motion/report.md`, en-LTR, runner theme): UI p95
+  0.02-0.04 ms, idle CPU 0.00 %, retention 0.0 MB ([docs/PERF.md](docs/PERF.md)).
+
+The full tool list — id, English and Arabic title, inputs, output names and controls — is in
+[docs/TOOLS.md](docs/TOOLS.md), and the user-facing summary is in the
+[2.4.0 release notes](docs/release-notes-2.4.0.md) ([العربية](docs/release-notes-2.4.0.ar.md)).
+
 ## How it works
 
 The drag-and-tap gesture is **off on a fresh install** (company-safe default). Turn it on in **Settings → Company mode**, or open the wheel from the tray menu. The Explorer menu is opt-in in the same place.
@@ -18,10 +42,10 @@ The drag-and-tap gesture is **off on a fresh install** (company-safe default). T
    | Key | Wheel | What it offers |
    |---|---|---|
    | **Shift** | Convert | JPG, PNG, WebP, MP4, MP3, DOCX, PDF, XLSX… depending on the file type |
-   | **Ctrl** | Tools | compress, shrink, rotate, trim, merge, split, archive… |
+   | **Ctrl** | Tools | 26 floating tools: crop, annotate, edit photos, background, collage, redact, video trim/crop/speed/split/join/frames/redact, audio trim/normalize/channels/bleep/visualizer, PDF merge/organize, compress, metadata, password protect/unlock, Lock, QR |
    | **Alt** | Actions | copy to…, move to…, copy path, terminal, floating shelf, share |
 
-3. Drop the file on a slice. The result is saved next to the original (the original is never changed). Drop it in the middle of the wheel to cancel.
+3. Drop the file on a slice. The result is saved next to the original (the original is never changed). Drop it in the middle of the wheel to cancel. A **tool** slice (Ctrl) opens its window instead of running: apply inside the window to write the result.
 
 The wheel stays open until you drop, so you can release the key and tap another one to switch wheels. Keys can be reassigned in Settings.
 
@@ -48,13 +72,29 @@ Progress shows up in the corner of the screen, where you can open the result, sh
 | Subtitles | SRT, VTT | SRT, VTT, TXT |
 | Archives | ZIP, TAR, TAR.GZ, GZ, BZ2, XZ, RAR, 7z | extract, ZIP, TAR, TAR.GZ |
 
-**Tools (Ctrl):**
-- images: compress, shrink to 50 %, max 1920 px, rotate, mirror, crop to square, grayscale, strip metadata (GPS, EXIF), merge into PDF,
-- video: compress (H.264), 720p, mute, trim by time, rotate, 2× speed, thumbnail frame,
-- audio: compress, normalize loudness, trim, join,
-- PDF: merge, split into pages, rotate, optimize,
-- images and scanned PDFs: **extract text (OCR)** with the recognizer built into Windows; the text is saved as .txt and copied to the clipboard,
-- anything, folders included: archive to ZIP / TAR.GZ.
+**Tools (Ctrl) — 26 floating windows.** Dropping a file on one of these slices opens its window; the
+source is only read and a new file is written when you apply it (Lock is the exception: it transforms the
+item in place). Each tool states its own verb on the primary button, **Reset** restores its defaults,
+**Esc** closes without writing and **Enter** applies. Video and audio tools need FFmpeg
+(see [Helper programs](#helper-programs)).
+
+| Media | Tool windows |
+|---|---|
+| Images | Crop Image, Annotate Image, Edit Photos, Add BG, Collage, Redact image |
+| Video | Trim Video, Crop Video, Change Speed, Split Video, Join Videos, Save frames, Redact video |
+| Audio | Trim Audio, Normalize Audio, Audio Channels, Bleep Audio, Audio Visualizer |
+| Documents | Merge to PDF, Organize Pages |
+| Any file | Compress File, Edit Metadata |
+| Protection | Password protection, Remove password, Lock (Beta) |
+| Reading | QR Code (read-only) |
+
+The same wheel still carries the quick one-shot slices that need no window: image compress, shrink to
+50 %, max 1920 px, rotate, mirror, grayscale, strip metadata (GPS, EXIF) and merge images into PDF; video
+compress (H.264), 720p, mute, trim by time, rotate, 2× speed and thumbnail frame; audio compress,
+normalize, trim and join; PDF merge, split, rotate and optimize; **extract text (OCR)** with the
+recognizer built into Windows (the text is saved as `.txt` and copied to the clipboard); and **archive**
+to ZIP / TAR.GZ for anything, folders included. Those run as background jobs and report on a progress
+card.
 
 Things that aren't files yet (images dragged from a browser, Outlook attachments, screenshots on the clipboard) are saved to **Downloads\DropWheel** first, and the results go next to them.
 
@@ -91,7 +131,8 @@ With the portable zip, settings and the log stay next to `DropWheel.exe` (the zi
 
 **Company-safe by default:** global keyboard/mouse monitoring is **off** and helper-tool downloads are **off**. Nothing is written to `HKLM`. Turn gestures on in **Settings → Integration** (the installer's checked task writes the initial choice), and downloads in the same place. `--no-hooks` disables the hooks, and the policy keys `HKLM\SOFTWARE\Policies\DropWheel\DisableHooks=1` / `DisableDownloads=1` let IT force either feature off.
 
-**Signed auto-update (2.2.x):** DropWheel checks the public GitHub release one minute after start and then once a day (or on demand). A tray item and a violet banner in **Settings → Updates** offer the new version; nothing downloads until you click **Update now**. Every download is checked against the GitHub asset digest, `SHA256SUMS.txt` and an ECDSA P-256 `.sig`; a failure deletes the files and says “Update could not be verified”. Installed copies run the new setup silently in the same install mode; portable copies replace their folder and restart, keeping `settings.json` and `portable.txt`. The **Check for updates automatically** switch only checks.
+**Signed auto-update:** DropWheel checks the public GitHub release one minute after start and then once a
+day (or on demand). A tray item and a violet banner in **Settings → Updates** offer the new version; nothing downloads until you click **Update now**. Every download is checked against the GitHub asset digest, `SHA256SUMS.txt` and an ECDSA P-256 `.sig`; a failure deletes the files and says “Update could not be verified”. Installed copies run the new setup silently in the same install mode; portable copies replace their folder and restart, keeping `settings.json` and `portable.txt`. The **Check for updates automatically** switch only checks.
 
 English and Arabic, light and dark, following Windows. Requirements: Windows 10 (1809+) or Windows 11, x64.
 
@@ -101,11 +142,11 @@ English and Arabic, light and dark, following Windows. Requirements: Windows 10 
 # .NET 10 SDK
 ./scripts/fetch-tools.ps1                      # downloads ffmpeg.exe and pandoc.exe into .\tools (for the tests)
 $env:PATH = "$PWD\tools;$env:PATH"; dotnet test tests/FileAction.Tests
-dotnet publish src/FileAction.App -c Release -r win-x64 --self-contained -o publish   # trimmed, ~165 MB unpacked
+dotnet publish src/FileAction.App -c Release -r win-x64 --self-contained -o publish   # self-contained; untrimmed (WPF does not support trimming)
 publish\DropWheel.exe
 ```
 
-`DropWheel.exe --self-test <folder>` builds every window offscreen and saves PNG previews in English and Arabic, light and dark (used by CI).
+`DropWheel.exe --self-test <folder>` renders the app's windows offscreen and saves PNG previews in English and Arabic, light and dark (used by CI). Its motion gate drives the wheel and the 11 image-family tool windows — the 15 media-family tools are skipped and named in `motion/report.md` — and the screenshot sweep renders the Crop tool as the representative tool window.
 
 ## Project layout
 
@@ -117,13 +158,16 @@ src/FileAction.Core      conversions and tools (shared library)
 src/FileAction.App       the Windows app (WPF)
   Input/GlobalInput.cs   global mouse and keyboard hooks (the “drag + tap” gesture)
   Wheel/                 the radial menu and when it opens
+  UI/Tools/              the 26 floating tool windows (one file per tool, self-registering)
   Actions/               the Actions wheel, floating shelf, sharing
   Jobs/                  background jobs and progress cards
   Shell/                 tray icon, hotkey, context menu, single instance, IT policy
 tests/FileAction.Tests   unit tests plus integration tests that run every operation on sample files
 installer/               Inno Setup script for the installer
 scripts/                 fetch-tools.ps1, screenshots.cmd, verify-authenticode.ps1
-docs/                    glossary-ar.md, ar-strings-review.md, signing.md
+docs/                    TOOLS.md (every tool window), FUNCTION-MATRIX.md (per-tool evidence),
+                         MOTION.md, PERF.md, MERGE-LOG.md, BACKLOG.md, glossary-ar.md,
+                         ar-strings-review.md, signing.md, release notes
   prompts/               FIX_PROMPT.md, THEME_PROMPT.md, UPDATE_PROMPT.md
 branding/                app and tray icons
 licenses/                third-party licence texts

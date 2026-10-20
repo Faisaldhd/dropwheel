@@ -89,12 +89,47 @@ internal sealed class LockSessionManager
         var id = Guid.NewGuid().ToString("N");
         var tempRoot = Path.Combine(ProtectionPaths.SessionsFolder, id);
         Directory.CreateDirectory(tempRoot);
-        // Extraction can take seconds for a large file; the UI thread stays responsive and the
-        // continuation returns to it before any window or journal work happens.
-        var extracted = await Task.Run(() => _service.ExtractTo(containerPath, secret, tempRoot));
-        var record = new LockSessionRecord(id, LockPaths.Normalize(containerPath), extracted.Path,
-            extracted.Read.Meta.Name, extracted.Read.Meta.IsDirectory, DateTimeOffset.Now, LockSessionState.Open, null);
-        _journal.Create(record);
+        // Journal before extraction: a crash during a long extraction leaves a clear Extracting entry that
+        // startup can discard, never an untracked partial plaintext.
+        var provisional = new LockSessionRecord(id, LockPaths.Normalize(containerPath), tempRoot,
+            LockPaths.DisplayName(containerPath), false, DateTimeOffset.Now, LockSessionState.Extracting, null);
+        _journal.Create(provisional);
+        ExtractOutcome extracted;
+        try
+        {
+            // Extraction can take seconds for a large file; the UI thread stays responsive and the
+            // continuation returns to it before any window or journal work happens.
+            extracted = await Task.Run(() => _service.ExtractTo(containerPath, secret, tempRoot));
+        }
+        catch
+        {
+            var cleaned = true;
+            try
+            {
+                if (Directory.Exists(tempRoot))
+                    Directory.Delete(tempRoot, recursive: true);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+                cleaned = false;
+                FileAction.App.Diagnostics.AppLog.Error("lock: extraction cleanup failed", cleanup);
+            }
+            // Never lose the pointer to a folder that could not be deleted: keep the Extracting journal
+            // so the startup sweep can offer it again.
+            if (cleaned)
+                _journal.Delete(id);
+            throw;
+        }
+        var record = provisional with
+        {
+            PlaintextPath = extracted.Path,
+            OriginalName = extracted.Read.Meta.Name,
+            IsDirectory = extracted.Read.Meta.IsDirectory,
+            State = LockSessionState.Open,
+            EntryCount = extracted.Read.Meta.EntryCount,
+            TreeHash = extracted.Read.Meta.IsDirectory ? LockArchive.TreeHash(extracted.Path) : null,
+        };
+        _journal.Write(record);
         var session = new LockSession(record, extracted.Header, extracted.DataKey, extracted.Read.Meta.IsDirectory)
         {
             LastChange = DateTimeOffset.Now,
@@ -277,11 +312,36 @@ internal sealed class LockSessionManager
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            Dialogs.Show(owner, ex.Message, T("tool.lock.recovery.title"), MessageBoxButton.OK,
+                MessageBoxImage.Warning);
             return;
         }
 
+        SweepSessionFolders(records, owner);
         foreach (var record in records)
         {
+            if (record.State == LockSessionState.Extracting)
+            {
+                var discard = Dialogs.Show(owner, T("tool.lock.recovery.incompleteBody", Bidi.Value(record.OriginalName)),
+                    T("tool.lock.recovery.incompleteTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (discard == MessageBoxResult.Yes)
+                {
+                    try
+                    {
+                        if (Directory.Exists(record.PlaintextPath))
+                            Directory.Delete(record.PlaintextPath, recursive: true);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        Dialogs.Show(owner, ex.Message, T("tool.lock.recovery.title"), MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                        continue;
+                    }
+                    _journal.Delete(record.Id);
+                }
+                continue;
+            }
+
             var containerExists = File.Exists(record.ContainerPath);
             var plaintextExists = File.Exists(record.PlaintextPath) || Directory.Exists(record.PlaintextPath);
             var action = LockRecoveryPlan.For(containerExists, plaintextExists);
@@ -317,6 +377,87 @@ internal sealed class LockSessionManager
         }
     }
 
+    /// <summary>Prompts to remove session folders with no journal entry (orphans from a crash).</summary>
+    private static void SweepSessionFolders(IReadOnlyList<LockSessionRecord> records, Window? owner)
+    {
+        try
+        {
+            if (!Directory.Exists(ProtectionPaths.SessionsFolder))
+                return;
+            var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var record in records)
+            {
+                var plaintext = Path.GetFullPath(record.PlaintextPath);
+                known.Add(plaintext);
+                if (Path.GetDirectoryName(plaintext) is { } parent)
+                    known.Add(parent);
+                known.Add(Path.Combine(ProtectionPaths.SessionsFolder, record.Id));
+            }
+            var orphans = Directory.EnumerateDirectories(ProtectionPaths.SessionsFolder)
+                .Where(path => !known.Contains(Path.GetFullPath(path)) &&
+                               !known.Contains(Path.GetFileName(path)))
+                .ToList();
+            if (orphans.Count == 0)
+                return;
+            var discard = Dialogs.Show(owner, T("tool.lock.recovery.orphanBody", orphans.Count),
+                T("tool.lock.recovery.orphanTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (discard != MessageBoxResult.Yes)
+                return;
+            foreach (var path in orphans)
+                Directory.Delete(path, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Dialogs.Show(owner, ex.Message, T("tool.lock.recovery.title"), MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+    /// <summary>Deletes leftover .dwrestore staging from an interrupted extraction after an explicit prompt.</summary>
+    private void SweepRestoreTemp(Window? owner)
+    {
+        var folder = _service.RestoreTempFolder;
+        try
+        {
+            if (!Directory.Exists(folder) || !Directory.EnumerateFileSystemEntries(folder).Any())
+                return;
+            var discard = Dialogs.Show(owner, T("tool.lock.recovery.tempBody"), T("tool.lock.recovery.tempTitle"),
+                MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (discard == MessageBoxResult.Yes)
+                Directory.Delete(folder, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Dialogs.Show(owner, ex.Message, T("tool.lock.recovery.title"), MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+    /// <summary>
+    /// Synchronous clean-exit relock: does not touch the dispatcher or the panel, so it cannot deadlock the
+    /// UI thread. Failures write the journal and are recovered at next start.
+    /// </summary>
+    public void LockAllNow()
+    {
+        List<LockSession> sessions;
+        lock (_gate)
+            sessions = _sessions.Values.ToList();
+        foreach (var session in sessions)
+        {
+            try
+            {
+                _service.RelockFromSession(session.Record.ContainerPath, session.Header, session.DataKey,
+                    session.Record.PlaintextPath);
+                _journal.Delete(session.Record.Id);
+                lock (_gate)
+                    _sessions.Remove(session.Record.Id);
+                session.Dispose();
+            }
+            catch (Exception ex)
+            {
+                session.Record = session.Record.WithState(LockSessionState.Error, ex.Message);
+                _journal.Write(session.Record);
+            }
+        }
+    }
     /// <summary>Locks everything still open, used on a clean exit; failures keep their journal entries.</summary>
     public async Task LockAllAsync()
     {

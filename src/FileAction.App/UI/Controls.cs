@@ -288,6 +288,6 @@ internal static class Controls
         CornerRadius = new CornerRadius(6),
         Padding = new Thickness(8, 2, 8, 3),
         Background = new SolidColorBrush(Color.FromArgb(0x26, good ? (byte)0x3C : (byte)0xF0, good ? (byte)0xC3 : (byte)0x5A, good ? (byte)0x6E : (byte)0x5A)),
-        Child = new TextBlock { Text = text, FontSize = 11.5, FontWeight = FontWeights.SemiBold, Foreground = good ? Theme.Success : Theme.Error },
+        Child = new TextBlock { Text = text, FontSize = 11.5, FontWeight = FontWeights.SemiBold, Foreground = good ? Theme.BadgeSuccessText : Theme.BadgeErrorText },
     };
 }

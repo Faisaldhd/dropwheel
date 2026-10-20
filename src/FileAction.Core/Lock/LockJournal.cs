@@ -7,6 +7,9 @@ namespace FileAction.Core.Lock;
 /// <summary>Where a protected file is while it is open for editing.</summary>
 public enum LockSessionState
 {
+    /// <summary>Extraction started but has not completed; the journal exists before any plaintext is trusted.</summary>
+    Extracting,
+
     /// <summary>The plaintext is unlocked and the application may still be editing it.</summary>
     Open,
 
@@ -29,7 +32,9 @@ public sealed record LockSessionRecord(
     bool IsDirectory,
     DateTimeOffset OpenedUtc,
     LockSessionState State,
-    string? Error)
+    string? Error,
+    int EntryCount = 0,
+    string? TreeHash = null)
 {
     public LockSessionRecord WithState(LockSessionState state, string? error = null) =>
         this with { State = state, Error = error };
@@ -64,6 +69,8 @@ public sealed class LockJournalStore(string directory)
             "opened=" + record.OpenedUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
             "state=" + record.State,
             "error=" + Encode(record.Error ?? string.Empty),
+            "entries=" + record.EntryCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "tree=" + Encode(record.TreeHash ?? string.Empty),
         };
         File.WriteAllLines(temp, lines, new UTF8Encoding(false));
         File.Move(temp, path, overwrite: true);
@@ -105,7 +112,7 @@ public sealed class LockJournalStore(string directory)
         var normalized = LockPaths.Normalize(containerPath);
         return List().FirstOrDefault(r =>
             string.Equals(LockPaths.Normalize(r.ContainerPath), normalized, StringComparison.OrdinalIgnoreCase) &&
-            r.State is LockSessionState.Open or LockSessionState.Syncing or LockSessionState.Error);
+            r.State is LockSessionState.Extracting or LockSessionState.Open or LockSessionState.Syncing or LockSessionState.Error);
     }
 
     public bool IsProtectedByOpenSession(string containerPath) => FindByContainer(containerPath) is not null;
@@ -141,9 +148,14 @@ public sealed class LockJournalStore(string directory)
                 ? stateValue
                 : LockSessionState.Open;
             var error = Decode(values.GetValueOrDefault("error"));
+            var entryCount = int.TryParse(values.GetValueOrDefault("entries"),
+                System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture,
+                out var parsedEntries) ? Math.Max(0, parsedEntries) : 0;
+            var treeHash = Decode(values.GetValueOrDefault("tree"));
             return new LockSessionRecord(id, container, plaintext, string.IsNullOrEmpty(name)
                 ? LockPaths.DisplayName(container)
-                : name, directory, opened, state, string.IsNullOrEmpty(error) ? null : error);
+                : name, directory, opened, state, string.IsNullOrEmpty(error) ? null : error, entryCount,
+                string.IsNullOrEmpty(treeHash) ? null : treeHash);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {

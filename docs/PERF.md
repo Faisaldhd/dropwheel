@@ -18,9 +18,10 @@ fails the build.
 
 ## Motion gate (2.4.0)
 
-`DropWheel.exe --self-test` runs `MotionSelfTest` on every CI run. It drives the wheel and every
-registered tool window through a deterministic pose sequence (the same easing curves and durations the
-live storyboards use), once with motion ON and once with motion OFF, and records:
+`DropWheel.exe --self-test` runs `MotionSelfTest` on every CI run. It drives the wheel plus the **11
+image-family tool windows** (the 15 media-family tools need media the harness does not feed and are
+skipped by name in `motion/report.md`) through a deterministic pose sequence — the same easing curves
+and durations the live storyboards use — once with motion ON and once with motion OFF, and records:
 
 - **UI frame p95** - applying one animation pose plus the WPF layout pass, per 60 fps frame;
 - **raster proxy p95** - the same frame rendered through `RenderTargetBitmap` (software rasterisation,
@@ -44,31 +45,36 @@ with the numbers.
 
 ### Measured on this branch (motion)
 
-CI run [39351795353](https://github.com/Faisaldhd/dropwheel/actions/runs/39351795353) (`Build + test`,
-commit `2153437`, merged with main after the edit-photos tool landed; Windows Server 2025, 4 logical
-processors, WPF render tier 2). The self-contained `--self-test` writes the full table to
-`motion/report.md`, uploaded with the `self-contained-self-test` artifact. Re-run the workflow after a
-motion change; do not hand-edit a passing number.
+Run [39376236166](https://github.com/Faisaldhd/dropwheel/actions/runs/39376236166), self-contained
+`--self-test` → `self-contained-self-test` artifact → `motion/report.md` (WPF render tier 2). These are the
+only motion numbers quoted in the 2.4.0 documentation; run `39351795353` (6 surfaces, idle CPU 0.39 %) is
+**superseded** and must not be quoted anywhere. Re-run the workflow after a motion change; never hand-edit
+a passing number.
 
-| surface | UI frame p95 ON (ms) | UI frame p95 OFF (ms) | raster proxy p95 ON (ms) | CPU ON (%) | p95 budget |
-| --- | ---: | ---: | ---: | ---: | --- |
-| wheel (442x442) | 0.07 | 0.00 | 39.7 | 25.0 | 16.7 ms |
-| tool `tools.annotate` | 0.03 | 0.00 | 66.5 | 25.2 | 16.7 ms |
-| tool `tools.crop` | 0.03 | 0.00 | 80.0 | 25.1 | 16.7 ms |
-| tool `tools.editphotos` | 0.03 | 0.00 | 52.5 | 24.8 | 16.7 ms |
-| tool `tools.addbackground` | 0.03 | 0.00 | 52.9 | 25.0 | 16.7 ms |
-| tool `tools.redact` | 0.03 | 0.00 | 69.6 | 25.1 | 16.7 ms |
+| surface group | surfaces | UI frame p95 ON (ms) | UI frame p95 OFF (ms) | raster proxy p95 ON (ms) | p95 budget |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| wheel (442 x 442) | 1 | 0.04 | 0.00 | 46.45–73.66 (range across the measured surfaces) | 16.7 ms |
+| image-family tool windows | 11 | 0.02–0.03 | 0.00 | same range | 16.7 ms |
 
-Idle CPU after close: **0.39 %** (budget 5 %). Working set retained by the motion suite: **0.0 MB**
-(budget 12 MB, inside the 15 MB idle rule). The tool list is data-driven from `ToolRegistry.All`, so
-tools merged after this run are measured automatically by the next CI run; `tools.collage` was skipped
-in this run because it needs more than one sample image, and the harness only feeds one PNG.
+Idle CPU after close in that run: **0.00 %** (budget 5 %). Working set retained by the motion suite:
+**0.0 MB** (budget 12 MB, inside the 15 MB idle rule). The worst UI frame p95 in the run is **0.24 %** of
+the 16.7 ms budget.
+
+**Coverage, stated honestly.** `MotionSelfTest` drives the wheel plus the **11 image-family tool windows**
+— Crop, Annotate, Edit Photos, Add BG, Collage, Redact image, Compress, Edit metadata, QR, Merge to PDF,
+Organize Pages: **12 measured surfaces**. The **15 media-family and protection tools** (7 video, 5 audio,
+Protect, Unlock, Lock) are skipped because they need media or a second input the harness does not feed;
+they are named one by one in `motion/report.md`. The measurement is **en-LTR with the runner's theme
+only** — RTL and an explicit light/dark switch are not measured here. All 26 tools share the same
+`ToolWindow` chrome and `Motion` code path, so a chrome regression is still caught, but no document may
+claim that every tool window was measured.
 
 The UI frame p95 is the app-controlled cost (pose write + layout) and is two orders of magnitude below
 the 16.7 ms frame budget. The raster proxy is `RenderTargetBitmap` software rasterisation of a complete
-window, which is much slower than the GPU compositor and is deliberately **not** a gate. CPU ON is the
-CPU spent inside the measurement loop (pose + software raster every frame) on one of four cores; idle
-CPU after the surfaces close is the number that gates timers, and it is 0.00 %.
+window, which is much slower than the GPU compositor and is deliberately **not** a gate. The CPU figure
+during the measurement is the CPU spent inside the measurement loop (pose + software raster every
+frame); idle CPU after every surface closes is the number that gates timers, and in run `39376236166` it
+is **0.00 %**.
 
 ## v2.3.0 baselines
 
