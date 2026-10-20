@@ -132,7 +132,10 @@ measures both, so the reduced-motion path is covered on every CI run.
 
 Startup (+5 %) and installer size (+6 MB) are guarded by the package/performance gates described in
 `docs/PERF.md`; motion adds one small class, no dependency and no startup work beyond reading two
-booleans.
+booleans. First measured CI run (da8540e, run 39350370128): UI frame p95 **0.02–0.05 ms** across the
+wheel and four tool windows, idle CPU **0.00 %**, retained working set **0.0 MB** — see
+`docs/PERF.md` for the full table and the meaning of the software-rasterisation proxy.
+
 
 ## Website clips
 

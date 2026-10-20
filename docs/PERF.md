@@ -36,15 +36,31 @@ with the numbers.
 
 ### Measured on this branch
 
-The numbers below are produced by CI (`Build + test` -> self-contained `--self-test`). Re-run the
-workflow after a motion change; do not hand-edit a passing number.
+CI run [39350370128](https://github.com/Faisaldhd/dropwheel/actions/runs/39350370128) (`Build + test`,
+commit `da8540e`, Windows Server 2025, 4 logical processors, WPF render tier 2). The self-contained
+`--self-test` writes the full table to `motion/report.md`, uploaded with the `self-contained-self-test`
+artifact. Re-run the workflow after a motion change; do not hand-edit a passing number.
 
 | surface | UI frame p95 ON (ms) | UI frame p95 OFF (ms) | raster proxy p95 ON (ms) | CPU ON (%) | p95 budget |
 | --- | ---: | ---: | ---: | ---: | --- |
-| wheel (424x424) | see `motion/report.md` artifact | | | | 16.7 ms |
-| tool `tools.crop` | see `motion/report.md` artifact | | | | 16.7 ms |
+| wheel (424x424) | 0.05 | 0.00 | 43.7 | 24.8 | 16.7 ms |
+| tool `tools.annotate` | 0.03 | 0.00 | 64.5 | 25.1 | 16.7 ms |
+| tool `tools.crop` | 0.03 | 0.00 | 72.3 | 25.0 | 16.7 ms |
+| tool `tools.addbackground` | 0.03 | 0.00 | 52.2 | 25.0 | 16.7 ms |
+| tool `tools.redact` | 0.02 | 0.00 | 69.3 | 24.8 | 16.7 ms |
 
-Idle CPU after close and retained working set are printed in the same artifact and in `self-test.txt`.
+Idle CPU after close: **0.00 %** (budget 5 %). Working set retained by the motion suite: **0.0 MB**
+(budget 12 MB, inside the 15 MB idle rule). The tool list is data-driven from `ToolRegistry.All`, so
+tools merged after this run are measured automatically by the next CI run; `tools.collage` was skipped
+in this run because it needs more than one sample image, and the harness only feeds one PNG.
+
+The UI frame p95 is the app-controlled cost (pose write + layout) and is two orders of magnitude below
+the 16.7 ms frame budget. The raster proxy is `RenderTargetBitmap` software rasterisation of a complete
+window, which is much slower than the GPU compositor and is deliberately **not** a gate. CPU ON is the
+CPU spent inside the measurement loop (pose + software raster every frame) on one of four cores; idle
+CPU after the surfaces close is the number that gates timers, and it is 0.00 %.
+
+
 
 ## Package and runtime gates
 

@@ -91,7 +91,10 @@ internal static class MotionClips
                     Theme.Override = dark;
                     Theme.Refresh();
                     var theme = dark ? "dark" : "light";
-                    var name = "tool-" + spec.Id.Replace('.', '-') + "-" + theme;
+                    var shortId = spec.Id.StartsWith("tools.", StringComparison.Ordinal)
+                        ? spec.Id["tools.".Length..]
+                        : spec.Id;
+                    var name = "tool-" + shortId.Replace('.', '-') + "-" + theme;
                     ToolWindow? window = null;
                     try
                     {
