@@ -272,6 +272,19 @@ internal sealed class SettingsWindow : Window
         theme.Margin = new Thickness(2, 0, 0, 6);
         page.Children.Add(theme);
 
+        // 2.4.0 motion: one switch for every transition in the app. Windows' own animation setting is
+        // honoured on top of it; the description says so instead of silently ignoring the toggle.
+        page.Children.Add(Card(
+            T("settings.motion.title"),
+            Motion.SystemAnimationsAvailable ? T("settings.motion.detail") : T("settings.motion.windowsOff"),
+            Toggle(_settings.Animations, value =>
+            {
+                _settings.Animations = value;
+                Motion.SetSettingsEnabled(value);
+                Save();
+            }),
+            glyph: "\uE945"));
+
         page.Children.Add(SectionHeader(T("settings.general.gestures.title")));
         page.Children.Add(SectionDetail(T("settings.general.gestures.detail")));
         foreach (var (wheel, description) in new[]
