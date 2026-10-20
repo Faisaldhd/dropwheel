@@ -71,6 +71,15 @@ internal static class Theme
     public static readonly SolidColorBrush Error = Freeze(new SolidColorBrush(Color.FromRgb(0xF0, 0x5A, 0x5A)));
     public static readonly SolidColorBrush Success = Freeze(new SolidColorBrush(Color.FromRgb(0x3C, 0xC3, 0x6E)));
 
+    /// <summary>2.4.0 lock badge: the app accent purple with a lavender highlight, both themes.</summary>
+    public static readonly Color LockBadgeColor = Color.FromRgb(0x82, 0x24, 0xD4);
+
+    public static readonly Color LockBadgeHighlightColor = Color.FromRgb(0xB4, 0x8A, 0xE0);
+
+    public static Brush LockBadge => Solid(LockBadgeColor);
+
+    public static Brush LockBadgeHighlight => Solid(LockBadgeHighlightColor);
+
     public static readonly FontFamily Icons = new("Segoe Fluent Icons, Segoe MDL2 Assets");
     public static readonly FontFamily UiFont = new("Segoe UI Variable Text, Segoe UI");
     public static readonly FontFamily DisplayFont = new("Segoe UI Variable Display, Segoe UI");

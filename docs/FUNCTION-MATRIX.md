@@ -216,3 +216,27 @@ the narrowest page; their heights may still differ."; primary button "Save Organ
 | O-11 | Theme and RTL | theme scan and theme-change rebuild as for Merge; the grid and footer inherit RTL from the shared window | PASS | `Pdf_tool_views_have_no_hard_coded_colours`, `Pdf_tool_views_repaint_when_the_theme_changes` (RTL chrome: inspection) |
 
 **How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~PdfToolFunctionTests|FullyQualifiedName~PdfToolThemeTests|FullyQualifiedName~PdfOrganizeTests"` (62 cases: 32 model/key methods, 9 real-file function tests, 3 theme cases). The 12 function/theme cases passed in run [39341981013](https://github.com/Faisaldhd/dropwheel/actions/runs/39341981013) (308 passed, 0 failed); the merged head reruns them in the `Build + test` job.
+## Lock — `tools.lock` (Beta)
+
+One real file or folder is transformed **in place** into one self-contained `.dwenc` / `.dwdir`: a
+three-slot password/recovery envelope, authenticated header, chunked AES-256-GCM frames, verified
+atomic replacement, a folder `desktop.ini` badge, auto-relock and crash recovery. Tests live in
+`tests/FileAction.Tests/LockContainerTests.cs` and `LockSafetyTests.cs`.
+
+| ID | What is checked | Expected result | Status | Evidence |
+|---|---|---|---|---|
+| L-1 | Single real file, one item | After lock there is exactly one `.dwenc` and no plaintext/temp; unlock restores the original name and bytes | PASS | `Service_roundtrip_creates_and_removes_exactly_one_file` |
+| L-2 | 0 B, 1 B, chunk−1, chunk, chunk+1, multi-chunk | Each size round-trips to the same SHA-256; no partial files remain | PASS | same theory (6 sizes) |
+| L-3 | Small folder | Nested file and `desktop.ini` round-trip; unlock restores the folder and byte-exact previous `desktop.ini` | PASS | `Folder_roundtrip_restores_content_and_desktop_ini_byte_for_byte` |
+| L-4 | Folder failure rollback | A locked file inside the folder aborts the lock, restores the folder appearance and writes no container | PASS | `Folder_protect_rolls_back_when_a_file_is_locked` |
+| L-5 | Tamper and truncation | Wrong tag/ciphertext/header/MAC and truncation are refused; nothing is restored | PASS | `Tampered_*`, `Truncated_file_is_refused` |
+| L-6 | Corrupt input | A damaged container gives a clear error and leaves no restored/staging/temp output | PASS | `Corrupt_input_leaves_no_output_files` |
+| L-7 | Read-only source | A read-only folder/file round-trips without partial output | PASS | `Read_only_folder_still_roundtrips_without_partial_output` |
+| L-8 | Cancel mid-run | Source and bytes stay intact; no `.dwenc` and no `.tmp` remain | PASS | `Cancel_mid_run_leaves_the_source_and_no_output` |
+| L-9 | Header-only rewrite atomicity | Failure injected at every file operation leaves the old secrets working; a verified replace is required | PASS | `Header_rewrite_is_atomic_under_a_failure_at_every_file_operation` |
+| L-10 | Crash recovery | The journal re-encrypts edited plaintext into the same container; plaintext is kept until the replace verifies | PASS | `Crash_recovery_reencrypts_the_edited_plaintext_into_the_same_container` |
+| L-11 | Auto-lock rules | Waits for the program, a tabbed Explorer view, a held file and the grace period; honors the idle fallback | PASS | `Auto_lock_waits_for_the_program_the_explorer_and_the_grace` |
+| L-12 | No stored secrets or Recycle copies | No password/key under `%LOCALAPPDATA%\DropWheel`; `RecycleContainerAfterUnlock` defaults OFF and protect never recycles | PASS | `No_secret_is_written_under_the_app_data_folder`, `Recycle_bin_is_off_by_default_and_protection_never_recycles` |
+| L-13 | Purple badge, original type, folder icon, refresh, HKCU only | `Theme.LockBadge` #8224D4 / `LockBadgeHighlight` #B48AE0; two-tone padlock bottom-left; 7 icons × 16/24/32/48/64/256 frames, 73,342 bytes; original file icon composed in the Lock window; folder `desktop.ini` badge; host notification after lock/unlock; HKCU-only registry | PASS (Explorer `.dwenc` DefaultIcon is the document variant; one icon per extension, no shell handler) | `Lock_icons_are_shipped_multi_size_png_frames_and_use_the_purple_tokens`, `Host_is_notified_after_lock_and_unlock_so_explorer_refreshes`, `Associations_are_per_user_and_removable`, `Desktop_ini_is_restored_byte_for_byte_or_removed` |
+
+**How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~LockContainerTests|FullyQualifiedName~LockSafetyTests"`; the CI `Build + test` job runs them on every push.
