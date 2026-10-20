@@ -141,6 +141,23 @@ public class MotionSourceTests
         Assert.Contains("Motion.Override = false", harness, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Every_theme_watch_is_released_when_its_surface_closes()
+    {
+        var offenders = AppSources()
+            .Where(file => File.ReadAllText(file).Contains("VideoThemeWatcher.Start()", StringComparison.Ordinal))
+            .Where(file => !File.ReadAllText(file).Contains("VideoThemeWatcher.Stop()", StringComparison.Ordinal))
+            .Select(Relative)
+            .ToArray();
+        Assert.True(offenders.Length == 0,
+            "a video surface starts the 500 ms theme poll without stopping it (no timer while idle):" +
+            Environment.NewLine + string.Join(Environment.NewLine, offenders));
+
+        var watcher = File.ReadAllText(Path.Combine(RepoRoot(), "src", "FileAction.App", "UI", "Tools", "Video", "VideoThemeWatcher.cs"));
+        Assert.Contains("public static void Stop()", watcher, StringComparison.Ordinal);
+        Assert.Contains("_timer.Stop();", watcher, StringComparison.Ordinal);
+    }
+
     /// <summary>The balanced argument list of every call matching <paramref name="call"/>.</summary>
     private static List<(int Start, string Text)> Arguments(Regex call, string text)
     {
