@@ -10,6 +10,10 @@ namespace FileAction.Core.Lock;
 /// </summary>
 public static class LockSecrets
 {
+    /// <summary>Reset material: the key from the just-opened container wins over a stale vault key.</summary>
+    public static string? ChooseResetKey(string? knownKey, RescuerSecrets? stored) =>
+        !string.IsNullOrEmpty(knownKey) ? knownKey : stored?.Key;
+
     /// <summary>UTF-8 bytes of a password. The caller must zero the returned buffer in a finally block.</summary>
     public static byte[] ToBytes(string secret) => Encoding.UTF8.GetBytes(secret);
 
