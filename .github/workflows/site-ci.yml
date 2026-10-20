@@ -160,8 +160,15 @@ jobs:
           mkdir -p site-artifacts/screenshots
           cat > "$RUNNER_TEMP/capture.cjs" <<'JS'
           const { chromium } = require('playwright');
+          const fs = require('fs');
 
           const BASE = 'http://127.0.0.1:8080/';
+          const DIAGNOSTICS_PATH = 'site-artifacts/screenshots/shot-diagnostics.json';
+          const diagnostics = {
+            generatedAt: new Date().toISOString(),
+            states: [],
+            failures: [],
+          };
           const STATES = [
             { lang: 'en', theme: 'dark', suffix: 'en-dark' },
             { lang: 'en', theme: 'light', suffix: 'en-light' },
@@ -298,6 +305,65 @@ jobs:
             }
           }
 
+          async function inspectToolShots(page, viewport, state) {
+            const shots = await page.evaluate(async () => {
+              const results = [];
+              for (const image of document.querySelectorAll('.tool-shot')) {
+                let decode = 'ok';
+                try {
+                  if (image.decode) await image.decode();
+                } catch (error) {
+                  decode = `error: ${error.message}`;
+                }
+                const style = getComputedStyle(image);
+                const rect = image.getBoundingClientRect();
+                results.push({
+                  cardId: image.closest('[data-tool]') ? image.closest('[data-tool]').id : null,
+                  src: image.getAttribute('src'),
+                  currentSrc: image.currentSrc,
+                  complete: image.complete,
+                  naturalWidth: image.naturalWidth,
+                  naturalHeight: image.naturalHeight,
+                  opacity: style.opacity,
+                  visibility: style.visibility,
+                  display: style.display,
+                  rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+                  decode,
+                });
+              }
+              return results;
+            });
+            diagnostics.states.push({
+              viewport: `${viewport.width}x${viewport.height}`,
+              state: state.suffix,
+              toolShots: shots,
+            });
+            fs.writeFileSync(DIAGNOSTICS_PATH, JSON.stringify(diagnostics, null, 2));
+            const broken = shots.filter(
+              (shot) =>
+                !shot.complete ||
+                shot.naturalWidth <= 0 ||
+                shot.naturalHeight <= 0 ||
+                shot.decode !== 'ok',
+            );
+            if (broken.length) {
+              diagnostics.failures.push({
+                viewport: `${viewport.width}x${viewport.height}`,
+                state: state.suffix,
+                broken,
+              });
+              fs.writeFileSync(DIAGNOSTICS_PATH, JSON.stringify(diagnostics, null, 2));
+            }
+            return broken;
+          }
+
+          async function captureCard(page, selector, file) {
+            const card = page.locator(selector);
+            await card.scrollIntoViewIfNeeded();
+            await page.waitForTimeout(300);
+            await card.screenshot({ path: `site-artifacts/screenshots/${file}` });
+          }
+
           (async () => {
             const browser = await chromium.launch();
             for (const viewport of VIEWPORTS) {
@@ -313,6 +379,7 @@ jobs:
                 await applyState(page, state);
                 await waitForHero(page, state);
                 await reveal(page);
+                await inspectToolShots(page, viewport, state);
                 await assertNoHorizontalOverflow(page, viewport, state);
                 await page.evaluate(() => {
                   if (document.activeElement && document.activeElement.blur) {
@@ -326,10 +393,20 @@ jobs:
                   path: `site-artifacts/screenshots/${viewport.prefix}-${state.suffix}.png`,
                   fullPage: true,
                 });
+                if (viewport.width === 1440 && state.suffix === 'en-dark') {
+                  await captureCard(page, '#tool-annotate', 'card-annotate.png');
+                  await captureCard(page, '#tool-addbackground', 'card-addbackground.png');
+                }
                 await context.close();
               }
             }
             await browser.close();
+            fs.writeFileSync(DIAGNOSTICS_PATH, JSON.stringify(diagnostics, null, 2));
+            if (diagnostics.failures.length) {
+              throw new Error(
+                `blank/undecoded .tool-shot image(s): ${JSON.stringify(diagnostics.failures)}`,
+              );
+            }
           })().catch((error) => {
             console.error(error);
             process.exit(1);
