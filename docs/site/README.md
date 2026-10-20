@@ -1,6 +1,6 @@
 # DropWheel download page
 
-Static, single-page site for **DropWheel 2.4.0**, published with GitHub Pages.
+Static, single-page site for **DropWheel 2.2.0**, published with GitHub Pages.
 
 **Live URL:** <https://faisaldhd.github.io/dropwheel/>
 
@@ -28,10 +28,7 @@ Enable **Settings → Pages → Source: GitHub Actions** for `https://faisaldhd.
 
 ## Updating the version
 
-1. Change `2.4.0` in **both** language blocks of `index.html` (the `Version` / `الإصدار` line) and in
-   the `<meta name="description">` line, and point the two release-notes links at the new notes file.
-   The page intentionally links the **stable aliases** (`DropWheel-Setup.exe`, `SHA256SUMS.txt`) rather
-   than a versioned asset name, so the download button keeps working for the next release.
+1. Change `2.2.0` in **both** language blocks of `index.html` (the `Version` / `الإصدار` line).
 2. The SHA-256 is **not** stored in the page. It is fetched at runtime from
    `https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt` and the
    `DropWheel-Setup*.exe` line is displayed. Nothing to update after a release.
@@ -51,7 +48,6 @@ Enable **Settings → Pages → Source: GitHub Actions** for `https://faisaldhd.
 Replace the three PNGs in `assets/` and keep the `width`/`height` attributes in `index.html`
 in sync with the new pixel sizes. Update the English **and** Arabic alt text/captions.
 
-> NOTE: the three screenshots were copied from `docs/screenshots/en/` and show the violet 2.2.x
-> Settings, wheel and Jobs windows — they predate the 2.4.0 tool windows and the **Animations** card.
-> Refresh them with the CI screenshots job (or `scripts/screenshots.cmd` on a desktop session) and keep
-> the English and Arabic alt text in sync; tracked in [`docs/BACKLOG.md`](../BACKLOG.md).
+> NOTE: the current screenshots were copied from `docs/screenshots/en/`, but they still show the
+> older orange FileAction UI (including the Czech language option). Replace them once the 2.2.0
+> violet screenshots exist.
