@@ -246,6 +246,31 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+
+      - name: Verify UI coverage report (en + ar, every window)
+        shell: pwsh
+        run: |
+          # The self-test itself exits non-zero on any coverage failure; this step makes "the report was
+          # written" and "all 26 tools appear in both cultures" part of the job result as well.
+          $report = "release/self-test/ui-coverage/ui-coverage.md"
+          if (-not (Test-Path $report)) { throw "ui-coverage.md was not written; the coverage pass did not run" }
+          $text = Get-Content $report -Raw
+          if ($text -match '\| FAIL \|') { throw "ui-coverage.md contains FAIL rows" }
+          $toolRows = ([regex]::Matches($text, '\| `tool:tools\.')).Count
+          if ($toolRows -lt 52) { throw "ui-coverage.md has only $toolRows tool/culture rows; expected 52 (26 tools x en/ar)" }
+          if ($text -notmatch 'Not covered by this run') { throw "ui-coverage.md has no explicit uncovered section" }
+          Write-Host "ui-coverage: $toolRows tool/culture rows, no FAIL rows"
+
+      - name: Upload UI coverage (en + ar, every window)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-coverage
+          path: |
+            release/self-test/ui-coverage/**
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Install Inno Setup (PR size budget)
         if: github.event_name == 'pull_request'
         shell: pwsh
@@ -306,6 +331,7 @@ jobs:
           if ($portableDelta -ge $budget) {
             throw "portable zip grew by $portableDelta bytes (>= $budget); the 2.4.0 size budget is +6 MiB over v2.3.0"
           }
+
 
       - name: Update signing self-test
         shell: pwsh

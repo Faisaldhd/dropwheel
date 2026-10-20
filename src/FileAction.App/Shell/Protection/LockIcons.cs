@@ -42,6 +42,19 @@ internal static class LockIcons
     /// <summary>System icon + the purple padlock in the bottom-left corner, rendered at exactly this size.</summary>
     public static BitmapSource? Compose(string path, bool folder, int size)
     {
+        try
+        {
+            return ComposeCore(path, folder, size);
+        }
+        catch (Exception)
+        {
+            // Rendering the badge must never take down the Lock window or the app self-test.
+            return Padlock(size) as BitmapSource;
+        }
+    }
+
+    private static BitmapSource? ComposeCore(string path, bool folder, int size)
+    {
         var baseIcon = ShellIcon.Get(path, size, folder);
         var visual = new DrawingVisual();
         using (var dc = visual.RenderOpen())
@@ -77,11 +90,18 @@ internal static class LockIcons
     /// <summary>Used by the lock window: system icon + badge for a file, or the composed folder icon.</summary>
     public static ImageSource? PreviewForPath(string path, int size = 48)
     {
-        // A .dwenc/.dwdir already has the composed association icon; do not stack a second padlock.
-        if (path.EndsWith(FileAction.Core.Lock.LockFormat.FileExtension, StringComparison.OrdinalIgnoreCase) ||
-            FileAction.Core.Lock.LockFormat.IsProtectedFolderName(path))
+        try
+        {
+            // A .dwenc/.dwdir already has the composed association icon; do not stack a second padlock.
+            if (path.EndsWith(FileAction.Core.Lock.LockFormat.FileExtension, StringComparison.OrdinalIgnoreCase) ||
+                FileAction.Core.Lock.LockFormat.IsProtectedFolderName(path))
+                return Padlock(size);
+            return Compose(path, Directory.Exists(path), size);
+        }
+        catch (Exception)
+        {
             return Padlock(size);
-        return Compose(path, Directory.Exists(path), size);
+        }
     }
 
     /// <summary>Tests: the ICO must contain a valid PNG frame at every declared size.</summary>

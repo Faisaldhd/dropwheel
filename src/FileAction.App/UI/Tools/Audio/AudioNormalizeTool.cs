@@ -60,7 +60,6 @@ internal sealed class AudioNormalizeView
         VerticalAlignment = VerticalAlignment.Center,
         HorizontalAlignment = HorizontalAlignment.Right,
         TextWrapping = TextWrapping.NoWrap,
-        FlowDirection = FlowDirection.LeftToRight,
     };
     private readonly TextBlock _status = new()
     {
