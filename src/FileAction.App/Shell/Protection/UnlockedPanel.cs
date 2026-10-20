@@ -48,7 +48,7 @@ internal sealed class UnlockedPanel : Window
             Text = "\uE72E",
             FontFamily = Theme.Icons,
             FontSize = 16,
-            Foreground = Theme.ProtectBadge,
+            Foreground = Theme.LockBadge,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 8, 0),
         };

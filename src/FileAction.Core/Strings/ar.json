@@ -460,7 +460,7 @@
   "tool.lock.rescuer.setup": "إعداد",
   "tool.lock.rescuer.title": "إعداد المنقذ",
   "tool.lock.rescuer.typeLast4": "اكتب آخر 4 أحرف من المفتاح",
-  "tool.lock.settings.associationExplained": "أنواع الملفات لكل مستخدم تمنح .dwenc و .dwdir أيقوناتهما الوردية وتفتحهما بـ DropWheel. لا يُثبَّت شيء على مستوى النظام.",
+  "tool.lock.settings.associationExplained": "أنواع الملفات لكل مستخدم تمنح .dwenc و .dwdir أيقوناتهما البنفسجية وتفتحهما بـ DropWheel. لا يُثبَّت شيء على مستوى النظام.",
   "tool.lock.settings.associationRemoved": "أُزيل ارتباط الملفات.",
   "tool.lock.settings.autoLock": "القفل تلقائياً عند الإغلاق",
   "tool.lock.settings.autoLockHint": "تُشفّر النسخة المفتوحة مرة أخرى عند إغلاق برنامجها، بعد مهلة الانتظار.",

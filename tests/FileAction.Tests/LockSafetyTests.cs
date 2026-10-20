@@ -1,5 +1,6 @@
 using System.Text;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using FileAction.App.Shell.Protection;
 using FileAction.App.UI;
 using FileAction.Core.Lock;
@@ -640,28 +641,59 @@ public class LockSafetyTests
     // ------------------------------------------------------------------ icons, registry, desktop.ini
 
     [Fact]
-    public void Icons_are_multi_size_png_frames_and_the_pink_token_is_used()
+    public void Lock_icons_are_shipped_multi_size_png_frames_and_use_the_purple_tokens()
     {
-        foreach (var folder in new[] { false, true })
+        long total = 0;
+        foreach (var name in LockIcons.AssetNames)
         {
-            var icon = folder ? LockIcons.BuildFolderIcon() : LockIcons.BuildFileIcon();
-            Assert.Equal(1, BitConverter.ToUInt16(icon, 2));
-            Assert.Equal(5, BitConverter.ToUInt16(icon, 4));
-            var expected = new byte[] { 16, 24, 32, 48, 0 };
-            for (var i = 0; i < 5; i++)
+            var icon = LockIcons.AssetBytes(name);
+            total += icon.Length;
+            Assert.True(LockIcons.HasAllFrames(icon), name + " must contain 16/24/32/48/64/256 PNG frames");
+            foreach (var size in LockIcons.FrameSizes)
             {
-                var entry = 6 + (16 * i);
-                Assert.Equal(expected[i], icon[entry]);
-                Assert.Equal(expected[i], icon[entry + 1]);
-                var offset = BitConverter.ToInt32(icon, entry + 12);
-                Assert.Equal(0x89, icon[offset]);
-                Assert.Equal((byte)'P', icon[offset + 1]);
-                Assert.Equal((byte)'N', icon[offset + 2]);
-                Assert.Equal((byte)'G', icon[offset + 3]);
+                var frame = LockIcons.ReadFrame(icon, size);
+                Assert.NotNull(frame);
+                var decoder = BitmapDecoder.Create(new MemoryStream(frame!),
+                    BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                Assert.Equal(size, decoder.Frames[0].PixelWidth);
+                Assert.Equal(size, decoder.Frames[0].PixelHeight);
             }
         }
-        Assert.Equal(Color.FromRgb(0xF0, 0x6F, 0xA8), Theme.ProtectBadgeDarkColor);
-        Assert.Equal(Color.FromRgb(0xD6, 0x40, 0x7F), Theme.ProtectBadgeLightColor);
+        Assert.True(total < 200 * 1024, $"lock icons are {total} bytes; the budget is 200 KB");
+
+        Assert.Equal(Color.FromRgb(0x82, 0x24, 0xD4), Theme.LockBadgeColor);
+        Assert.Equal(Color.FromRgb(0xB4, 0x8A, 0xE0), Theme.LockBadgeHighlightColor);
+        Assert.Equal(Theme.LockBadgeColor, ((SolidColorBrush)Theme.LockBadge).Color);
+        Assert.Equal(Theme.LockBadgeHighlightColor, ((SolidColorBrush)Theme.LockBadgeHighlight).Color);
+
+        Assert.Equal("locked-image", LockIcons.AssetForPath("photo.JPG"));
+        Assert.Equal("locked-video", LockIcons.AssetForPath("clip.mp4"));
+        Assert.Equal("locked-archive", LockIcons.AssetForPath("bundle.zip"));
+        Assert.Equal("locked-document", LockIcons.AssetForPath("notes.pdf"));
+        Assert.Equal("locked-other", LockIcons.AssetForPath("data.bin"));
+    }
+
+    [Fact]
+    public void Host_is_notified_after_lock_and_unlock_so_explorer_refreshes()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var host = new FakeHost();
+            var service = new LockService(new LockEnvironment([], []), host, minimumIterations: 1000,
+                newSlotIterations: 1000);
+            var file = Path.Combine(directory, "refresh.txt");
+            WriteFile(file, "refresh");
+            var container = service.Protect(file, directory, Credentials()).OutputPath;
+            Assert.NotEmpty(host.Notified);
+            host.Notified.Clear();
+            service.Unprotect(container, "file-password-1", recycleContainer: false);
+            Assert.Single(host.Notified);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
     }
 
     [Fact]

@@ -211,7 +211,7 @@ internal sealed class StrengthMeter : StackPanel
         for (var i = 0; i < _segments.Length; i++)
         {
             _segments[i].Background = i < score
-                ? score <= 1 ? Theme.Error : score == 2 ? Theme.ProtectBadge : Theme.Success
+                ? score <= 1 ? Theme.Error : score == 2 ? Theme.LockBadgeHighlight : Theme.Success
                 : Theme.Track;
         }
         _label.Text = T(score switch

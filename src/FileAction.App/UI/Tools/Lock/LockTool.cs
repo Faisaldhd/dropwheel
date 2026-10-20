@@ -150,12 +150,20 @@ internal sealed class LockProtectView
         LockRuntime.Initialize();
 
         var content = new StackPanel();
+        content.Children.Add(new System.Windows.Controls.Image
+        {
+            Source = LockIcons.PreviewForPath(items[0].Path, 48),
+            Width = 48,
+            Height = 48,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, 8),
+        });
         content.Children.Add(new DockPanel
         {
             Margin = new Thickness(0, 0, 0, 10),
             Children =
             {
-                LockUi.Pill(T("tool.lock.beta"), Theme.ProtectBadge, Theme.TextOnAccent),
+                LockUi.Pill(T("tool.lock.beta"), Theme.LockBadge, Theme.TextOnAccent),
                 new TextBlock
                 {
                     Text = items.Count == 1
@@ -244,7 +252,7 @@ internal sealed class LockProtectView
                     Text = "\uE72E",
                     FontFamily = Theme.Icons,
                     FontSize = 13,
-                    Foreground = Theme.ProtectBadge,
+                    Foreground = Theme.LockBadge,
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(0, 0, 7, 0),
                 },
@@ -318,7 +326,7 @@ internal sealed class LockProtectView
                 ? T("tool.lock.rescuer.needsPassword")
                 : T("tool.lock.rescuer.ready");
         _rescuerStatus.Foreground = stored is null || string.IsNullOrEmpty(stored.Password)
-            ? Theme.ProtectBadge
+            ? Theme.LockBadge
             : Theme.Success;
     }
 
@@ -518,6 +526,14 @@ internal sealed class LockUnlockView
         _item = item;
         LockRuntime.Initialize();
         var content = new StackPanel();
+        content.Children.Add(new System.Windows.Controls.Image
+        {
+            Source = LockIcons.PreviewForPath(item.Path, 48),
+            Width = 48,
+            Height = 48,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, 8),
+        });
         content.Children.Add(new TextBlock
         {
             Text = Bidi.Value(LockPaths.DisplayName(item.Path)),

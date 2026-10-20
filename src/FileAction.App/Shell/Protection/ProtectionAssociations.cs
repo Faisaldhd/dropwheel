@@ -55,7 +55,7 @@ internal sealed class HkcuProtectionRegistry : IProtectionRegistry
 }
 
 /// <summary>
-/// Per-user file types for <c>.dwenc</c> and <c>.dwdir</c> with the pink multi-size icon and an
+/// Per-user file types for <c>.dwenc</c> and <c>.dwdir</c> with the purple multi-size icon and an
 /// <c>open</c> verb. Registered only after the first protected file, and removable from Settings.
 /// </summary>
 internal static class ProtectionAssociations

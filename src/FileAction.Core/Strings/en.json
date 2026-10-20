@@ -460,7 +460,7 @@
   "tool.lock.rescuer.setup": "Set up",
   "tool.lock.rescuer.title": "Set up the Rescuer",
   "tool.lock.rescuer.typeLast4": "Type the last 4 characters of the key",
-  "tool.lock.settings.associationExplained": "Per-user file types give .dwenc and .dwdir their pink icons and open them with DropWheel. Nothing is installed system-wide.",
+  "tool.lock.settings.associationExplained": "Per-user file types give .dwenc and .dwdir their purple icons and open them with DropWheel. Nothing is installed system-wide.",
   "tool.lock.settings.associationRemoved": "The file association was removed.",
   "tool.lock.settings.autoLock": "Lock automatically when closed",
   "tool.lock.settings.autoLockHint": "The unlocked copy is encrypted again when its program closes, after the grace period.",

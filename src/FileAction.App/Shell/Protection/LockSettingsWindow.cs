@@ -34,7 +34,7 @@ internal sealed class LockSettingsWindow : Window
         _busy = new TextBlock
         {
             FontSize = 11.5,
-            Foreground = Theme.ProtectBadge,
+            Foreground = Theme.LockBadge,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(2, 0, 2, 8),
         };
@@ -141,7 +141,7 @@ internal sealed class LockSettingsWindow : Window
         if (!LockRuntime.Settings.RescuerConfigured)
         {
             _status.Text = T("tool.lock.settings.rescuerMissing");
-            _status.Foreground = Theme.ProtectBadge;
+            _status.Foreground = Theme.LockBadge;
             return;
         }
         _status.Text = stored is null || string.IsNullOrEmpty(stored.Password)

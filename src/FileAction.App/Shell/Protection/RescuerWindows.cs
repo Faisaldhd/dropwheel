@@ -183,7 +183,7 @@ internal sealed class RescuerSetupWindow : Window
             TextAlignment = TextAlignment.Center,
             Padding = new Thickness(12, 12, 12, 12),
             Background = Theme.Card,
-            Foreground = Theme.ProtectBadge,
+            Foreground = Theme.LockBadge,
             BorderBrush = Theme.PanelBorder,
             BorderThickness = new Thickness(1),
         };

@@ -4,7 +4,7 @@ using System.Text;
 namespace FileAction.Core.Lock;
 
 /// <summary>
-/// The folder badge: a <c>desktop.ini</c> that points Explorer at DropWheel's pink-locked folder icon,
+/// The folder badge: a <c>desktop.ini</c> that points Explorer at DropWheel's purple-locked folder icon,
 /// with the System/ReadOnly attributes Explorer requires. The bytes that were there before are kept in the
 /// encrypted metadata, so unlocking restores them exactly (or removes the file when there was none).
 /// </summary>
