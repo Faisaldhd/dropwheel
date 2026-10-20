@@ -41,7 +41,7 @@ Everything below is static analysis, JSON parsing, `git` and CI.
 | E-08 | `UI/LanguageManager.cs:20-24,69`, `UI/UiSetup.cs:17` | the single RTL switch every window uses |
 | E-09 | `UI/Tools/ToolWindow.cs:91,104` | tool-window base sets RTL for all 26 tools |
 | E-10 | `UI/Bidi.cs:19-27` | runtime bidi isolation helper (`Bidi.Value` / `Bidi.Number`) |
-| E-11 | 134 `Bidi.Value(...)` call sites (grep) | dynamic technical values are isolated at runtime |
+| E-11 | 134 `Bidi.Value`/`Bidi.Number` call sites (grep) | dynamic technical values are isolated at runtime |
 | E-12 | `SelfTest.cs:118-194,449-483` | what the CI screenshot job actually renders |
 | E-13 | `docs/ar-strings-review.md`, `docs/glossary-ar.md` | translator conventions used as the review rubric |
 
@@ -60,12 +60,12 @@ is re-asserted on every push by E-06 `Tables_have_exact_key_parity_in_both_direc
 | Group (required) | en | ar | only en | only ar | empty | raw-key value | untranslated prose | placeholder mismatch |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | `settings.` (General/Wheels/Quality/Integration/Updates/About) | 111 | 111 | 0 | 0 | 0 | 0 | 0 | 0 |
-| `settings.about.` (the "about" group; there is no top-level `about.`) | 6 | 6 | 0 | 0 | 0 | 0 | 0 | 0 |
+| *of which* `settings.about.` (the "about" group; no top-level `about.` exists) — subset of `settings.` | 6 | 6 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `tool.` (25 tools + protection flows) | 742 | 742 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `error.` | 39 | 39 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `update.` | 17 | 17 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `jobs.` + `job.` | 1 + 12 | 1 + 12 | 0 | 0 | 0 | 0 | 0 | 0 |
-| all other groups (`action`, `app`, `catalog`, `editor`, `fileType`, `help`, `hotkey`, `items`, `language`, `ocr`, `param`, `preview`, `sheet`, `shelf`, `suffix`, `toast`, `tray`, `wheel`) | 156 | 156 | 0 | 0 | 0 | 0 | 0 | 0 |
+| all other groups (`action`, `app`, `catalog`, `editor`, `fileType`, `help`, `hotkey`, `items`, `language`, `ocr`, `param`, `preview`, `sheet`, `shelf`, `suffix`, `toast`, `tray`, `wheel`) | 172 | 172 | 0 | 0 | 0 | 0 | 0 | 0 |
 | **Total** | **1,094** | **1,094** | **0** | **0** | **0** | **0** | **0** | **0** |
 
 Rules enforced mechanically:
@@ -259,7 +259,7 @@ literal was found anywhere in `FileAction.App`/`FileAction.Core`: the only strin
 | Chevrons `\uE76B`/`\uE76C` (previous/next frame) | **not** mirrored; deliberate — they belong to the LTR media timeline (`VideoTimeline.cs:56`, `VideoControls.cs:108,173`) | PASS*, screenshot §7 |
 | Settings slider (`UI/Controls.cs:175-236`) | fill/thumb math is in DIPs inside an inherited-direction grid | PASS*, screenshot §7 |
 | Audio/rate sliders (`AudioSlider.cs:73,91`, `VideoControls.cs:173`, `EditPhotosView.cs:332`) | explicitly LTR: “technical values stay left-to-right in Arabic too” | PASS* (documented exception) |
-| Progress bars (12 sites) | no explicit direction; inherit RTL and fill right-to-left | PASS |
+| Progress bars (16 sites) | no explicit direction; inherit RTL and fill right-to-left | PASS |
 | Directional icons | only rotate-left/right glyphs and media chevrons exist; rotation is semantically absolute and must **not** mirror | PASS |
 | Tray menu | RTL menu, version isolated (`TrayIcon.cs:132,138,166`) | PASS |
 
@@ -271,7 +271,7 @@ literal was found anywhere in `FileAction.App`/`FileAction.Core`: the only strin
 - **Mixed Latin/Arabic runs:** version keys isolated in the tables (§4); 134 dynamic-value call sites
   use `Bidi.Value`; file names in the shelf/jobs/wheel hub are isolated. Residual risk F-03.
 - **Truncation/wrap:** `TextTrimming.CharacterEllipsis` on titles, hub text, file names and subtitles
-  (24 sites); wheel labels max 22 Arabic chars; `MaxWidth` + `TextWrapping` on dialog prose. Arabic is
+  (multiple sites); wheel labels max 22 Arabic chars; `MaxWidth` + `TextWrapping` on dialog prose. Arabic is
   on average 1.3–1.6× longer than English; the longest Arabic wheel label (16 chars) wraps to at most
   3 lines at the narrowest 48-DIP slice — needs the screenshot in §7, not a code change.
 
