@@ -103,3 +103,45 @@ in-process (Apache-2.0, see [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md))
 
 The `--self-test` window sweep still renders only the crop tool (`SelfTest.cs` is a shared file this tool did not edit), so Q-16…Q-19 are code inspection rather than a rendered screenshot; the `Screenshots` job needs a desktop session and is skipped on pull requests.
 
+## Merge to PDF - `tools.pdfmerge` (2+ PDFs/images)
+
+Window title "Merge to PDF", primary button "Merge PDFs", output `Merged.pdf` next to the first source (or the
+drop folder), never overwriting. A single image stays with Crop. Real-file tests live in
+`tests/FileAction.Tests/PdfToolFunctionTests.cs`; the model and key tests in `PdfOrganizeTests.cs`; the
+theme scan/repaint test in `PdfToolThemeTests.cs`.
+
+| ID | Check | Expected / assertion | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| M-1 | Tool identity and localized labels | Id `tools.pdfmerge`; TitleKey `tool.pdfmerge.title`; PrimaryLabelKey `tool.pdfmerge.merge` -> "Merge PDFs"; all 14 `tool.pdfmerge.*` keys exist in en and ar with identical placeholders and differ between the languages | PASS | `Every_pdf_tool_key_exists_in_english_and_arabic_with_the_same_placeholders`, `The_pdf_tool_key_groups_contain_exactly_the_expected_keys` |
+| M-2 | Accepts 2+ PDFs/images | `Applies` is true for 2+ PDFs, 2+ images and a mix; false for a single file or a non-PDF/image | PASS | `CanMerge_accepts_pdfs_and_images_only` |
+| M-3 | Document order is the plan order | 3 PDFs (alpha 1 page, beta 2 pages, gamma 1 page) -> a real output of 4 pages in that order; PdfPig extracts `AlphaText`, `BetaOne`, `BetaTwo`, `GammaText` page by page | PASS | `Merge_writes_the_three_pdfs_in_document_order_with_their_text` |
+| M-4 | Rotation preserved | source pages with /Rotate 0, 90, 180 -> output pages keep 0, 90, 180 | PASS | `Merge_keeps_the_rotation_of_each_source_page` |
+| M-5 | One image = one page | 320x200 PNG after a 1-page PDF -> 2 pages; the image page is 240x150 pt (96 DPI -> points) and its pixels render | PASS | `Merge_adds_an_image_as_exactly_one_page` |
+| M-6 | Up/down arrow rules | first row: up disabled, down enabled; last row: up enabled, down disabled; single file: both disabled; each press moves exactly one position | PASS | `Merge_arrows_are_disabled_at_the_first_and_last_row`, `Merge_a_single_file_has_both_arrows_disabled`, `Merge_up_and_down_move_one_position` |
+| M-7 | Remove / reset / move | remove keeps the other rows in order, reset restores the incoming order, move places the file at the target index (and rejects no-ops/out-of-range) | PASS | `Merge_remove_keeps_the_other_files_in_order`, `Merge_reset_restores_the_selection_order`, `Merge_move_forward_places_the_file_at_the_target_index`, `Merge_move_rejects_out_of_range_or_no_op_indexes` |
+| M-8 | Initial order and the alphabetical caveat | the plan copies the items in the order the app received them; paths collected without a selection can arrive alphabetically, which the arrows/drag correct (documented in `PdfMergeTool` and `PdfMergePlan`) | PASS (inspection) | `PdfMergeTool` XML doc; `Merge_keeps_the_selection_order_and_mixes_pdfs_with_images` |
+| M-9 | Failure paths leave no partial output | corrupt PDF and password-protected PDF -> localized `ConversionException` naming the file and no `Merged*` file in the output folder; read-only folder -> access error and an empty folder | PASS | `Merge_fails_on_a_corrupt_pdf_without_writing_a_partial_file`, `Merge_fails_on_an_encrypted_pdf_without_writing_a_partial_file`, `Merge_fails_on_a_read_only_folder_without_writing_a_partial_file` |
+| M-10 | Theme and RTL | no hard-coded colours in `UI/Tools/Pdf`; both views rebuild after a light/dark switch; RTL comes from the shared `ToolWindow` | PASS | `Pdf_tool_views_have_no_hard_coded_colours`, `Pdf_tool_views_repaint_when_the_theme_changes` (RTL chrome: inspection) |
+
+## Organize Pages - `tools.pdforganize` (one PDF)
+
+Header "N pages" and "Reset Order"; a page grid with numbered badges, rotate/duplicate/remove and
+drag-reorder; footer "Make all pages the same width" with the note "Pages are scaled proportionally to match
+the narrowest page; their heights may still differ."; primary button "Save Organized PDF"; output
+`<name> Organized.pdf`, source untouched.
+
+| ID | Check | Expected / assertion | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| O-1 | Tool identity and localized labels | Id `tools.pdforganize`; PrimaryLabelKey `tool.pdforganize.save` -> "Save Organized PDF"; all 16 `tool.pdforganize.*` keys exist in en and ar with identical placeholders and differ between the languages | PASS | `Every_pdf_tool_key_exists_in_english_and_arabic_with_the_same_placeholders`, `The_pdf_tool_key_groups_contain_exactly_the_expected_keys` |
+| O-2 | Accepts one PDF only | applies to `report.pdf`; false for an image, text file, folder or two PDFs | PASS | `CanOrganize_accepts_a_single_pdf_only` |
+| O-3 | Seeds one page per source page | 3 pages -> indexes 0,1,2 with rotation 0; the header shows "{0} pages" | PASS | `Organize_seeds_one_page_per_source_page_in_order` |
+| O-4 | Rotate | +90/-90/180 add to the page's own rotation and wrap at 360 | PASS | `Organize_rotate_adds_degrees_and_wraps`, `Page_ref_rotated_by_normalizes_to_a_quarter_turn` |
+| O-5 | Duplicate / delete | duplicate inserts a copy right after the page with its rotation; delete removes one page and never the last page | PASS | `Organize_duplicate_inserts_a_copy_right_after_the_page`, `Organize_delete_removes_a_page_but_keeps_at_least_one` |
+| O-6 | Move / drag and Reset Order | move reorders pages including duplicates; reset restores the source page list | PASS | `Organize_move_reorders_pages_and_keeps_duplicates`, `Organize_reset_restores_the_original_page_list` |
+| O-7 | Exact real-file result | rotate(0,90)+rotate(1,180)+duplicate(1)+delete(3)+move(2,0) -> 3 pages, texts Two/One/Two, /Rotate 180/90/180 | PASS | `Organize_applies_rotate_duplicate_delete_and_move_exactly` |
+| O-8 | Same-width option | 300x400 + 600x300, option on -> both output pages 300 pt wide, heights 400 and 150, and the text of both pages still extracts | PASS | `Organize_same_width_scales_every_page_to_the_narrowest_width` |
+| O-9 | Validation | empty page list, page index outside the source and a non-quarter-turn rotation are rejected | PASS | `Organize_validate_flags_an_empty_page_list`, `Organize_validate_flags_a_page_index_outside_the_source`, `Organize_validate_flags_a_rotation_that_is_not_a_quarter_turn` |
+| O-10 | Failure path | corrupt input -> localized `ConversionException` naming the file and no `Organized*` output | PASS | `Organize_fails_on_a_corrupt_pdf_without_writing_a_partial_file` |
+| O-11 | Theme and RTL | theme scan and theme-change rebuild as for Merge; the grid and footer inherit RTL from the shared window | PASS | `Pdf_tool_views_have_no_hard_coded_colours`, `Pdf_tool_views_repaint_when_the_theme_changes` (RTL chrome: inspection) |
+
+**How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~PdfToolFunctionTests|FullyQualifiedName~PdfToolThemeTests|FullyQualifiedName~PdfOrganizeTests"` (62 cases: 32 model/key methods, 9 real-file function tests, 3 theme cases). The 12 function/theme cases passed in run [39341981013](https://github.com/Faisaldhd/dropwheel/actions/runs/39341981013) (308 passed, 0 failed); the merged head reruns them in the `Build + test` job.
