@@ -511,6 +511,9 @@ if (-not $uiText) {
             $surfaces.Groups[1].Value, $surfaces.Groups[2].Value, $surfaces.Groups[4].Value,
             $keys.Groups[1].Value, $keys.Groups[2].Value, $strength
     }
+    # Wording only: the two rows below are not genuine Arabic renders, so the verdict line must not
+    # imply 114 Arabic surfaces. See CHECKLIST.md gate 4 and the localization lane's finding.
+    $detail += '; 112/114 surfaces genuinely en+ar; 2 surfaces (wheel, parameter dialog) are English renders in the ar pass - gate defect, post-tag fix'
     if ($uiRunId -ne $runId) {
         $detail += " (artifact from run $uiRunId, NOT the release commit - PASS with caveat)"
     }
