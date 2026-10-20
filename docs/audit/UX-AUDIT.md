@@ -37,6 +37,7 @@ lock feature.
 | Error states | **FAIL** | the generic path shows a raw `ex.Message` toast (F-18) |
 | Busy / progress states | **FAIL** | no in-window progress or cancel (F-19) |
 | RTL readiness | **PASS with defect** | window `FlowDirection`, `Bidi.Value`, full `ar` string parity; slider fill is not mirrored (F-06) |
+| Status-badge contrast (WCAG AA) | **FAIL — fixed here** | light 2.02:1 / 2.79:1, dark error 3.94:1 → new theme-aware badge tokens (F-28) |
 | Tool reachability from the wheel | **FAIL — fixed upstream, guarded here** | 24 of 26 windows were reachable; `tools.annotate` / `tools.redact` had no wheel operation (F-27), wired in `4f23c9c` |
 | Wheel | **PASS with defects** | purple identity, modal depth, stagger; mode-switch affordance unproven (F-23), stale captures (F-22) |
 | Shipped evidence | **FAIL** | `docs/screenshots/en/wheel-*.png` are pre-2.4 orange-accent captures (F-22) |
@@ -44,6 +45,13 @@ lock feature.
 Tool rows: **13 PASS / 13 FAIL** when the shared gutter defect (F-03) is attributed to each window it
 visibly affects. Counting only window-specific deviations — the annex's convention — it is
 **18 PASS / 8 FAIL**. Both numbers are derived from the same table in §9.
+
+**Evidence standard (rule 5).** Every count here comes from a named grep, file and line, or a commit;
+every pixel number was measured with PIL on a committed poster (§5.1) and is labelled *capture pixels*,
+not DIP. Anything that would need a rendered window is written **needs CI screenshot** rather than
+estimated: that applies to F-05, F-06, F-18, F-19, F-20, F-23, F-26 and F-28, and to the 21 parity rows
+that have no light/dark capture. Contrast ratios are computed, not eyeballed: WCAG 2.1 relative-luminance
+formula over the composited colour, shown as the pair itself in F-28.
 
 ## 2. What the reference actually establishes
 
@@ -270,6 +278,42 @@ nothing is hidden or mislabelled in a way that changes what the user can do.
 
 Severity: **P0** blocks a class of user, **P1** wrong or misleading in normal use, **P2** polish/consistency.
 
+**Ownership (rule 3).** Every FAIL has an owner and a status. `owner: UX lane (audit/adesign, PR #31)`
+means this branch; `owner: deferred -> docs/BACKLOG.md` means we are deliberately not shipping it in
+2.4.0 and a one-line request has been filed with the owner; otherwise the owning lane is named.
+F-17 is **not assigned** — the busy-state and error-state findings were merged as F-19 and F-18 when the
+list was collapsed.
+
+| FAIL | Sev | Owner | Status |
+| --- | --- | --- | --- |
+| F-01 | P0 | UX lane (audit/adesign, PR #31) | open — control-kit rewrite, D1 |
+| F-02 | P1 | UX lane (audit/adesign, PR #31) | open — D2 |
+| F-03 | P1 | UX lane (audit/adesign, PR #31) | open — D2 |
+| F-04 | P2 | UX lane (audit/adesign, PR #31) | open — D4 |
+| F-05 | P1 | UX lane (audit/adesign, PR #31) | open — D6 |
+| F-06 | P2 | UX lane (audit/adesign, PR #31) | open — D12 |
+| F-07 | P2 | UX lane (audit/adesign, PR #31) | open — D13 |
+| F-08 | P2 | UX lane (audit/adesign, PR #31) | open — D1 |
+| F-09 | P2 | UX lane (audit/adesign, PR #31) | open — D3 |
+| F-10 | P2 | UX lane (audit/adesign, PR #31) | open — D10 |
+| F-11 | P2 | UX lane (audit/adesign, PR #31) | **fixed** `835758c` |
+| F-12 | P2 | deferred -> docs/BACKLOG.md | requested (string owner; append-only for this lane) |
+| F-13 | evidence | deferred -> docs/BACKLOG.md | needs `--self-test` (CI only) |
+| F-14 | process | deferred -> docs/BACKLOG.md | brief/reference housekeeping |
+| F-15 | P1 | UX lane (audit/adesign, PR #31) | open — D15 |
+| F-16 | P1 | UX lane (audit/adesign, PR #31) | open — D16 |
+| F-18 | P1 | UX lane (audit/adesign, PR #31) | open — error surface |
+| F-19 | P1 | UX lane (audit/adesign, PR #31) | open — busy/cancel |
+| F-20 | P2 | UX lane (audit/adesign, PR #31) | open — live theme repaint |
+| F-21 | P2 | UX lane (audit/adesign, PR #31) | open — token naming |
+| F-22 | P2 | docs lane (audit/adocs) | open — stale `docs/screenshots/en/wheel-*` |
+| F-23 | P2 | UX lane (audit/adesign, PR #31) | open — needs CI screenshot of click-mode wheel |
+| F-24 | P2 | UX lane (audit/adesign, PR #31) | open — D16 |
+| F-25 | P2 | UX lane (audit/adesign, PR #31) | open — icon tokens |
+| F-26 | P2 | deferred -> docs/BACKLOG.md | needs new strings (string owner) |
+| F-27 | P1 | UX lane (audit/adesign, PR #31) | **fixed upstream** `4f23c9c`; guard `6f6c81d` |
+| F-28 | P1 | UX lane (audit/adesign, PR #31) | **fixed here** (§11) |
+
 ### P0
 
 **F-01 — No tool control is focusable, tabbable or announced** · P0 · annex §5 F-01
@@ -281,6 +325,24 @@ Screenshot: `docs/screenshots/motion/tool-crop-light-poster.png` (all controls a
 Fix: D1.
 
 ### P1
+
+**F-28 — Status-badge text fails WCAG AA in light mode (and the error badge in dark)** · P1 · **fixed here**
+`Controls.Badge` painted `Theme.Success` / `Theme.Error` text on a 15 % (`0x26`) tint of the same hue over
+`Theme.Card` (`Controls.cs:286–292`). Measured WCAG 2.1 contrast (relative-luminance formula, tint
+composited over the card):
+
+| pair | light | dark |
+| --- | ---: | ---: |
+| success text on its badge | **2.02:1** (2.28:1 against pure white) | 5.32:1 ✔ |
+| error text on its badge | **2.79:1** (3.33:1 against pure white) | **3.94:1** ✘ |
+
+The text is 11.5 px semibold — body text, so the requirement is **4.5:1**, not the 3:1 large-text tier
+(large means ≥ 24 px, or ≥ 18.66 px bold). Fix: new tokens `Theme.BadgeSuccessText` /
+`Theme.BadgeErrorText` (`Theme.cs`, theme-aware) resolve to `#3CC36E` / `#FF9A9A` in dark and
+`#17703C` / `#A61B1B` in light → **5.32:1 / 6.45:1 dark, 5.44:1 / 6.31:1 light**. `Theme.Success` /
+`Theme.Error` stay the mark colours for icons, strokes and the lock badge, so no other surface changes.
+Screenshot: **needs CI screenshot** of a badge in each theme (no shipped capture contains a
+`Controls.Badge`). Owner: UX lane (audit/adesign, PR #31).
 
 **F-27 — Two 2.4.0 tool windows were unreachable from the wheel** · P1 · **fixed upstream (`4f23c9c`); guarded here**
 `WheelController.BuildOperations()` (`Wheel/WheelController.cs:88–116`) listed 25 operations and omitted
@@ -433,6 +495,7 @@ changed; anything that needs a rendered window to verify is listed in §12 inste
 | `fix(qr): label the read-only primary 'Copy and Close'` | **new** `tool.qr.copyClose` in `en`+`ar` (additive), `QrTool.PrimaryLabelKey`; behaviour unchanged (already copied + closed) | F-11 |
 | `test(ux): bilingual titles and primary labels for every tool` | 2 deterministic string-contract facts, §13 | string-table regressions |
 | `test(wheel): every registered tool window has a dispatchable operation` | 2 deterministic dispatch facts, §13 | F-27 regressions |
+| `fix(a11y): readable status-badge text in both themes` | `Theme.BadgeSuccessText` / `Theme.BadgeErrorText` (theme-aware tokens) and `Controls.Badge` consuming them; no string, layout or behaviour change | F-28 |
 
 The wheel wiring itself is **not** in this diff: it landed upstream as `4f23c9c` while the PR was in
 review, so this branch ships only the guard that keeps it true.
