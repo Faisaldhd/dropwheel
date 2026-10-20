@@ -186,16 +186,17 @@ internal sealed class JobCard : Border
         row.Children.Add(body);
         Child = row;
 
-        if (!Animate)
+        if (!Animate || !Motion.Enabled)
             return;
 
-        // Slide in from the right.
+        // Slide in from the right. Shared tokens only: motion is a theme-level vocabulary.
         var slide = new TranslateTransform(40, 0);
         RenderTransform = slide;
         Opacity = 0;
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        slide.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(40, 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
-        BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
+        slide.BeginAnimation(TranslateTransform.XProperty,
+            new DoubleAnimation(40, 0, TimeSpan.FromMilliseconds(Motion.ToastMs)) { EasingFunction = Motion.SoftOut });
+        BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(Motion.ToastMs)) { EasingFunction = Motion.SoftOut });
     }
 
     private readonly Grid _badgeHost;
@@ -210,14 +211,20 @@ internal sealed class JobCard : Border
 
     private void StartPulse()
     {
-        if (!Animate)
+        if (!Animate || !Motion.Enabled)
         {
             _fill.Width = 48;
+            _fill.Opacity = 1;
             return;
         }
         // Indeterminate state: a short segment breathing until real progress arrives.
         _fill.Width = 48;
-        _fill.BeginAnimation(OpacityProperty, new DoubleAnimation(0.35, 1, TimeSpan.FromMilliseconds(700)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+        _fill.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0.35, 1, TimeSpan.FromMilliseconds(Motion.BreathMs))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+            });
     }
 
     public void Report(double value)

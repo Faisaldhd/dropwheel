@@ -118,6 +118,13 @@ public static class LockArchive
         return count;
     }
 
+    /// <summary>SHA-256 of one plaintext file, used to bind a session snapshot to the bytes.</summary>
+    public static string FileHash(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete,
+            256 * 1024, FileOptions.SequentialScan);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+    }
     /// <summary>
     /// A stable SHA-256 of the folder tree (sorted relative paths + lengths + last-write ticks). Stored when
     /// a session opens so a retry can see that the user edited the tree; the current tree is always encoded.

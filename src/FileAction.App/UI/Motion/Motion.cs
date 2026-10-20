@@ -68,6 +68,12 @@ internal static class Motion
     /// <summary>Badge pop (Lock/success/error).</summary>
     public const double PopMs = 260;
 
+    /// <summary>A job/progress card sliding into the notification corner (fade + 40 px slide).</summary>
+    public const double ToastMs = 200;
+
+    /// <summary>Indeterminate progress breathing: one direction of the opacity cycle.</summary>
+    public const double BreathMs = 700;
+
     /// <summary>How far a floating surface rises into place.</summary>
     public const double RisePx = 8;
 
@@ -392,19 +398,6 @@ internal static class Motion
             new DoubleAnimation(move.X, x, duration) { EasingFunction = EaseOut, FillBehavior = FillBehavior.HoldEnd });
         move.BeginAnimation(TranslateTransform.YProperty,
             new DoubleAnimation(move.Y, y, duration) { EasingFunction = EaseOut, FillBehavior = FillBehavior.HoldEnd });
-    }
-
-    /// <summary>Fades the wheel's highlight ring / slice in or out without touching layout.</summary>
-    public static void Fade(UIElement element, double to, double durationMs = HoverMs)
-    {
-        if (!Enabled)
-        {
-            element.BeginAnimation(UIElement.OpacityProperty, null);
-            element.Opacity = to;
-            return;
-        }
-        element.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(element.Opacity, to, TimeSpan.FromMilliseconds(durationMs)) { EasingFunction = SoftOut, FillBehavior = FillBehavior.HoldEnd });
     }
 
     /// <summary>Success pulse: a quick, small scale bounce (never affects layout).</summary>

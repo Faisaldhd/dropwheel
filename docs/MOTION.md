@@ -5,10 +5,10 @@ curve and distance lives in one file, `src/FileAction.App/UI/Motion/Motion.cs`, 
 that file for its animation. No window, wheel or button hard-codes a duration of its own.
 
 The rule that keeps it cheap: **only `RenderTransform` and `Opacity` are animated**. The single
-exception is the media-orientation resize of a tool window, which animates width/height for 180 ms
-because it is the one case where the layout itself is the transition. Nothing is animated on a timer:
-WPF storyboards run on the render thread's clock, and when reduced motion is on no storyboard is
-started at all, so the app has no animation work while idle.
+exception is the media-orientation resize of a tool window, which animates the window's width, height,
+left and top for 180 ms because it is the one case where the layout itself is the transition. Nothing
+is animated on a timer: WPF storyboards run on the render thread's clock, and when reduced motion is on
+no storyboard is started at all, so the app has no animation work while idle.
 
 ## Tokens
 
@@ -31,6 +31,8 @@ started at all, so the app has no animation work while idle.
 | `ToggleMs` | 120 ms | toggle knob slide |
 | `PulseMs` | 320 ms | success pulse |
 | `PopMs` | 260 ms | badge pop (Lock/success/error) |
+| `ToastMs` | 200 ms | job/progress card slide-in |
+| `BreathMs` | 700 ms per direction | indeterminate progress breathing |
 | `SwitchRotateDegrees` | 4 deg | wheel mode switch lean |
 
 Easings: `EaseOut` (Cubic), `EaseIn` (Cubic), `EaseInOut` (Cubic), `SoftOut` (Quadratic, cross-fades),
@@ -43,7 +45,7 @@ frozen once at startup.
 | --- | --- | ---: | --- | --- |
 | whole disc | wheel opens | 150 ms | `SoftOut` fade, `Settle` scale | window opacity, disc scale 0.88 -> 1 |
 | slices | wheel opens / mode switch | 150 ms each, 18 ms apart | `EaseOut` | slice opacity, slice scale 0.82 -> 1 |
-| highlighted slice | pointer or keyboard moves the selection | 100 ms | `EaseOut` | slice translate (7 px along its angle) + accent fill |
+| highlighted slice | pointer or keyboard moves the selection | 100 ms | `EaseOut` | slice translate (7 px along its angle); the accent fill itself is an instant brush swap, not animated |
 | pressed slice | mouse down on a slice | 90 ms | `EaseOut` | slice scale 1 -> 0.96 -> 1 |
 | mode switch | Tab, modifier key, tab click, repeat toggle, language switch | 170 ms total | `EaseIn` out, `EaseOut` in | disc opacity 1 -> 0.25 -> 1, disc rotation 0 -> -4 deg -> 0 |
 | whole disc | Esc, action, deactivate, drag ended | 100 ms | `EaseIn` | window opacity 1 -> 0, disc scale 1 -> 0.965 |
@@ -112,29 +114,36 @@ measures both, so the reduced-motion path is covered on every CI run.
   frame. Interactive elements attach handlers once, guarded by an attached property.
 - **Stop and release.** Close storyboards clear their clocks when they complete; `Motion.Release`
   clears opacity and transform clocks. A closed window holds no animation clock.
-- **No polling timers.** The only timers are the pre-existing one-shot drag-end timer and the
-  self-test's measurement timer.
+- **No polling animation timer.** The motion system schedules nothing: every animation is a WPF
+  storyboard/clock started by a user or lifecycle event. The timers that predate 2.4.0 (the 350 ms
+  Explorer-args coalescer, the 150 ms drag folder sampler, the 500 ms drag-end close, the job-card
+  auto-remove, the preview playback reporters, the video theme poller and the protection runtime
+  pollers) are unchanged by motion; none of them drives an animation. The self-test's one-second
+  measurement timer is the only timer motion creates.
 - **GPU rendering.** Transforms and opacity are compositor-friendly; the app does not force software
   rendering. `Motion.RenderTier` records WPF's tier in the self-test (2 = full hardware acceleration).
-- **DPI and RTL** are untouched: motion uses render transforms only, never layout mirrors, and the
-  wheel's disc keeps `FlowDirection.LeftToRight` while its text follows the app language.
+- **DPI and RTL** are untouched by motion: it uses render transforms only, never layout mirrors, and the
+  wheel's disc keeps `FlowDirection.LeftToRight` while its text follows the app language. RTL motion is
+  **not separately measured** — the gate runs en-LTR (see `docs/audit/MOTION-AUDIT.md` §4b).
 
 ## Verification
 
 `DropWheel.exe --self-test <dir>` now includes a motion gate (see `docs/PERF.md`):
 
-- opens the wheel and every registered tool window in a deterministic pose sequence and records
-  **UI-thread frame p95** with motion ON versus OFF, plus a software-rasterisation proxy for one
-  composed frame;
+- drives the wheel and the image-family tool windows (15 media-family tools are skipped and named in
+  `motion/report.md`) in a deterministic pose sequence, **en-LTR on the runner's theme** — every surface
+  shares the animated chrome code path — and records **UI-thread frame p95** with motion ON versus OFF,
+  plus a software-rasterisation proxy for one composed frame;
 - records **CPU during** the measurement and **idle CPU** for one second after everything is closed;
 - records the **working set retained** after close, budget 12 MB (inside the 15 MB idle-memory rule);
 - fails the self-test when UI frame p95 > 16.7 ms, idle CPU > 5 %, or retention > 12 MB.
 
 Startup (+5 %) and installer size (+6 MB) are guarded by the package/performance gates described in
 `docs/PERF.md`; motion adds one small class, no dependency and no startup work beyond reading two
-booleans. Measured CI runs (39350370128, then 39351795353 after the edit-photos merge): UI frame p95
-**0.02-0.07 ms** across the wheel and five tool windows, idle CPU **0.00-0.39 %**, retained working set
-**0.0 MB** - see `docs/PERF.md` for the full table and the meaning of the software-rasterisation proxy.
+booleans. Measured in CI run 39376236166 (`motion/report.md`, 12 surfaces): UI frame p95
+**0.02-0.04 ms** with motion on and **0.00 ms** with motion off, idle CPU **0.00 %**, retained working
+set **0.0 MB** - see `docs/audit/MOTION-AUDIT.md` §5 for the per-surface table and the budget
+comparison, and §4 for what the gate does and does not cover (English/LTR only, 11 of 26 tools).
 
 
 ## Website clips
@@ -143,7 +152,8 @@ booleans. Measured CI runs (39350370128, then 39351795353 after the edit-photos 
 poster frames, in dark and light:
 
 - `wheel-{dark,light}.webp` - opening, the travelling highlight and closing, looping;
-- `tool-<id>-{dark,light}.webp` - a registered tool window opening, holding and closing.
+- `tool-<id>-{dark,light}.webp` - an image-family tool window opening, holding and closing (the
+  committed set covers the wheel and five tools; CI regenerates the full measured set).
 
 They are **renders of the real visual tree**, produced by `--self-test` through
 `MotionClips`/`Pose`, using the same easing curves and durations as the live storyboards. They are not

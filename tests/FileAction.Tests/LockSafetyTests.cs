@@ -1609,6 +1609,104 @@ public class LockSafetyTests
             Cleanup(directory);
         }
     }
+    [Fact]
+    public void Failed_plaintext_delete_does_not_zero_the_file_and_retry_refuses_changed_bytes()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var file = Path.Combine(directory, "retry.txt");
+            WriteFile(file, "good content");
+            var credentials = Credentials();
+            var service = new LockService(new LockEnvironment([], []), minimumIterations: 1000,
+                newSlotIterations: 1000, deletePath: _ => false);
+            var container = service.ProtectTo(file, Path.Combine(directory, "retry.dwenc"), credentials,
+                keepSource: true).OutputPath;
+            var originalHash = LockArchive.FileHash(file);
+            LockHeader header;
+            byte[] dataKey;
+            using (var source = new FileStream(container, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                header = LockContainer.ReadHeader(source);
+                dataKey = LockContainer.Unwrap(header, credentials.FilePassword, out _);
+            }
+
+            Assert.ThrowsAny<Exception>(() => service.RelockFromSession(container, header, dataKey, file,
+                expectedFileHash: originalHash));
+            Assert.Equal("good content", File.ReadAllText(file)); // not overwritten with zeros
+            File.WriteAllBytes(file, new byte[12]); // simulate the old zeroing bug
+            Assert.Throws<LockChangedException>(() => service.RelockFromSession(container, header, dataKey, file,
+                expectedFileHash: originalHash));
+            var good = new LockService(new LockEnvironment([], []), minimumIterations: 1000,
+                newSlotIterations: 1000);
+            var restored = good.Unprotect(container, credentials.FilePassword, recycleContainer: false);
+            Assert.Equal("good content", File.ReadAllText(restored.RestoredPath));
+            LockSecrets.Wipe(dataKey);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void Failed_folder_delete_does_not_zero_or_delete_the_tree_and_retry_refuses_mutation()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var folder = Path.Combine(directory, "retry-folder");
+            Directory.CreateDirectory(folder);
+            WriteFile(Path.Combine(folder, "file.txt"), "folder content");
+            var credentials = Credentials();
+            var service = new LockService(new LockEnvironment([], []), minimumIterations: 1000,
+                newSlotIterations: 1000, deletePath: _ => false);
+            var container = service.ProtectTo(folder, Path.Combine(directory, "retry.dwdir"), credentials,
+                keepSource: true).OutputPath;
+            var tree = LockArchive.TreeHash(folder);
+            LockHeader header;
+            byte[] dataKey;
+            using (var source = new FileStream(container, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                header = LockContainer.ReadHeader(source);
+                dataKey = LockContainer.Unwrap(header, credentials.FilePassword, out _);
+            }
+
+            Assert.ThrowsAny<Exception>(() => service.RelockFromSession(container, header, dataKey, folder,
+                expectedTreeHash: tree));
+            Assert.Equal("folder content", File.ReadAllText(Path.Combine(folder, "file.txt")));
+            WriteFile(Path.Combine(folder, "late.txt"), "late");
+            Assert.Throws<LockChangedException>(() => service.RelockFromSession(container, header, dataKey, folder,
+                expectedTreeHash: tree));
+            LockSecrets.Wipe(dataKey);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+    [Fact]
+    public void Restore_staging_stays_in_the_swept_app_temp_not_the_destination()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var appTemp = Path.Combine(directory, "app-restore-temp");
+            var service = new LockService(new LockEnvironment([], [], RestoreTempFolder: appTemp),
+                minimumIterations: 1000, newSlotIterations: 1000);
+            var file = Path.Combine(directory, "staged.txt");
+            WriteFile(file, "staged content");
+            var container = service.Protect(file, directory, Credentials()).OutputPath;
+            var restored = service.Unprotect(container, "file-password-1", recycleContainer: false);
+            Assert.Equal("staged content", File.ReadAllText(restored.RestoredPath));
+            Assert.False(Directory.Exists(Path.Combine(directory, ".dwlock-restore")));
+            Assert.False(Directory.Exists(Path.Combine(directory, ".dwrestore")));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
     // ------------------------------------------------------------------ helpers
 
     private static string ReadContent(LockService service, string container, string secret)
