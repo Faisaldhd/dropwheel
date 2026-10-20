@@ -84,7 +84,7 @@ No build. Edit the files and reload.
 
 Measured on the authored copy (see the audit for the full method):
 
-- first load: **222.4 KiB** of same-origin files (document, CSS, JS, hero clip, icon); under the
+- first load: **363,059 bytes** of same-origin files (document, CSS, JS, hero clip, icons; the CI size gate in scripts/site/size_budget.py is authoritative); under the
   500 KB budget;
 - zero external requests, zero console errors, zero missing alt text, zero duplicate IDs;
 - no horizontal overflow at 390 px;
