@@ -286,6 +286,14 @@ jobs:
                 await waitForHero(page, state);
                 await reveal(page);
                 await assertNoHorizontalOverflow(page, viewport, state);
+                await page.evaluate(() => {
+                  if (document.activeElement && document.activeElement.blur) {
+                    document.activeElement.blur();
+                  }
+                  window.scrollTo(0, 0);
+                });
+                await page.mouse.move(0, 0);
+                await page.waitForTimeout(150);
                 await page.screenshot({
                   path: `site-artifacts/screenshots/${viewport.prefix}-${state.suffix}.png`,
                   fullPage: true,
