@@ -223,6 +223,7 @@ internal sealed class CropView
                 Layout();
                 PaintChips();
             };
+            Motion.Interactive(chip);
             _chipRow.Children.Add(chip);
         }
         PaintChips();
