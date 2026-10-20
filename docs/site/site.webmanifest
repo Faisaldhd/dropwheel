@@ -1,0 +1,27 @@
+{
+  "name": "DropWheel — 26 file tools at your cursor",
+  "short_name": "DropWheel",
+  "description": "Windows 10/11 file tools: convert, edit, compress, protect and lock from one radial wheel. Free and open source, MIT. Everything runs on your PC.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#100B18",
+  "theme_color": "#8224D4",
+  "categories": ["utilities", "productivity"],
+  "icons": [
+    {
+      "src": "assets/icon/dropwheel-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon/dropwheel-256.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
