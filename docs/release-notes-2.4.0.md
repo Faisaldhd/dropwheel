@@ -76,7 +76,7 @@ Every gap names its owner, so a limit is never mistaken for something forgotten.
   the tools stay out of the package).
 - The **per-window bilingual rendering gate** (every tool window in English and Arabic at 100/150/200 %
   DPI) is **`audit/selftest`, PR #37, in flight**. What is enforced today: both string tables are
-  complete and identical in structure (1,094 keys each), with parity enforced by `LocalizationTests` in
+  complete and identical in structure (1,107 keys each), with parity enforced by `LocalizationTests` in
   CI, and the self-test renders the shipped build in English and Arabic, light and dark.
 - **Light-mode contrast and the video timer** are **`audit/amotion` / `audit/adesign`, in flight**.
 - Deferred, non-blocking work is tracked in [BACKLOG.md](BACKLOG.md).
