@@ -81,11 +81,11 @@ because the site does not publish one.
   </script>
 ```
 
-Fields map to the shipped page as follows: `name` → `index.html:114`;
-`applicationCategory` → the tool set at `index.html:250-665`;
-`operatingSystem` → `index.html:111` and `1014`; `license` → the MIT line at
-`index.html:1056`; `downloadUrl` → the download button at `index.html:97` and `121`;
-`sameAs` → `index.html:1053`.
+Fields map to the shipped page as follows: `name` → `index.html:116`;
+`applicationCategory` → the tool set at `index.html:253-640`;
+`operatingSystem` → `index.html:113` and `996`; `license` → the MIT line at
+`index.html:1005` and the LICENSE link at `1039`; `downloadUrl` → the download
+buttons at `index.html:99`, `123` and `915`; `sameAs` → `index.html:1036`.
 
 ### 1.3 CSP (`index.html:11`) — one conditional line
 
@@ -155,8 +155,8 @@ match the card, change line 9 to `#8224D4` in the same commit.
 | `og:site_name` `DropWheel` | `index.html:16` | kept verbatim |
 | `og:locale` `en_US` + alternate `ar_AR` | `index.html:22-23` | kept verbatim (and `app.js:189-190` rewrites them on switch) |
 | Icon paths | `index.html:13-14` | unchanged; manifest uses the same `assets/icon/*.png` |
-| Download URL | `index.html:97,121` | `downloadUrl` identical |
-| Licence | `index.html:1056` (MIT link) | `license` points at the repo LICENSE |
+| Download URL | `index.html:99,123,915` | `downloadUrl` identical |
+| Licence | `index.html:1005` and `:1039` (MIT + LICENSE link) | `license` points at the repo LICENSE |
 
 ## 4. JavaScript that rewrites these tags — update with the head
 
