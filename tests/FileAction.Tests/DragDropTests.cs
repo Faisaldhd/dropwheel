@@ -301,12 +301,11 @@ public sealed class DragDropTests : IDisposable
         Assert.Equal(registered.Length, registered.Distinct(StringComparer.Ordinal).Count());
 
         var wheel = WheelController.BuildOperations().Select(o => o.Id).ToHashSet(StringComparer.Ordinal);
-        var missing = registered.Where(id => !wheel.Contains(id)).ToArray();
+        var missing = registered.Where(id => !wheel.Contains(id)).OrderBy(id => id, StringComparer.Ordinal).ToArray();
 
-        // tools.annotate and tools.redact ship a registered window and tests but are still absent from
-        // WheelController.BuildOperations() (finding F-01; the UX lane lands that 2-line fix). Any other
-        // gap is a hard failure, and once the fix lands the missing set is empty and this still passes.
-        Assert.All(missing, id => Assert.Contains(id, new[] { "tools.annotate", "tools.redact" }));
+        // 4f23c9c wired Annotate and Redact into the wheel, so every registered window must now be offered
+        // by its own id; a registered-but-unwired tool is exactly the regression this asserts against.
+        Assert.Empty(missing);
     }
 
     // ------------------------------------------------------------------ 6. cancel / close mid-flow
