@@ -11,6 +11,7 @@ DropWheel is MIT-licensed (see [LICENSE](LICENSE)). It is based on FileAction by
 | [ClosedXML](https://github.com/ClosedXML/ClosedXML) | XLSX | MIT |
 | [ExcelDataReader](https://github.com/ExcelDataReader/ExcelDataReader) | XLS | MIT |
 | [SharpCompress](https://github.com/adamhathcock/sharpcompress) | RAR, 7z, TAR… | MIT |
+| [ZXing.Net](https://github.com/micjahn/ZXing.Net) 0.16.11 | QR decoding (tools.qr) | Apache-2.0 |
 | [FFmpeg](https://ffmpeg.org) (Windows: downloaded on demand, “essentials” build by [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)) | Audio and video | GPL-3.0 – source: https://github.com/FFmpeg/FFmpeg |
 | [Pandoc](https://pandoc.org) (Windows: downloaded on demand from [its releases](https://github.com/jgm/pandoc/releases)) | Documents | GPL-2.0-or-later – source: https://github.com/jgm/pandoc |
 | [LibreOffice](https://www.libreoffice.org) (optional, installed separately) | Office files → PDF | MPL-2.0 |
