@@ -1547,6 +1547,35 @@ public class LockSafetyTests
             Cleanup(directory);
         }
     }
+    [Fact]
+    public void Tree_hash_changes_for_add_remove_and_rename()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var folder = Path.Combine(directory, "HashTree");
+            Directory.CreateDirectory(folder);
+            WriteFile(Path.Combine(folder, "a.txt"), "a");
+            WriteFile(Path.Combine(folder, "b.txt"), "b");
+            var first = LockArchive.TreeHash(folder);
+
+            WriteFile(Path.Combine(folder, "c.txt"), "c");
+            var added = LockArchive.TreeHash(folder);
+            Assert.NotEqual(first, added);
+
+            File.Delete(Path.Combine(folder, "b.txt"));
+            var removed = LockArchive.TreeHash(folder);
+            Assert.NotEqual(added, removed);
+
+            File.Move(Path.Combine(folder, "a.txt"), Path.Combine(folder, "renamed.txt"));
+            var renamed = LockArchive.TreeHash(folder);
+            Assert.NotEqual(removed, renamed);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
     // ------------------------------------------------------------------ helpers
 
     private static string ReadContent(LockService service, string container, string secret)
