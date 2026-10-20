@@ -86,6 +86,7 @@
   "tool.addbackground.label": "Background",
   "tool.addbackground.subtitle": "frame the photo",
   "tool.addbackground.suffix": "With Background",
+  "tool.addbackground.apply": "Save with Background",
   "tool.addbackground.loading": "Loading the picture…",
   "tool.addbackground.gradients": "Gradients",
   "tool.addbackground.colors": "Colors",
