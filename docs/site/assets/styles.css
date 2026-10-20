@@ -1696,3 +1696,127 @@ html.reveal-ready .tools-grid .tool-card:nth-child(3n + 3) { transition-delay: 9
     transition: none;
   }
 }
+
+.hash-block__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--muted-2);
+  font-size: 0.78rem;
+}
+.hash-block__meta bdi { color: var(--text); font-family: var(--font-mono); }
+
+/* ---------------------------------------------------------------- editorial tool cards
+ * Adapted from the reference design language: one card per tool, generous interior
+ * whitespace, hairline separation, accent only in the eyebrow, regular-weight title,
+ * one-purpose line, then the ticked capabilities. The reference is a 1080 px mobile
+ * viewport, so a literal transfer would give ~97 px titles at 1440; we keep its ratios
+ * and anatomy and let two columns carry the rhythm instead of one 22-section scroll. */
+@media (min-width: 1080px) {
+  .tools-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 30px;
+  }
+}
+
+.tool-card {
+  border-radius: 28px;
+  box-shadow: none;
+}
+@media (hover: hover) {
+  .tool-card:hover {
+    transform: translateY(-2px);
+    box-shadow: none;
+  }
+}
+
+.tool-media {
+  aspect-ratio: 16 / 10;
+  padding: 0;
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--accent-soft), transparent 72%),
+    var(--media-bg);
+  border-block-end: 1px solid var(--line);
+}
+.tool-shot {
+  inset: 20px;
+  width: calc(100% - 40px);
+  height: calc(100% - 40px);
+  border-radius: 12px;
+  filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.34));
+}
+
+.tool-body {
+  gap: 9px;
+  padding: 24px 26px 22px;
+}
+
+.tool-kicker {
+  color: var(--accent-2);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.tool-num {
+  color: var(--muted-2);
+  letter-spacing: 0.04em;
+}
+
+.tool-body h3 {
+  font-size: 1.42rem;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  line-height: 1.2;
+}
+html[dir="rtl"] .tool-body h3 { letter-spacing: 0; }
+.tool-body p {
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 46ch;
+}
+html[lang="ar"] .tool-body p { line-height: 1.75; }
+
+.tool-options {
+  gap: 4px 16px;
+  margin: 8px 0 0;
+  padding: 14px 0 0;
+  border-block-start: 1px solid var(--line);
+}
+.tool-options li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.79rem;
+  line-height: 1.45;
+}
+.tool-options li::before {
+  content: "\2713";
+  color: var(--accent-2);
+  font-size: 0.78rem;
+  line-height: 1;
+  flex: none;
+  transform: translateY(-1px);
+}
+html[dir="rtl"] .tool-options li::before { order: 1; }
+
+.tool-scope {
+  margin-block-start: 2px;
+  color: var(--muted-2);
+  font-size: 0.74rem;
+}
+
+@media (max-width: 640px) {
+  .tool-body { padding: 20px 20px 18px; }
+  .tool-media { aspect-ratio: 4 / 3; }
+  .tool-shot { inset: 14px; width: calc(100% - 28px); height: calc(100% - 28px); }
+  .tool-body h3 { font-size: 1.24rem; }
+}

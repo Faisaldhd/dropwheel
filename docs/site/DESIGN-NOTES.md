@@ -46,3 +46,21 @@ Inspiration only — none of the reference's name, logo, imagery or sentences go
   numbers, filenames and timings stay LTR islands. Motion stays ease-out and short — the reference
   animates position and opacity only, with a soft settle and no bounce, which we encode as our
   existing duration/easing tokens.
+
+## How this page departs from the reference, and why (lead note)
+
+- The reference is a 1080 px mobile viewport with ~22 full-height sections. At 1440 px a literal
+  transfer yields ~97 px card titles and an 18,000 px scroll for 26 tools, so we keep the reference's
+  *ratios and anatomy* and let a two-column editorial grid carry the rhythm instead of one column.
+- One card per tool is kept: category eyebrow in accent caps, regular-weight title, one-sentence
+  purpose, hairline, then the ticked capabilities. Nothing is added to a card that is not in the app.
+- The big pause between the capture and the caption is kept inside the card (24-26 px interior padding
+  plus a 16:10 media band) rather than as 400 px of empty page height.
+- Framing is contrast, not chrome: the real window capture sits on the card's own dark panel with a
+  soft drop shadow, no bezel, no browser bar, no tilt.
+- Accent text is lavender (#B48AE0) in dark mode (6.5:1) and deep purple (#8224D4) in light mode;
+  the saturated purple is used for fills and graphics where contrast is not carrying text.
+- Motion: one-shot reveal, transform + opacity only, 380 ms ease-out with a 45/90 ms column stagger,
+  fully disabled under prefers-reduced-motion and when JS is unavailable.
+- Honesty rule for the capture gap: the 21 tools without a verified render show an explicit
+  "capture pending" panel in the same 4:3/16:10 frame, never a mock-up or a stand-in UI.
