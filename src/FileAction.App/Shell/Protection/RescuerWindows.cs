@@ -213,7 +213,6 @@ internal sealed class RescuerSetupWindow : Window
             },
             IsChecked = false,
             Margin = new Thickness(0, 2, 0, 14),
-            FlowDirection = FlowDirection.LeftToRight,
         };
         _keyPage.Children.Add(_saved);
 
