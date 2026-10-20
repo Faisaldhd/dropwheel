@@ -184,6 +184,9 @@ internal sealed class AudioBleepView
 
         var bleepTitle = LaneTitle(T("tool.audiobleep.lane.bleep"));
         var audioTitle = LaneTitle(T("tool.audiobleep.lane.audio"));
+        // The lane grid stays LTR because it is a time axis; the Arabic lane captions must not.
+        bleepTitle.FlowDirection = LanguageManager.FlowDirection;
+        audioTitle.FlowDirection = LanguageManager.FlowDirection;
         var bleepBorder = LaneSurface(_bleepLane);
         var audioSurface = new Grid();
         audioSurface.Children.Add(_audioLane);

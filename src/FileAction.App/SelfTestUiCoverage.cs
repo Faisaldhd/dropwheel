@@ -359,6 +359,9 @@ internal static class SelfTestUiCoverage
     {
         var problems = new List<string>();
         var labels = new List<(string Text, FlowDirection Flow)>();
+        // Window titles are drawn by the OS title bar (not by the WPF content tree), so they are checked
+        // for raw keys/emptiness but not for a WPF FlowDirection they do not own.
+        var titles = new List<string>();
         var empties = 0;
         var seen = new HashSet<DependencyObject>();
 
@@ -395,7 +398,7 @@ internal static class SelfTestUiCoverage
             if (!seen.Add(node))
                 return;
             if (node is Window w)
-                AddText(w.Title);
+                titles.Add(w.Title ?? string.Empty);
             if (node is TextBlock block)
                 AddBlock(block);
             if (node is ContentControl content && content.Content is string contentText)
@@ -418,6 +421,7 @@ internal static class SelfTestUiCoverage
 
         var badKeys = labels
             .Select(l => l.Text)
+            .Concat(titles)
             .Where(text => Loc.IsKey(text) || (KeyShape.IsMatch(text.Trim()) && !LooksLikeFile(text)))
             .Distinct(StringComparer.Ordinal)
             .ToList();
