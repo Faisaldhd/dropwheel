@@ -12,18 +12,18 @@ by this consolidation.
 
 | Area | File | Rows | P0 | P1 | P2 |
 | --- | --- | ---: | ---: | ---: | ---: |
-| State - leftover state and the jobs window | `BH-STATE.md` ($(System.Collections.Hashtable.Branch)) | 9 | 0 | 2 | 7 |
-| UI - freeze, jank, memory | `BH-UI.md` ($(System.Collections.Hashtable.Branch)) | 8 | 0 | 2 | 6 |
-| Crash - crashes and unhandled exceptions | `BH-CRASH.md` ($(System.Collections.Hashtable.Branch)) | 6 | 1 | 1 | 4 |
-| Races - concurrency and cancellation | `BH-RACES.md` ($(System.Collections.Hashtable.Branch)) | 12 | 0 | 3 | 9 |
-| Visual - rendering, RTL, DPI | `BH-VISUAL.md` ($(System.Collections.Hashtable.Branch)) | 11 | 0 | 2 | 8 (+1 unlabelled) |
-| Upgrade - settings, uninstall, update path | `BH-UPGRADE.md` ($(System.Collections.Hashtable.Branch)) | 11 | 0 | 2 | 9 |
+| State - leftover state and the jobs window | `BH-STATE.md` (`audit/bughunt-state`) | 9 | 0 | 2 | 7 |
+| UI - freeze, jank, memory | `BH-UI.md` (`audit/bughunt-ui`) | 8 | 0 | 2 | 6 |
+| Crash - crashes and unhandled exceptions | `BH-CRASH.md` (`audit/bughunt-crash`) | 6 | 1 | 1 | 4 |
+| Races - concurrency and cancellation | `BH-RACES.md` (`audit/bughunt-races`) | 12 | 0 | 3 | 9 |
+| Visual - rendering, RTL, DPI | `BH-VISUAL.md` (`audit/bughunt-visual`) | 11 | 0 | 2 | 8 (+1 unlabelled) |
+| Upgrade - settings, uninstall, update path | `BH-UPGRADE.md` (`audit/bughunt-upgrade`) | 11 | 0 | 2 | 9 |
 | **Total** | | **57** | **1** | **12** | **43** |
 
-
-[compiler] The 12 P1 rows include `ST-05`, which the state hunt labels "P1 (conditional)": its trigger needs a jobs window that is closed, and the UI has no normal path to close it.
-[compiler] Counts are read from each file''s table rows. Two P2 rows in the crash section are recorded
+[compiler] Counts are read from each file's table rows. Two P2 rows in the crash section are recorded
 as **verified negatives** (no defect found); they are kept so "checked and clean" is visible, not hidden.
+
+[compiler] The P1 count includes `ST-05`, labelled "P1 (conditional)" by the state hunt: its trigger needs a jobs window that is closed, and the UI has no normal path to close it.
 
 ## State - leftover state and the jobs window
 
@@ -321,4 +321,5 @@ Baseline: `origin/main` `8b28758`.
   the intended behaviour; UP-09 is about the missing opt-out, not about that assertion being wrong.
 - **The first-run path itself** (`FirstRunDone`, the welcome surface) was read, not run; the clean-machine
   assumption is CI-proven ("no DropWheel install, settings, Run value or shell entries" before install).
+
 
