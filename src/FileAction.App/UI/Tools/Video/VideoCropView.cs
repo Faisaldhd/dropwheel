@@ -142,6 +142,7 @@ internal sealed class VideoCropView
         root.Unloaded += (_, _) =>
         {
             VideoThemeWatcher.Changed -= OnThemeChanged;
+            VideoThemeWatcher.Stop();
             _lifetime.Cancel();
             _preview.Dispose();
         };

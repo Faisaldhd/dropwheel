@@ -77,6 +77,7 @@ internal sealed class VideoSpeedView
         root.Unloaded += (_, _) =>
         {
             VideoThemeWatcher.Changed -= OnThemeChanged;
+            VideoThemeWatcher.Stop();
             _lifetime.Cancel();
             _preview.Dispose();
         };
