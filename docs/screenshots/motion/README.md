@@ -5,7 +5,7 @@ Short, looping motion clips for the website and release notes, rendered from the
 | file | shows |
 | --- | --- |
 | `wheel-dark.webp`, `wheel-light.webp` | the wheel opening from the cursor, its travelling highlight moving across three slices, then closing (150 ms open, 100 ms highlight, 100 ms close) |
-| `tool-tools-crop-dark.webp`, `tool-tools-crop-light.webp` | the Crop tool window opening (180 ms fade + 8 px rise + 0.97 -> 1), holding, then closing (120 ms) |
+| `tool-{crop,annotate,addbackground,redact,editphotos}-{dark,light}.webp` | each registered tool window opening (180 ms fade + 8 px rise + 0.97 -> 1), holding, then closing (120 ms) |
 | `*-poster.png` | the fully-open frame of each clip, for `<video poster>`/social previews |
 
 Each clip is up to 480 px wide, 12.5 fps, 10-18 sampled timeline frames looping; the encoder merges
