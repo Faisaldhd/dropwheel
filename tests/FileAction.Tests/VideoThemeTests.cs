@@ -25,6 +25,10 @@ public class VideoThemeTests
         foreach (var file in Directory.EnumerateFiles(folder, "*.cs"))
         {
             var name = Path.GetFileName(file);
+            // VideoPalette.cs is the documented single home of the video literals (the redaction
+            // swatches and the frozen black/white brushes); every other file must use it or Theme.
+            if (string.Equals(name, "VideoPalette.cs", StringComparison.OrdinalIgnoreCase))
+                continue;
             var lines = File.ReadAllLines(file);
             for (var index = 0; index < lines.Length; index++)
             {
