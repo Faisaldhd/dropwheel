@@ -8,8 +8,10 @@ Short, looping motion clips for the website and release notes, rendered from the
 | `tool-tools-crop-dark.webp`, `tool-tools-crop-light.webp` | the Crop tool window opening (180 ms fade + 8 px rise + 0.97 -> 1), holding, then closing (120 ms) |
 | `*-poster.png` | the fully-open frame of each clip, for `<video poster>`/social previews |
 
-Each clip is up to 480 px wide, 12.5 fps, 10-18 frames, looping; the self-test prints the combined
-size. Every registered tool is emitted automatically, so new tools appear here after a re-render.
+Each clip is up to 480 px wide, 12.5 fps, 10-18 sampled timeline frames looping; the encoder merges
+identical consecutive poses and keeps the timing (so the file may hold fewer frames than the timeline).
+The self-test prints the combined size. Every registered tool is emitted automatically, so new tools
+appear here after a re-render.
 
 ## How they are made
 
