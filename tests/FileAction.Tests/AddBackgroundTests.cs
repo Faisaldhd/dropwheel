@@ -307,6 +307,19 @@ public class AddBackgroundTests
     }
 
     [Fact]
+    public void The_defaults_behind_Reset_are_the_documented_ones()
+    {
+        Assert.Equal(160, AddBackground.DefaultPadding);
+        Assert.Equal(64, AddBackground.DefaultCorners);
+        Assert.Equal(40, AddBackground.DefaultShadow);
+        Assert.Equal(400, AddBackground.MaxPadding);
+        Assert.Equal(400, AddBackground.MaxCorners);
+        Assert.Equal(100, AddBackground.MaxShadow);
+        Assert.Equal(GradientPreset.Violet, Enum.GetValues<GradientPreset>()[0]);
+        Assert.Equal(0, AddBackground.RatioValue(BackgroundRatio.Auto));
+    }
+
+    [Fact]
     public void The_tool_accepts_one_photo_and_rejects_other_inputs()
     {
         var spec = AddBackgroundTool.Instance;
