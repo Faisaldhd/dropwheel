@@ -35,6 +35,9 @@ internal sealed class RedactTool : IToolWindowSpec
 
     public string TitleKey => "tool.redact.title";
 
+    /// <summary>The bottom-right action says what it does instead of the generic "Apply".</summary>
+    public string PrimaryLabelKey => "tool.redact.save";
+
     /// <summary>
     /// 36 DIP of chrome around the preview, and ~290 DIP of fixed rows (title bar, mode row, strength or
     /// colour row, action row, hint and the bottom buttons). With the default preview that opens at
@@ -62,10 +65,10 @@ internal sealed class RedactTool : IToolWindowSpec
 /// applies to exactly one image.
 /// </summary>
 /// <remarks>
-/// The wheel builds its operations from a shared list, so this operation still has to be added next to
-/// <c>CropOperation</c> in <c>WheelController.BuildOperations()</c>. That file is shared with the other
-/// wave branches, so the one-line wiring is reported with the pull request instead of edited here; the
-/// operation, the window and the strings are complete.
+/// The wheel builds its operations from a shared list (<c>WheelController.BuildOperations</c>), which does
+/// not include this operation yet — nor the Annotate tool. That one line belongs to the shared integration
+/// commit, so it is reported with the pull request instead of edited here; the operation, the window and
+/// the strings are complete, and the operation opens its own window by identity.
 /// </remarks>
 internal sealed class RedactOperation : Operation, IInteractiveTool
 {
@@ -80,6 +83,7 @@ internal sealed class RedactOperation : Operation, IInteractiveTool
     public override Task<OperationResult> ExecuteAsync(IReadOnlyList<FileItem> items, OperationContext ctx) =>
         Task.FromResult(OperationResult.Of(Array.Empty<string>()));
 
+    /// <summary>Opens this tool by identity; <c>ToolRegistry.For(items)</c> is first-match and ambiguous.</summary>
     public void Open(IReadOnlyList<FileItem> items, DropTargets? targets) =>
         new ToolWindow(RedactTool.Instance, items, targets).Show();
 }
@@ -88,13 +92,5 @@ internal sealed class RedactOperation : Operation, IInteractiveTool
 internal static class RedactToolRegistration
 {
     [ModuleInitializer]
-    internal static void Register()
-    {
-        // ToolRegistry.For(items) answers "which window tool handles these files" with the first matching
-        // registration, and two image tools now match a single image. Registering the crop tool here keeps
-        // its slice opening the crop window regardless of module-initializer order; the durable fix is for
-        // the registry to take a tool id (reported with this pull request). Register is idempotent.
-        ToolRegistry.Register(CropTool.Instance);
-        ToolRegistry.Register(RedactTool.Instance);
-    }
+    internal static void Register() => ToolRegistry.Register(RedactTool.Instance);
 }
