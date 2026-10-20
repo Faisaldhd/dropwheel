@@ -13,6 +13,21 @@ claim needs before the flagship feature ships.**
 * **Round-1 source of truth:** `git show 1d4188b:docs/audit/SECURITY-AUDIT.md` — the committed file, not the
   uncommitted round-2 block sitting in this worktree.
 
+## Supervisor decisions (2026-10-20)
+
+Recorded by the TEAM B supervisor after reading §1–§5. **Verified branch head: `55eb4e5`**; the unvouched
+draft's `5bffa9d` is **stale** (two later commits: `53e9a14`, then a test fix).
+
+1. **B-3 — ACCEPTED for 2.4.0.** Fail-closed slot verification (every written slot test-opened after Protect,
+   a mismatch fails the operation, plus the key-only prompt) closes the harm. The missing clause — pre-verifying
+   the typed Rescuer password against an existing container — is a UX safeguard, not a security hole.
+   `decision: accepted (supervisor, 2.4.0) → BACKLOG` (schedule the pre-check).
+2. **M-4 — DEFERRED, not fixed.** No KDF disclosure for Protect's ZIP/PDF ships in 2.4.0: a disclosure change
+   to `en.json`/`SECURITY.md` at T-2h is not worth the risk. `decision: deferred → BACKLOG, owner: unassigned`;
+   the exact finding is kept above (`SECURITY.md:115` documents the Lock container only).
+3. **Minors — all 13 stay open.** `decision: accepted as scheduled work → BACKLOG`, order **m-7 first, then
+   m-12**, no code changes now.
+
 ## 0. Premise correction (important for whoever acts on this)
 
 The unvouched draft examined **`5bffa9d`**, which is **not** the branch head. Two commits landed after it:
