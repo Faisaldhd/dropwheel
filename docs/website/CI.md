@@ -22,8 +22,11 @@ check to make a run green.
 | `push` | any branch matching `site/**` or the `feat/2.4.0-website` branch |
 | `workflow_dispatch` | manual re-run from the Actions tab |
 
-The workflow has three independent gates plus a screenshot job. Each job is
-shown separately in the run, so a failure names the gate directly.
+The workflow has three independent gates plus a screenshot job and a deploy
+stamp smoke check. Each job is shown separately in the run, so a failure names
+the gate directly. The smoke check stamps a synthetic release through the exact
+relative `--index docs/site/index.html` + `--output <temp>` shape used by the
+deploy, so a path/copy bug fails in CI instead of after release verification.
 
 ## Gate 1: Lighthouse CI (desktop, every category >= 0.95)
 
@@ -172,10 +175,11 @@ Before each capture the script forces `scroll-behavior: auto` (the page sets
 `smooth`, which otherwise makes rapid programmatic jumps animate and never
 reach the bottom), walks the document in ~800 px steps with a 60 ms pause,
 checks that the scroll actually reached the bottom, asserts that zero
-`[data-reveal]` nodes remain hidden, waits for pending images, scrolls back to
-the top, blurs the active element and parks the pointer at (0,0) so the skip
-link is not captured in its focus-visible state, waits 300 ms and only then
-screenshots. At 390 px it hard-fails the step when
+`[data-reveal]` nodes remain hidden, waits up to 3 s for every image to be
+`complete`, decodes them and settles 300 ms, scrolls back to the top, blurs the
+active element and parks the pointer at (0,0) so the skip link is not captured
+in its focus-visible state, waits 300 ms and only then screenshots. At 390 px it
+hard-fails the step when
 `document.scrollingElement.scrollWidth > window.innerWidth + 1`, which catches
 horizontal overflow in either direction or language.
 
@@ -212,6 +216,9 @@ uploaded, and a tag push should not publish a half-verified release.)
 
 Before anything is uploaded, the deploy job:
 
+0. Runs a synthetic `SHA256SUMS.txt` through `stamp_release.py` with the same
+   relative `--index` / `--output` arguments and verifies the temp page is
+   stamped, so a path bug cannot survive until after release verification.
 1. Resolves the newest stable release (`releases/latest` excludes drafts and
    pre-releases) or the tag supplied in `release_tag`. Drafts and pre-releases
    are refused.

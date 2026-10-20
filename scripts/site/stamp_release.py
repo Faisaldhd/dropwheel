@@ -282,8 +282,8 @@ def main(argv: list[str] | None = None) -> int:
         index = Path(args.index)
         if not index.is_file():
             raise StampError(f"index.html not found: {index}")
-        # Resolve once so a relative --index works with --output: the deploy job runs
-        # from the repo root and passes docs/site/index.html.
+        # Resolve once so --index docs/site/index.html and --output DIR work
+        # together: index.relative_to(site_root) must compare absolute paths.
         index = index.resolve()
         sums = Path(args.sums)
         sha256 = parse_sums(sums, args.asset_name)

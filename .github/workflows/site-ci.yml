@@ -44,6 +44,24 @@ jobs:
             cat "$RUNNER_TEMP/size-budget.txt"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Smoke-test release stamping with synthetic sums
+        run: |
+          set -euo pipefail
+          SUMS="$RUNNER_TEMP/synthetic-SHA256SUMS.txt"
+          HASH=$(python3 -c 'print("a" * 64)')
+          printf '%s  DropWheel-Setup.exe\n' "$HASH" > "$SUMS"
+          # Exercise the exact relative --index + --output shape pages.yml uses.
+          python scripts/site/stamp_release.py --index docs/site/index.html --sums "$SUMS" \
+            --version 9.9.9 --asset-size 12345678 --dry-run
+          python scripts/site/stamp_release.py --index docs/site/index.html --sums "$SUMS" \
+            --version 9.9.9 --asset-size 12345678 --output "$RUNNER_TEMP/stamp-smoke"
+          test -f "$RUNNER_TEMP/stamp-smoke/index.html"
+          grep -q '<!--release-version:start-->9.9.9<!--release-version:end-->' "$RUNNER_TEMP/stamp-smoke/index.html"
+          grep -q "<!--release-sha256:start-->$HASH<!--release-sha256:end-->" "$RUNNER_TEMP/stamp-smoke/index.html"
+          if grep -q 'releases/download/v2\.3\.0/' "$RUNNER_TEMP/stamp-smoke/index.html"; then
+            echo "::error::Synthetic stamp left a stale v2.3.0 download URL."
+            exit 1
+          fi
 
   link-check:
     name: Link check
@@ -240,20 +258,30 @@ jobs:
 
             await page.waitForTimeout(300);
             await page.evaluate(async () => {
-              const pending = Array.from(document.images).filter((image) => !image.complete);
+              // Lazy lock/tool images can report complete before the decoder has
+              // produced pixels. Wait for every image to be complete, then
+              // decode them, with a 3 s cap, and settle before the capture.
+              const images = Array.from(document.images);
+              const deadline = Date.now() + 3000;
+              while (Date.now() < deadline && !images.every((image) => image.complete)) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
               await Promise.race([
                 Promise.all(
-                  pending.map(
-                    (image) =>
-                      new Promise((resolve) => {
-                        image.addEventListener('load', resolve, { once: true });
-                        image.addEventListener('error', resolve, { once: true });
-                      }),
+                  images.map((image) =>
+                    image.decode ? image.decode().catch(() => {}) : Promise.resolve(),
                   ),
                 ),
                 new Promise((resolve) => setTimeout(resolve, 3000)),
               ]);
+              await new Promise((resolve) => setTimeout(resolve, 300));
             });
+            const incomplete = await page.evaluate(
+              () => Array.from(document.images).filter((image) => !image.complete).length,
+            );
+            if (incomplete > 0) {
+              throw new Error(`${incomplete} image(s) were not complete at capture time`);
+            }
           }
 
           async function assertNoHorizontalOverflow(page, viewport, state) {
