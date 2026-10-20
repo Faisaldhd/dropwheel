@@ -86,7 +86,16 @@ internal sealed class WheelController
 
     /// <summary>The cross-platform catalog plus tools that need Windows itself (OCR) or a window (Crop).</summary>
     public static IReadOnlyList<Operation> BuildOperations() =>
-        [.. Catalog.Build(), new Ocr.OcrOperation(), new UI.Tools.Image.CropOperation()];
+    [
+        .. Catalog.Build(),
+        new Ocr.OcrOperation(),
+        new UI.Tools.Image.CropOperation(),
+        new UI.Tools.Image.Frame.AddBackgroundOperation(),
+        new UI.Tools.Image.EditPhotosOperation(),
+        new UI.Tools.Collage.CollageOperation(),
+        new UI.Tools.Video.VideoFramesOperation(),
+        new UI.Tools.Video.VideoRedactOperation(),
+    ];
 
     /// <summary>
     /// What fits these items. Conversions that need FFmpeg or Pandoc stay on the wheel even before those are
