@@ -314,7 +314,7 @@ Theme.Glow()        -> DropShadowEffect { BlurRadius = 14, ShadowDepth = 0, Opac
 | L1 | floating surface | `Theme.Shadow(28)` wheel disc, `Theme.Shadow(12)` hub | `WheelWindow.cs:770`, `:829` |
 | L1 | tool window chrome | `BlurRadius 28, ShadowDepth 6, Opacity 0.35` (its own literal — the one place not using `Theme.Shadow`) | `ToolWindow.cs:252-257` |
 | L2 | the highlighted slice | `Theme.Glow()` | `WheelWindow.cs:1006` |
-| L2 | slider thumb | `Theme.Shadow(6)` | `Controls.cs:189` |
+| L2 | slider thumb | `Theme.Shadow(6)` | `Controls.cs:188` |
 
 Rules:
 
