@@ -453,7 +453,6 @@ internal sealed class LockWarningDialog : Window
                 MaxWidth = 430,
             },
             IsChecked = false,
-            FlowDirection = FlowDirection.LeftToRight,
             Margin = new Thickness(0, 0, 0, 14),
         };
         body.Children.Add(_ack);
@@ -489,6 +488,9 @@ internal sealed class LockWarningDialog : Window
         };
         Loaded += (_, _) => _ack.Focus();
     }
+
+    /// <summary>Builds the dialog offscreen for the self-test's UI coverage pass; never shows it.</summary>
+    internal static LockWarningDialog CreateForPreview(IReadOnlyList<FileItem> items) => new(items);
 
     public static bool Ask(Window? owner, IReadOnlyList<FileItem> items)
     {

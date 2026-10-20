@@ -71,7 +71,7 @@ internal static class SelfTest
 
             log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
             // Saved after every step, so a hard crash (which skips the catch below) still shows where it stopped.
-            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestOcr(outDir, log), () => TestToolWindows(outDir, log), () => MotionSelfTest.Run(outDir, log), () => RenderMotionClips(outDir, log) })
+            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestOcr(outDir, log), () => TestToolWindows(outDir, log), () => SelfTestUiCoverage.Run(Path.Combine(outDir, "ui-coverage"), log), () => MotionSelfTest.Run(outDir, log), () => RenderMotionClips(outDir, log) })
             {
                 File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
                 step();
@@ -485,7 +485,7 @@ internal static class SelfTest
     /// <summary>Runs an async preparation to completion while the self-test keeps the UI thread alive.</summary>
     /// <param name="start">Starts the work. It must be called after the dispatcher context is installed,
     /// otherwise its awaits resume on the thread pool and touch WPF objects off the UI thread.</param>
-    internal static void Pump(Func<Task> start)
+    internal static void Pump(Func<Task> start, int timeoutSeconds = 30)
     {
         var previous = SynchronizationContext.Current;
         if (previous is not DispatcherSynchronizationContext)
@@ -493,7 +493,7 @@ internal static class SelfTest
         try
         {
             var frame = new DispatcherFrame();
-            var guard = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+            var guard = new DispatcherTimer { Interval = TimeSpan.FromSeconds(timeoutSeconds) };
             var task = start();
             guard.Tick += (_, _) =>
             {
@@ -508,7 +508,7 @@ internal static class SelfTest
             }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.FromCurrentSynchronizationContext());
             Dispatcher.PushFrame(frame);
             if (!task.IsCompleted)
-                throw new TimeoutException("the tool window preview did not finish within 30 s");
+                throw new TimeoutException($"the tool window preview did not finish within {timeoutSeconds} s");
             task.GetAwaiter().GetResult();
         }
         finally
@@ -517,7 +517,7 @@ internal static class SelfTest
         }
     }
 
-    private static void SaveWindow(Window window, string file, double width, bool desktop = false)
+    internal static void SaveWindow(Window window, string file, double width, bool desktop = false)
     {
         CheckNoRawKeys(window, Path.GetFileName(file));
         var content = (UIElement)window.Content;
