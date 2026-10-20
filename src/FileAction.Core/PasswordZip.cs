@@ -126,7 +126,7 @@ public static class AesZipWriter
             var keyMaterial = ZipAesKeyDerivation.Derive(password, salt);
             long cipherBytes;
             byte[] authenticationCode;
-            long uncompressedBytes = 0;
+            long entryBytes = 0;
             try
             {
                 _output.Write(salt);
@@ -146,7 +146,8 @@ public static class AesZipWriter
                         {
                             cancellationToken.ThrowIfCancellationRequested();
                             deflate.Write(buffer, 0, read);
-                            uncompressedBytes = AddProgress(read);
+                            entryBytes += read;
+                            AddProgress(read);
                         }
                     }
                     finally
@@ -167,13 +168,13 @@ public static class AesZipWriter
             }
 
             var compressedSize = salt.Length + verifierLength + cipherBytes + authenticationCode.Length;
-            if (compressedSize > uint.MaxValue || uncompressedBytes > uint.MaxValue)
+            if (compressedSize > uint.MaxValue || entryBytes > uint.MaxValue)
                 throw TooLarge();
 
-            PatchLocalHeader(localOffset, crc: 0, (uint)compressedSize, (uint)uncompressedBytes);
+            PatchLocalHeader(localOffset, crc: 0, (uint)compressedSize, (uint)entryBytes);
             _central.Add(new CentralEntry(
                 name, extra, EncryptedFlag | StrongEncryptionFlag | Utf8Flag, AesCompressionMethod, timestamp,
-                Crc: 0, CompressedSize: (uint)compressedSize, UncompressedSize: (uint)uncompressedBytes,
+                Crc: 0, CompressedSize: (uint)compressedSize, UncompressedSize: (uint)entryBytes,
                 LocalOffset: (uint)localOffset, ExternalAttributes: 0));
         }
 
