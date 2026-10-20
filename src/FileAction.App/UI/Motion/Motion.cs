@@ -400,19 +400,6 @@ internal static class Motion
             new DoubleAnimation(move.Y, y, duration) { EasingFunction = EaseOut, FillBehavior = FillBehavior.HoldEnd });
     }
 
-    /// <summary>Fades the wheel's highlight ring / slice in or out without touching layout.</summary>
-    public static void Fade(UIElement element, double to, double durationMs = HoverMs)
-    {
-        if (!Enabled)
-        {
-            element.BeginAnimation(UIElement.OpacityProperty, null);
-            element.Opacity = to;
-            return;
-        }
-        element.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(element.Opacity, to, TimeSpan.FromMilliseconds(durationMs)) { EasingFunction = SoftOut, FillBehavior = FillBehavior.HoldEnd });
-    }
-
     /// <summary>Success pulse: a quick, small scale bounce (never affects layout).</summary>
     public static Storyboard Pulse(FrameworkElement element)
     {

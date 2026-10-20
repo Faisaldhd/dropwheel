@@ -30,9 +30,6 @@ internal static class MotionSelfTest
     /// <summary>Budget for the UI-thread part of one 60 fps frame.</summary>
     public const double FrameBudgetMs = 16.7;
 
-    /// <summary>Software-rasterisation probe ceiling; a composed frame should also fit 60 fps.</summary>
-    public const double RasterBudgetMs = 33.0;
-
     /// <summary>Idle CPU after everything has closed. A polling timer would show up here.</summary>
     public const double IdleCpuBudgetPercent = 5.0;
 
@@ -191,8 +188,8 @@ internal static class MotionSelfTest
                 "",
                 skips.Count == 0
                     ? "Every registered tool window was driven by the harness."
-                    : $"Not measured ({skips.Count} registered tool(s) want a media family the harness does not " +
-                      $"create): {string.Join(", ", skips.Order(StringComparer.Ordinal))}.",
+                    : $"Not measured ({skips.Count} registered tool(s); the reason is logged next to each id): " +
+                      $"{string.Join(", ", skips.Order(StringComparer.Ordinal))}.",
                 $"Idle CPU after close: **{idleCpu:F2} %** (budget {IdleCpuBudgetPercent:F0} %).",
                 $"Working set retained by the motion suite: **{retainedMb:F1} MB** (budget {MemoryRetentionBudgetMb:F0} MB).",
             ];
