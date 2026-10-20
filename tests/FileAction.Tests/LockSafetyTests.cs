@@ -1463,6 +1463,82 @@ public class LockSafetyTests
             Cleanup(directory);
         }
     }
+    [Fact]
+    public void Relock_encodes_the_current_folder_after_add_remove_and_rename()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var folder = Path.Combine(directory, "Tree");
+            Directory.CreateDirectory(folder);
+            WriteFile(Path.Combine(folder, "keep.txt"), "keep");
+            WriteFile(Path.Combine(folder, "remove.txt"), "remove");
+            var container = Path.Combine(directory, "Tree.dwdir");
+            var service = NewService();
+            var credentials = Credentials();
+            service.ProtectTo(folder, container, credentials, keepSource: true);
+
+            using var source = new FileStream(container, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var header = LockContainer.ReadHeader(source);
+            var dataKey = LockContainer.Unwrap(header, credentials.FilePassword, out _);
+            try
+            {
+                WriteFile(Path.Combine(folder, "added.txt"), "added");
+                File.Delete(Path.Combine(folder, "remove.txt"));
+                File.Move(Path.Combine(folder, "keep.txt"), Path.Combine(folder, "renamed.txt"));
+
+                service.RelockFromSession(container, header, dataKey, folder);
+                var restored = service.Unprotect(container, credentials.FilePassword, recycleContainer: false);
+                Assert.Equal("added", File.ReadAllText(Path.Combine(restored.RestoredPath, "added.txt")));
+                Assert.Equal("keep", File.ReadAllText(Path.Combine(restored.RestoredPath, "renamed.txt")));
+                Assert.False(File.Exists(Path.Combine(restored.RestoredPath, "remove.txt")));
+                Assert.False(File.Exists(Path.Combine(restored.RestoredPath, "keep.txt")));
+            }
+            finally
+            {
+                LockSecrets.Wipe(dataKey);
+            }
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+    [Fact]
+    public void Relock_keeps_a_rescuer_password_changed_during_the_session()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var folder = Path.Combine(directory, "Reset");
+            Directory.CreateDirectory(folder);
+            WriteFile(Path.Combine(folder, "file.txt"), "content");
+            var container = Path.Combine(directory, "Reset.dwdir");
+            var service = NewService();
+            var credentials = Credentials();
+            service.ProtectTo(folder, container, credentials, keepSource: true);
+
+            using var source = new FileStream(container, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var oldHeader = LockContainer.ReadHeader(source);
+            var dataKey = LockContainer.Unwrap(oldHeader, credentials.FilePassword, out _);
+            try
+            {
+                service.SetRescuerPassword(container, credentials.FilePassword, "rescuer-reset-during-session");
+                service.RelockFromSession(container, oldHeader, dataKey, folder);
+                var restored = service.Unprotect(container, "rescuer-reset-during-session",
+                    recycleContainer: false);
+                Assert.Equal("content", File.ReadAllText(Path.Combine(restored.RestoredPath, "file.txt")));
+            }
+            finally
+            {
+                LockSecrets.Wipe(dataKey);
+            }
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
     // ------------------------------------------------------------------ helpers
 
     private static string ReadContent(LockService service, string container, string secret)

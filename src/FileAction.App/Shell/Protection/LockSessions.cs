@@ -103,6 +103,7 @@ internal sealed class LockSessionManager
         }
         catch
         {
+            var cleaned = true;
             try
             {
                 if (Directory.Exists(tempRoot))
@@ -110,9 +111,13 @@ internal sealed class LockSessionManager
             }
             catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
             {
-                // The journal is still removed below; a leftover empty folder is harmless.
+                cleaned = false;
+                FileAction.App.Diagnostics.AppLog.Error("lock: extraction cleanup failed", cleanup);
             }
-            _journal.Delete(id);
+            // Never lose the pointer to a folder that could not be deleted: keep the Extracting journal
+            // so the startup sweep can offer it again.
+            if (cleaned)
+                _journal.Delete(id);
             throw;
         }
         var record = provisional with
@@ -122,6 +127,7 @@ internal sealed class LockSessionManager
             IsDirectory = extracted.Read.Meta.IsDirectory,
             State = LockSessionState.Open,
             EntryCount = extracted.Read.Meta.EntryCount,
+            TreeHash = extracted.Read.Meta.IsDirectory ? LockArchive.TreeHash(extracted.Path) : null,
         };
         _journal.Write(record);
         var session = new LockSession(record, extracted.Header, extracted.DataKey, extracted.Read.Meta.IsDirectory)
@@ -162,7 +168,7 @@ internal sealed class LockSessionManager
         try
         {
             await Task.Run(() => _service.RelockFromSession(session.Record.ContainerPath, session.Header,
-                session.DataKey, session.Record.PlaintextPath, expectedEntryCount: session.Record.EntryCount));
+                session.DataKey, session.Record.PlaintextPath));
             _journal.Delete(session.Record.Id);
             NotifyLocked(session.Record);
             lock (_gate)
@@ -311,7 +317,7 @@ internal sealed class LockSessionManager
             return;
         }
 
-        SweepRestoreTemp(owner);
+        SweepSessionFolders(records, owner);
         foreach (var record in records)
         {
             if (record.State == LockSessionState.Extracting)
@@ -371,6 +377,41 @@ internal sealed class LockSessionManager
         }
     }
 
+    /// <summary>Prompts to remove session folders with no journal entry (orphans from a crash).</summary>
+    private static void SweepSessionFolders(IReadOnlyList<LockSessionRecord> records, Window? owner)
+    {
+        try
+        {
+            if (!Directory.Exists(ProtectionPaths.SessionsFolder))
+                return;
+            var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var record in records)
+            {
+                var plaintext = Path.GetFullPath(record.PlaintextPath);
+                known.Add(plaintext);
+                if (Path.GetDirectoryName(plaintext) is { } parent)
+                    known.Add(parent);
+                known.Add(Path.Combine(ProtectionPaths.SessionsFolder, record.Id));
+            }
+            var orphans = Directory.EnumerateDirectories(ProtectionPaths.SessionsFolder)
+                .Where(path => !known.Contains(Path.GetFullPath(path)) &&
+                               !known.Contains(Path.GetFileName(path)))
+                .ToList();
+            if (orphans.Count == 0)
+                return;
+            var discard = Dialogs.Show(owner, T("tool.lock.recovery.orphanBody", orphans.Count),
+                T("tool.lock.recovery.orphanTitle"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (discard != MessageBoxResult.Yes)
+                return;
+            foreach (var path in orphans)
+                Directory.Delete(path, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Dialogs.Show(owner, ex.Message, T("tool.lock.recovery.title"), MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
     /// <summary>Deletes leftover .dwrestore staging from an interrupted extraction after an explicit prompt.</summary>
     private void SweepRestoreTemp(Window? owner)
     {
@@ -404,7 +445,7 @@ internal sealed class LockSessionManager
             try
             {
                 _service.RelockFromSession(session.Record.ContainerPath, session.Header, session.DataKey,
-                    session.Record.PlaintextPath, expectedEntryCount: session.Record.EntryCount);
+                    session.Record.PlaintextPath);
                 _journal.Delete(session.Record.Id);
                 lock (_gate)
                     _sessions.Remove(session.Record.Id);

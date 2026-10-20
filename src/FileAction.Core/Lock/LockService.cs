@@ -38,7 +38,8 @@ public sealed record ProtectOutcome(
     string OutputPath,
     LockDigest Digest,
     bool SourceRemoved,
-    string? LeftoverSource);
+    string? LeftoverSource,
+    int EntryCount = 0);
 
 public sealed record UnprotectOutcome(
     string RestoredPath,
@@ -204,8 +205,8 @@ public sealed class LockService(
             if (isDirectory && !keepSource)
             {
                 var currentEntries = LockArchive.CountEntries(full);
-                if (currentEntries != meta.EntryCount)
-                    throw new LockChangedException($"{meta.EntryCount} entries were archived but the folder now has {currentEntries}");
+                if (currentEntries != result.EntryCount)
+                    throw new LockChangedException($"{result.EntryCount} entries were archived but the folder now has {currentEntries}");
             }
             VerifyContainer(temp, dataKey, result.Digest, credentials, progress, cancellationToken);
             progress?.Report(new LockProgress(LockStage.Finalizing, result.Digest.Length, result.Digest.Length));
@@ -226,7 +227,7 @@ public sealed class LockService(
             if (kept is not null)
                 _host.NotifyShell(kept);
             progress?.Report(new LockProgress(LockStage.Done, result.Digest.Length, result.Digest.Length));
-            return new ProtectOutcome(target, result.Digest, removed, kept);
+            return new ProtectOutcome(target, result.Digest, removed, kept, result.EntryCount);
         }
         catch
         {
@@ -252,8 +253,7 @@ public sealed class LockService(
         string plaintextPath,
         string? folderIconPath = null,
         IProgress<LockProgress>? progress = null,
-        CancellationToken cancellationToken = default,
-        int expectedEntryCount = 0)
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(header);
         ArgumentNullException.ThrowIfNull(dataKey);
@@ -271,12 +271,6 @@ public sealed class LockService(
         }
 
         var isDirectory = Directory.Exists(plaintextPath);
-        if (isDirectory && expectedEntryCount > 0)
-        {
-            var currentEntries = LockArchive.CountEntries(plaintextPath);
-            if (currentEntries != expectedEntryCount)
-                throw new LockChangedException($"{expectedEntryCount} entries were expected but the folder now has {currentEntries}");
-        }
         var meta = isDirectory
             ? BuildFolderMeta(plaintextPath, folderIconPath)
             : LockMeta.ForFile(plaintextPath);
@@ -300,10 +294,12 @@ public sealed class LockService(
                     appearanceApplied = true;
                 }
                 result = EncryptSource(plaintextPath, isDirectory, destination, dataKey, null, meta, progress,
-                    cancellationToken, header);
+                    cancellationToken, current);
                 destination.Flush(flushToDisk: true);
             }
 
+            if (isDirectory && LockArchive.CountEntries(plaintextPath) != result.EntryCount)
+                throw new LockChangedException("the folder changed while it was being re-encrypted");
             VerifyContainer(temp, dataKey, result.Digest, null, progress, cancellationToken);
             progress?.Report(new LockProgress(LockStage.Finalizing, result.Digest.Length, result.Digest.Length));
             ReplaceFile(temp, full);
@@ -434,8 +430,9 @@ public sealed class LockService(
         IProgress<LockProgress>? progress,
         CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(_restoreTemp);
-        var staging = Path.Combine(_restoreTemp, ".dwrestore-" + Guid.NewGuid().ToString("N") + ".tmp");
+        var stagingRoot = StagingRoot(destinationDirectory);
+        Directory.CreateDirectory(stagingRoot);
+        var staging = Path.Combine(stagingRoot, ".dwrestore-" + Guid.NewGuid().ToString("N") + ".tmp");
         LockReadResult read;
         try
         {
@@ -449,6 +446,8 @@ public sealed class LockService(
                 plain.Flush(flushToDisk: true);
             }
 
+            if (read.Digest.Length != read.Meta.Size)
+                throw new LockDamagedException("the restored file size does not match the metadata");
             var final = UniqueRestored(destinationDirectory, read.Meta.Name, File.Exists, Directory.Exists);
             MoveFile(staging, final);
             FolderAppearance.RestoreTimes(final, read.Meta, directory: false);
@@ -470,9 +469,10 @@ public sealed class LockService(
         IProgress<LockProgress>? progress,
         CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(_restoreTemp);
-        var archive = Path.Combine(_restoreTemp, ".dwrestore-" + Guid.NewGuid().ToString("N") + ".archive");
-        var staging = Path.Combine(_restoreTemp, ".dwrestore-" + Guid.NewGuid().ToString("N") + ".dir");
+        var stagingRoot = StagingRoot(destinationDirectory);
+        Directory.CreateDirectory(stagingRoot);
+        var archive = Path.Combine(stagingRoot, ".dwrestore-" + Guid.NewGuid().ToString("N") + ".archive");
+        var staging = Path.Combine(stagingRoot, ".dwrestore-" + Guid.NewGuid().ToString("N") + ".dir");
         LockReadResult read;
         try
         {
@@ -489,7 +489,9 @@ public sealed class LockService(
             using (var archiveStream = new FileStream(archive, FileMode.Open, FileAccess.Read, FileShare.Read,
                        256 * 1024, FileOptions.SequentialScan))
             {
-                LockArchive.Extract(archiveStream, staging, cancellationToken);
+                var entries = LockArchive.Extract(archiveStream, staging, cancellationToken);
+                if (entries != read.Meta.EntryCount)
+                    throw new LockDamagedException("the folder entry count does not match the archive");
             }
             DeleteStale(archive);
 
@@ -648,12 +650,7 @@ public sealed class LockService(
             journal.Delete(record.Id);
             return;
         }
-        if (record.IsDirectory && record.EntryCount > 0)
-        {
-            var currentEntries = LockArchive.CountEntries(plaintext);
-            if (currentEntries != record.EntryCount)
-                throw new LockChangedException($"{record.EntryCount} entries were expected but the session now has {currentEntries}");
-        }
+
 
         var stagingTarget = container + ".recover";
         var containerExists = File.Exists(container);
@@ -664,6 +661,8 @@ public sealed class LockService(
         {
             var outcome = ProtectTo(plaintext, stagingTarget, credentials, folderIconPath, progress,
                 cancellationToken, allowInternalSource: true, keepSource: true);
+            if (record.IsDirectory && LockArchive.CountEntries(plaintext) != outcome.EntryCount)
+                throw new LockChangedException("the session folder changed while it was being re-encrypted");
             if (containerExists)
             {
                 ReplaceFile(outcome.OutputPath, container);
@@ -705,13 +704,15 @@ public sealed class LockService(
 
         if (isDirectory)
         {
+            var encodedEntries = 0;
             Action<ILockContentSink> writeArchive = sink =>
-                LockArchive.Write(sourcePath, sink, null, cancellationToken);
-            return credentials is not null
+                encodedEntries = LockArchive.Write(sourcePath, sink, null, cancellationToken);
+            var result = credentials is not null
                 ? LockContainer.EncryptContent(destination, dataKey, credentials, meta, writeArchive, byteProgress,
                     cancellationToken)
                 : LockContainer.EncryptContent(destination, dataKey, existingHeader!, meta, writeArchive,
                     byteProgress, cancellationToken);
+            return result with { EntryCount = encodedEntries };
         }
 
         Action<ILockContentSink> writeFile = sink =>
@@ -931,6 +932,15 @@ public sealed class LockService(
             File.Copy(source, destination, overwrite: false);
             File.Delete(source);
         }
+    }
+    /// <summary>Stages on the destination volume so the final rename is atomic; falls back to app temp only cross-volume.</summary>
+    private string StagingRoot(string destinationDirectory)
+    {
+        var tempRoot = Path.GetPathRoot(_restoreTemp);
+        var destinationRoot = Path.GetPathRoot(destinationDirectory);
+        return string.Equals(tempRoot, destinationRoot, StringComparison.OrdinalIgnoreCase)
+            ? _restoreTemp
+            : Path.Combine(destinationDirectory, ".dwlock-restore");
     }
     /// <summary>Moves a restore folder to its destination, falling back to copy+delete across volumes.</summary>
     private static void MoveDirectory(string source, string destination)

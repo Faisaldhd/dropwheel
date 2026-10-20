@@ -1102,5 +1102,7 @@
   "tool.lock.recovery.tempBody": "DropWheel found leftover temporary restore files. Delete them? They are not needed and the protected files are unchanged.",
   "tool.lock.recovery.incompleteTitle": "Incomplete unlock",
   "tool.lock.rescuer.keyOnlyTitle": "Use the Rescuer key",
-  "tool.lock.rescuer.keyOnlyBody": "Enter the 24-character recovery key to reset the Rescuer password. The key is not stored."
+  "tool.lock.rescuer.keyOnlyBody": "Enter the 24-character recovery key to reset the Rescuer password. The key is not stored.",
+  "tool.lock.recovery.orphanTitle": "Orphaned unlock folders",
+  "tool.lock.recovery.orphanBody": "DropWheel found {0} session folder(s) with no journal entry. Delete them? The protected files are unchanged."
 }

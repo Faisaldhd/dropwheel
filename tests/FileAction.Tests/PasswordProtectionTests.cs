@@ -22,28 +22,30 @@ public class PasswordProtectionTests
     private static readonly Regex Placeholder = new(@"\{(\d+)\}", RegexOptions.Compiled);
 
     [Fact]
-    public void Cumulative_multi_entry_size_is_rejected_before_writing()
+    public void Zip_multi_entry_round_trip_keeps_each_uncompressed_size()
     {
-        var plan = new ProtectedZipPlan(
-        [
-            new ProtectedZipEntry("a.bin", "a.bin", IsDirectory: false, Length: 2_000_000_000),
-            new ProtectedZipEntry("b.bin", "b.bin", IsDirectory: false, Length: 2_000_000_000),
-        ], 0);
-        var path = Path.Combine(Path.GetTempPath(), "zip-multi-" + Guid.NewGuid().ToString("N") + ".zip");
-        try
+        using var scope = new TempScope();
+        var one = scope.File("one.txt", "first entry");
+        var two = scope.File("two.txt", new string('b', 200_000));
+        var archivePath = Path.Combine(scope.Directory, "multi Protected.zip");
+        var plan = ProtectedZipPlanBuilder.Collect([one, two]);
+
+        var result = AesZipWriter.Create(plan, archivePath, Password);
+        Assert.Equal(2, result.FileCount);
+
+        using var archive = ArchiveFactory.OpenArchive(archivePath, new ReaderOptions { Password = Password });
+        var entries = archive.Entries.Where(item => !item.IsDirectory).OrderBy(item => item.Key).ToList();
+        Assert.Equal(2, entries.Count);
+        foreach (var entry in entries)
         {
-            var error = Assert.Throws<PasswordProtectionException>(() =>
-                AesZipWriter.Create(plan, path, Password));
-            Assert.Equal(PasswordProtectionFailure.TooLarge, error.Failure);
-            Assert.False(File.Exists(path));
-        }
-        finally
-        {
-            if (File.Exists(path))
-                File.Delete(path);
+            var expected = entry.Key.EndsWith("one.txt", StringComparison.Ordinal)
+                ? "first entry"
+                : new string('b', 200_000);
+            using var stream = entry.OpenEntryStream();
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            Assert.Equal(expected, reader.ReadToEnd());
         }
     }
-
     [Fact]
     public void Validation_rejects_short_mismatched_and_overlong_passwords()
     {
