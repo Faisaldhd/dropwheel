@@ -507,10 +507,20 @@ def main(argv=None):
     check.set_evidence(f"{len(handlers)} inline handler attributes")
 
     check = report.add(Check("EXT-3", "No inline <script> without src"))
-    inline_scripts = [n for n in all_nodes if n.tag == "script" and not n.attrs.get("src") and element_text(n).strip()]
+    # A JSON-LD data block is not executable JavaScript: <script type="application/ld+json">
+    # is inert under script-src and carries structured data. Every other inline script
+    # (no type, type="module", type="application/json", ...) is still a failure.
+    json_ld = [n for n in all_nodes
+               if n.tag == "script" and not n.attrs.get("src")
+               and (n.attrs.get("type") or "").strip().lower() == "application/ld+json"]
+    inline_scripts = [n for n in all_nodes
+                      if n.tag == "script" and not n.attrs.get("src")
+                      and element_text(n).strip() and n not in json_ld]
     for node in inline_scripts:
-        check.fail(f"{rel(index_path, cwd)}:{node.line}: inline script")
-    check.set_evidence(f"{len(inline_scripts)} inline script blocks")
+        check.fail(f"{rel(index_path, cwd)}:{node.line}: executable inline script "
+                   f"(type={(node.attrs.get('type') or 'none')!r})")
+    check.set_evidence(f"{len(inline_scripts)} executable inline script blocks; "
+                       f"{len(json_ld)} JSON-LD data block(s) skipped as non-executable")
 
     check = report.add(Check("EXT-4", "No analytics/tracker identifiers"))
     tracker_hits = []
