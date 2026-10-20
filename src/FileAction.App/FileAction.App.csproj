@@ -21,7 +21,7 @@
     <ApplicationIcon>Assets\DropWheel.ico</ApplicationIcon>
     <StartupObject>FileAction.App.Program</StartupObject>
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
-    <Version>2.3.0</Version>
+    <Version>2.4.0</Version>
     <SatelliteResourceLanguages>en;ar</SatelliteResourceLanguages>
     <!--
       Smaller download: trim only libraries marked as trim-safe (the .NET runtime, the Windows SDK projectionâ€¦);
@@ -58,6 +58,12 @@
     <Resource Include="Assets\DropWheel.png" />
     <Resource Include="Assets\DropWheel-tray-dark.ico" />
     <Resource Include="Assets\DropWheel-tray-light.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Deterministic assets from tools/lock-icons/generate.ps1; embedded so a stale output folder can
+         never leave the shell association pointing at a missing icon. -->
+    <EmbeddedResource Include="Assets\Lock\*.ico" LogicalName="FileAction.App.Lock.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

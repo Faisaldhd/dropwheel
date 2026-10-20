@@ -529,6 +529,47 @@ public class CollageTests
         }
     }
 
+    [Fact]
+    public async Task Drop_target_folder_receives_the_collage_and_the_source_folder_stays_untouched()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "dropwheel-collage-drop-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "source");
+        var drop = Path.Combine(root, "drop");
+        Directory.CreateDirectory(source);
+        Directory.CreateDirectory(drop);
+        try
+        {
+            var first = Path.Combine(source, "first.png");
+            var second = Path.Combine(source, "second.png");
+            using (var image = new MagickImage(MagickColors.RebeccaPurple, 120, 90))
+                image.Write(first);
+            using (var image = new MagickImage(MagickColors.Goldenrod, 90, 120))
+                image.Write(second);
+            var before = SHA256.HashData(File.ReadAllBytes(first));
+
+            // The folder under the cursor wins, exactly like the Crop tool (2.2.3 rules).
+            var directory = CollageView.OutputDirectoryFor(first, new DropTargets(drop, null));
+            Assert.Equal(Path.TrimEndingDirectorySeparator(Path.GetFullPath(drop)), directory);
+
+            var output = await CollageRenderer.RenderAsync(
+                [first, second],
+                new CollageOptions { Size = new CollageSize(640, 480), Spacing = 4 },
+                directory);
+
+            Assert.Equal(Path.Combine(drop, "Collage.png"), output);
+            Assert.True(File.Exists(output));
+            Assert.False(File.Exists(Path.Combine(source, "Collage.png")), "the source folder must not receive the collage");
+            Assert.Equal(before, SHA256.HashData(File.ReadAllBytes(first)));
+
+            // The remembered drop folder is the second chance when nothing is under the cursor.
+            Assert.Equal(directory, CollageView.OutputDirectoryFor(first, new DropTargets(null, drop)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static void AssertColour(MagickImage image, int x, int y, IMagickColor<byte> expected, int tolerance = 1)
     {
         using var pixels = image.GetPixels();

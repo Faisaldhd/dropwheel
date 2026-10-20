@@ -25,6 +25,7 @@ scripts/_*
 # The floating-tool source folder is not the downloaded helper-tools folder.
 !src/FileAction.App/UI/Tools/
 
-# The generated tool window sheet is committed on purpose.
-!docs/screenshots/tools/
-!docs/screenshots/tools/**
+# Hostile-input audit scratch (tests create and delete their own roots here)
+_audit-ci/
+_local/tmp/
+

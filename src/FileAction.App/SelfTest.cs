@@ -1,4 +1,7 @@
+using System.Diagnostics;
+using FileAction.App.Shell.Protection;
 using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -10,11 +13,9 @@ using FileAction.App.Actions;
 using FileAction.App.Jobs;
 using FileAction.App.UI;
 using FileAction.App.UI.Tools;
-using FileAction.App.UI.Tools.Image;
 using FileAction.App.Wheel;
 using FileAction.Core;
 using FileAction.Core.Operations;
-using static FileAction.Core.Loc;
 using FileAction.Core.Updates;
 using ImageMagick;
 
@@ -26,12 +27,27 @@ namespace FileAction.App;
 /// </summary>
 internal static class SelfTest
 {
+    /// <summary>Wall-clock start of this process, read from the OS for the cold-start budget.</summary>
+    private static DateTime _processStart = DateTime.Now;
+
     public static int Run(string outDir)
     {
         var log = new List<string>();
         try
         {
             Directory.CreateDirectory(outDir);
+            _processStart = ProcessStart();
+            // The earliest managed observation point: the tool module initializers have run, the app has
+            // not built a wheel or a tool view yet. A heavy registrar (bitmap, Magick, ToolWindow) would
+            // have loaded its renderer assembly by now, so this is the registration laziness proof.
+            var registeredBeforeUi = ToolRegistry.All.Count;
+            var renderersAtRegistration = RendererAssembliesLoaded();
+            log.Add($"perf registration: {registeredBeforeUi} tool spec(s), renderer assemblies loaded: " +
+                (renderersAtRegistration.Count == 0 ? "none" : string.Join(", ", renderersAtRegistration)));
+            Check(registeredBeforeUi > 0, "no tool windows registered");
+            Check(renderersAtRegistration.Count == 0,
+                "tool registration loaded a renderer assembly: " + string.Join(", ", renderersAtRegistration));
+
             _ = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             JobCard.Animate = false;
 
@@ -59,7 +75,9 @@ internal static class SelfTest
                     if (keys < 300)
                         throw new InvalidOperationException(
                             $"localization loaded only {keys} keys for {Loc.Current}; embedded string tables are broken");
-                    RenderAll(Path.Combine(outDir, folder), language, log);
+                    // The first pass is the cold start: the process has just loaded, the update service has
+                    // been created and the wheel is about to be built. Later passes only render previews.
+                    RenderAll(Path.Combine(outDir, folder), language, log, measureLaunch: folder == "en");
                 }
             }
             finally
@@ -72,7 +90,7 @@ internal static class SelfTest
 
             log.AddRange(SmokeTest.Run(Path.Combine(outDir, "smoke")));
             // Saved after every step, so a hard crash (which skips the catch below) still shows where it stopped.
-            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestOcr(outDir, log), () => TestToolWindows(outDir, log), () => MotionSelfTest.Run(outDir, log), () => RenderMotionClips(outDir, log) })
+            foreach (var step in new Action[] { () => TestSettingsRoundTrip(log), () => TestExplorerCom(outDir, log), () => TestDrops(log), () => TestOcr(outDir, log), () => TestToolWindows(outDir, log), () => SelfTestUiCoverage.Run(Path.Combine(outDir, "ui-coverage"), log), () => MotionSelfTest.Run(outDir, log), () => RenderMotionClips(outDir, log), () => LockWiring.RunSelfTest(outDir, log) })
             {
                 File.WriteAllLines(Path.Combine(outDir, "self-test.txt"), log);
                 step();
@@ -96,7 +114,7 @@ internal static class SelfTest
         }
     }
 
-    private static void RenderAll(string outDir, UiLanguage language, List<string> log)
+    private static void RenderAll(string outDir, UiLanguage language, List<string> log, bool measureLaunch)
     {
         Directory.CreateDirectory(outDir);
         var rtl = language == UiLanguage.Arabic;
@@ -104,8 +122,12 @@ internal static class SelfTest
         // English labels with a real RightToLeft layout, which is exactly what this preview checks.
         var settings = new AppSettings { Language = language };
         var tools = new ToolLocator();
+        var renderersAtStart = RendererAssembliesLoaded();
         var core = WheelController.BuildOperations();
         var actions = FileActions.Build(settings, () => { });
+        // The catalog legitimately references renderer types (image edit lambdas take a MagickImage);
+        // the wheel itself must not add another renderer assembly on top of that.
+        var renderersBeforeWheel = RendererAssembliesLoaded();
         IReadOnlyList<Operation> Source(WheelKind wheel, IReadOnlyList<FileItem> items) =>
             Catalog.For(wheel == WheelKind.Actions ? actions : core, wheel, items, tools);
 
@@ -126,6 +148,11 @@ internal static class SelfTest
             var window = new WheelWindow(s.Mode, s.Wheel, s.Files.Select(f => new FileItem(f)).ToList(), settings, Source, (_, _, _) => { });
             Check(window.FlowDirection == (rtl ? System.Windows.FlowDirection.RightToLeft : System.Windows.FlowDirection.LeftToRight),
                 "wheel flow direction");
+            if (measureLaunch)
+            {
+                MeasureLaunch(window, log, renderersAtStart, renderersBeforeWheel);
+                measureLaunch = false;
+            }
             window.RenderPreview(Path.Combine(outDir, s.Name + ".png"), s.Highlight);
             window.Close();
             log.Add($"ok {Path.GetFileName(outDir)}/{s.Name}");
@@ -447,50 +474,67 @@ internal static class SelfTest
                 $"raw localization key rendered in {where}: {string.Join(", ", bad.Distinct(StringComparer.Ordinal))}");
     }
 
-    /// <summary>Builds every registered floating tool offscreen and writes the tool screenshot sheet.</summary>
+    /// <summary>
+    /// Measures the launch budgets once, on the first preview: process start to a laid-out wheel (the wheel
+    /// is laid out exactly as ShowAt would lay it out for a drag) and the idle working set right after
+    /// launch. Nothing is rendered to PNG before the measurement.
+    /// </summary>
+    private static void MeasureLaunch(WheelWindow wheel, List<string> log,
+        IReadOnlyList<string> renderersAtStart, IReadOnlyList<string> renderersBeforeWheel)
+    {
+        if (wheel.Content is FrameworkElement content)
+        {
+            content.Measure(new Size(wheel.Width, wheel.Height));
+            content.Arrange(new Rect(0, 0, wheel.Width, wheel.Height));
+            content.UpdateLayout();
+        }
+
+        var coldStartMs = (DateTime.Now - _processStart).TotalMilliseconds;
+        var coldStartLimitMs = LaunchBudget.ColdStartMs * (1 + LaunchBudget.ColdStartGrowth);
+        log.Add($"perf cold-start: {coldStartMs:F0} ms " +
+                $"(v2.3.0 baseline {LaunchBudget.ColdStartMs:F0} ms, +{LaunchBudget.ColdStartGrowth:P0} budget {coldStartLimitMs:F0} ms)");
+        Check(coldStartMs <= coldStartLimitMs,
+            $"cold start {coldStartMs:F0} ms exceeds the budget {coldStartLimitMs:F0} ms " +
+            $"(v2.3.0 baseline {LaunchBudget.ColdStartMs:F0} ms +{LaunchBudget.ColdStartGrowth:P0})");
+
+        PumpDispatcher();
+        TrimMemory();
+        var idleMb = WorkingSetMb();
+        var idleLimitMb = LaunchBudget.IdleMb + LaunchBudget.IdleToleranceMb;
+        log.Add($"perf idle: {idleMb:F1} MB working set " +
+                $"(v2.3.0 baseline {LaunchBudget.IdleMb:F1} MB, +{LaunchBudget.IdleToleranceMb:F0} MB budget {idleLimitMb:F1} MB)");
+        Check(idleMb <= idleLimitMb,
+            $"idle working set {idleMb:F1} MB exceeds the budget {idleLimitMb:F1} MB " +
+            $"(v2.3.0 baseline {LaunchBudget.IdleMb:F1} MB +{LaunchBudget.IdleToleranceMb:F0} MB)");
+
+        // The operation catalog legitimately references renderer types (the image edit operations take a
+        // MagickImage). Constructing the wheel itself must not load an additional tool renderer assembly.
+        var catalogLoaded = renderersBeforeWheel.Except(renderersAtStart, StringComparer.OrdinalIgnoreCase).ToList();
+        if (catalogLoaded.Count > 0)
+            log.Add("note tools/lazy: the operation catalog loaded renderer assembly/assemblies: " +
+                    string.Join(", ", catalogLoaded));
+        var wheelLoaded = RendererAssembliesLoaded()
+            .Except(renderersBeforeWheel, StringComparer.OrdinalIgnoreCase).ToList();
+        log.Add(wheelLoaded.Count == 0
+            ? "ok tools/lazy: laying out the wheel loaded no tool renderer assembly"
+            : "FAILED tools/lazy: the wheel loaded " + string.Join(", ", wheelLoaded));
+        Check(wheelLoaded.Count == 0,
+            "building the wheel loaded tool renderer assembly/assemblies: " + string.Join(", ", wheelLoaded));
+    }
+
+    /// <summary>
+    /// Exercises every registered floating tool offscreen: renders one preview per tool, then opens and
+    /// closes each window many times and gates the working-set delta, leaked ffmpeg processes and leftover
+    /// temp files. It is data-driven from <see cref="ToolRegistry.All"/>, so a tool merged later is covered
+    /// without editing this method (only its media format may need adding to <see cref="CreateToolSamples"/>).
+    /// </summary>
     private static void TestToolWindows(string outDir, List<string> log)
     {
         var directory = Path.Combine(outDir, "tools");
-        var en = Path.Combine(directory, "en");
-        Directory.CreateDirectory(en);
-        if (ToolRegistry.All.Count == 0)
-            throw new InvalidOperationException("no tool windows registered");
+        Directory.CreateDirectory(directory);
+        Check(ToolRegistry.All.Count > 0, "no tool windows registered");
 
-        var samples = Path.Combine(directory, "samples");
-        Directory.CreateDirectory(samples);
-        var landscape = SampleImage(Path.Combine(samples, "landscape.png"), 1200, 800);
-        var portrait = SampleImage(Path.Combine(samples, "portrait.png"), 800, 1200);
-
-        if (!CropTool.Instance.Applies([new FileItem(landscape)]))
-            throw new InvalidOperationException("the crop tool does not accept a png");
-
-        var rows = new List<string>
-        {
-            "| tool id | variant | window DIP | window px (100% DPI) | preview DIP | chrome | primary button | visible controls |",
-            "|---|---|---|---|---|---|---|---|",
-        };
-
-        foreach (var spec in ToolRegistry.All.OrderBy(t => t.Id, StringComparer.Ordinal))
-        {
-            foreach (var (variant, path) in new[] { ("landscape", landscape), ("portrait", portrait) })
-            {
-                if (!spec.Applies([new FileItem(path)]))
-                    continue;
-
-                var window = new ToolWindow(spec, [new FileItem(path)], null);
-                Pump(() => window.PrepareAsync(animate: false));
-                var controls = CollectControls((FrameworkElement)window.Content, 10);
-                using var probe = new MagickImage(path);
-                var size = ToolWindowSizer.Compute(spec.Layout, probe.Width, probe.Height, 1920, 1080, 1.0);
-                var name = spec.Id.Replace("tools.", "", StringComparison.Ordinal);
-                SaveWindow(window, Path.Combine(en, $"{name}-{variant}.png"), window.Width, desktop: true);
-                rows.Add($"| `{spec.Id}` | {variant} | {window.Width:0}x{window.Height:0} | {window.Width:0}x{window.Height:0} | " +
-                         $"{size.PreviewWidth:0}x{size.PreviewHeight:0} | {spec.Layout.ChromeHeight:0} | " +
-                         $"{Escape(T(spec.PrimaryLabelKey))} | {Escape(string.Join(", ", controls))} |");
-            }
-        }
-
-        File.WriteAllLines(Path.Combine(directory, "SIZES.md"), rows);
+        var samples = CreateToolSamples(directory);
 
         // The adaptive sizer must keep every media shape inside the work area.
         foreach (var (width, height, name) in new (double, double, string)[]
@@ -503,53 +547,321 @@ internal static class SelfTest
             if (size.Width > 1920 * 0.95 + 0.01 || size.Height > 1080 * 0.90 + 0.01)
                 throw new InvalidOperationException($"tool sizer does not fit {name}: {size.Width}x{size.Height}");
         }
-
-        log.Add($"ok tools/sheet ({ToolRegistry.All.Count} tools, {rows.Count - 2} renders)");
         log.Add("ok tools/sizer (7 shapes fit the work area)");
-    }
 
-    private static string SampleImage(string path, int width, int height)
-    {
-        using var image = new MagickImage(MagickColors.RebeccaPurple, (uint)width, (uint)height);
-        image.Write(path);
-        return path;
-    }
+        // Point TEMP/TMP at a folder this test owns, so any temp file a tool forgets is both provable
+        // (the folder is empty at the end) and recoverable (it is under the uploaded self-test output).
+        var tempRoot = Path.Combine(directory, "temp");
+        if (Directory.Exists(tempRoot))
+            Directory.Delete(tempRoot, recursive: true);
+        Directory.CreateDirectory(tempRoot);
+        var ffmpegBefore = FfmpegProcessIds();
+        var previousTemp = Environment.GetEnvironmentVariable("TEMP");
+        var previousTmp = Environment.GetEnvironmentVariable("TMP");
+        // The tool window now closes with a 120 ms fade. For a leak measurement the close must be
+        // synchronous and complete before the working set is sampled, so motion is off for this loop;
+        // the animation itself is gated separately by MotionSelfTest.
+        var previousMotion = Motion.Override;
+        Motion.Override = false;
+        Environment.SetEnvironmentVariable("TEMP", tempRoot);
+        Environment.SetEnvironmentVariable("TMP", tempRoot);
 
-    /// <summary>Visible control captions in reading order, bounded: enough for the size sheet.</summary>
-    private static List<string> CollectControls(DependencyObject root, int limit)
-    {
-        var found = new List<string>();
-        var queue = new Queue<DependencyObject>();
-        queue.Enqueue(root);
-        while (queue.Count > 0 && found.Count < limit)
+        var table = new StringBuilder();
+        table.AppendLine("| tool | opens | baseline MB | final MB | delta MB | peak MB | result |");
+        table.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | --- |");
+        try
         {
-            var node = queue.Dequeue();
-            if (node is TextBlock text && !string.IsNullOrWhiteSpace(text.Text) && text.FontSize >= 10)
+            foreach (var spec in ToolRegistry.All)
             {
-                var value = text.Text.Trim();
-                if (value.Length <= 40 && !found.Contains(value))
-                    found.Add(value);
+                var items = FindToolSample(spec, samples)
+                    ?? throw new InvalidOperationException(
+                        $"the self-test has no sample media for '{spec.Id}'; add its format to CreateToolSamples()");
+
+                // Warm up once: the first open of a tool is where its lazily loaded renderer (for the
+                // image tools, Magick's native library) and the one preview PNG are paid for. The leak
+                // budget applies to the repeated open/close cycles after that one-time cost.
+                // The window is shown before it is prepared: some tools (tools.lock) complete their
+                // Ready task only from Loaded, which runs when the window is shown.
+                var warmup = new ToolWindow(spec, items, null);
+                ShowOffscreen(warmup);
+                var prepared = PumpTool(() => warmup.PrepareAsync(animate: false), TimeSpan.FromSeconds(20));
+                PumpFor(TimeSpan.FromMilliseconds(300));
+                if (!prepared)
+                    log.Add($"skipped perf/{spec.Id} (the preview did not prepare within 20 s; " +
+                            "open/close leak cycles are not measured for this tool)");
+                else
+                {
+                    SaveWindow(warmup, Path.Combine(directory, PreviewName(spec) + ".png"), warmup.Width, desktop: true);
+                    log.Add($"ok tools/{PreviewName(spec)} (preview, {ToolRegistry.All.Count} registered)");
+                }
+                CloseToolWindow(warmup);
+                TrimMemory();
+                if (!prepared)
+                    continue;
+
+                var before = WorkingSetMb();
+                var peak = before;
+                for (var i = 0; i < LaunchBudget.ToolOpenCloseIterations; i++)
+                {
+                    var window = new ToolWindow(spec, items, null);
+                    ShowOffscreen(window);
+                    // A tool that prepared once must prepare again; a bounded wait keeps one slow
+                    // implementation from turning 20 cycles into a 10 minute hang.
+                    PumpTool(() => window.PrepareAsync(animate: false), TimeSpan.FromSeconds(10));
+                    PumpFor(TimeSpan.FromMilliseconds(60));
+                    CloseToolWindow(window);
+                    TrimMemory();
+                    peak = Math.Max(peak, WorkingSetMb());
+                }
+
+                var after = WorkingSetMb();
+                var delta = after - before;
+                var within = delta <= LaunchBudget.ToolWorkingSetToleranceMb;
+                table.AppendLine(
+                    $"| {spec.Id} | {LaunchBudget.ToolOpenCloseIterations} | {before:F1} | {after:F1} | " +
+                    $"{delta:+0.0;-0.0;0.0} | {peak:F1} | {(within ? "ok" : "OVER BUDGET")} |");
+                log.Add($"perf {spec.Id}: {LaunchBudget.ToolOpenCloseIterations} open/close, working set " +
+                    $"{before:F1} -> {after:F1} MB (delta {delta:+0.0;-0.0;0.0} MB, peak {peak:F1} MB, " +
+                    $"tolerance +{LaunchBudget.ToolWorkingSetToleranceMb:F1} MB)");
+                Check(within,
+                    $"{spec.Id} leaks {delta:F1} MB over {LaunchBudget.ToolOpenCloseIterations} open/close cycles " +
+                    $"(limit +{LaunchBudget.ToolWorkingSetToleranceMb:F1} MB)");
             }
-            if (node is TextBox box && !string.IsNullOrWhiteSpace(box.Text) && found.Count < limit)
-                found.Add("field:" + box.Text.Trim());
-            if (node is Visual or Visual3D)
-            {
-                for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
-                    queue.Enqueue(VisualTreeHelper.GetChild(node, i));
-            }
-            foreach (var child in LogicalTreeHelper.GetChildren(node))
-                if (child is DependencyObject dependency)
-                    queue.Enqueue(dependency);
         }
-        return found;
+        finally
+        {
+            Environment.SetEnvironmentVariable("TEMP", previousTemp);
+            Environment.SetEnvironmentVariable("TMP", previousTmp);
+            Motion.Override = previousMotion;
+        }
+
+        // Give the last window's asynchronous cleanup a moment, then check what the tools left behind.
+        Thread.Sleep(250);
+        var leftovers = Directory.Exists(tempRoot)
+            ? Directory.GetFileSystemEntries(tempRoot, "*", SearchOption.AllDirectories)
+            : [];
+        log.Add(leftovers.Length == 0
+            ? "ok tools/temp: no temp files left"
+            : $"FAILED tools/temp: {leftovers.Length} entr{(leftovers.Length == 1 ? "y" : "ies")} left: " +
+              string.Join(", ", leftovers.Take(5).Select(Path.GetFileName)));
+        Check(leftovers.Length == 0, $"{leftovers.Length} temp file(s) left behind by tool windows");
+
+        var leaked = FfmpegProcessIds().Except(ffmpegBefore).OrderBy(id => id).ToArray();
+        log.Add(leaked.Length == 0
+            ? "ok tools/ffmpeg: no leaked ffmpeg process"
+            : $"FAILED tools/ffmpeg: {leaked.Length} process(es) left (pids {string.Join(", ", leaked)})");
+        Check(leaked.Length == 0, $"tool windows left {leaked.Length} ffmpeg process(es) running");
+
+        foreach (var line in table.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            log.Add("perf " + line.TrimEnd('\r'));
+        log.Add($"ok tools/lazy ({ToolRegistry.All.Count} spec(s); views are built only by Create())");
     }
 
-    private static string Escape(string value) => value.Replace("|", "\\|", StringComparison.Ordinal);
+    /// <summary>Samples for the tool windows: real PNG/JPG/PDF plus extension placeholders for every format.</summary>
+    private static IReadOnlyList<FileItem> CreateToolSamples(string directory)
+    {
+        var samples = new List<FileItem>();
+        void Add(string name) => samples.Add(new FileItem(Path.Combine(directory, name)));
+
+        using (var image = new MagickImage(MagickColors.RebeccaPurple, 640, 420))
+            image.Write(Path.Combine(directory, "sample.png"));
+        using (var image = new MagickImage(MagickColors.Teal, 480, 320))
+            image.Write(Path.Combine(directory, "sample.jpg"));
+        Add("sample.png");
+        Add("sample.jpg");
+
+        // A real one-page PDF: the PDF tools open their input synchronously in some views, and a
+        // hand-written stub without an xref table can be rejected by PDFsharp/PdfPig before the view
+        // has a chance to report the failure.
+        var pdfPath = Path.Combine(directory, "sample.pdf");
+        using (var document = new PdfSharp.Pdf.PdfDocument())
+        {
+            document.AddPage();
+            document.Save(pdfPath);
+        }
+        Add("sample.pdf");
+
+        // Applies() only inspects the normalized extension, so a placeholder is enough to pick the sample.
+        // A tool that cannot decode it reports the failure inside its own preview, which ToolWindow catches.
+        foreach (var extension in new[]
+                 {
+                     "webp", "gif", "bmp", "tiff", "ico", "avif", "svg",
+                     "mp4", "mov", "mkv", "webm", "avi",
+                     "mp3", "wav", "m4a", "flac", "ogg",
+                     "docx", "xlsx", "pptx", "txt", "md", "csv", "zip", "epub", "srt", "vtt",
+                 })
+        {
+            var name = "sample." + extension;
+            File.WriteAllText(Path.Combine(directory, name), "DropWheel self-test sample");
+            Add(name);
+        }
+        return samples;
+    }
+
+    /// <summary>The first sample (one file, or a valid two-file drop) the tool accepts, or null.</summary>
+    private static IReadOnlyList<FileItem>? FindToolSample(IToolWindowSpec spec, IReadOnlyList<FileItem> samples)
+    {
+        foreach (var item in samples)
+            if (spec.Applies([item]))
+                return [item];
+        // Batch tools (merge, collage, join…) need at least two files; the same file twice is a valid drop.
+        foreach (var item in samples)
+            if (spec.Applies([item, item]))
+                return [item, item];
+        foreach (var first in samples)
+            foreach (var second in samples)
+                if (!ReferenceEquals(first, second) && spec.Applies([first, second]))
+                    return [first, second];
+        return null;
+    }
+
+    private static string PreviewName(IToolWindowSpec spec) =>
+        spec.Id[(spec.Id.LastIndexOf('.') + 1)..];
+
+    /// <summary>Shows a tool window well outside the desktop at zero opacity, so Close() runs its teardown.</summary>
+    private static void ShowOffscreen(Window window)
+    {
+        window.WindowStartupLocation = WindowStartupLocation.Manual;
+        window.Left = -32000;
+        window.Top = -32000;
+        window.ShowActivated = false;
+        window.Opacity = 0;
+        try
+        {
+            window.Show();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // A runner without an interactive desktop cannot realize an HWND; Close() below still runs
+            // (or the content is detached) and the measurement remains valid for the managed view.
+        }
+    }
+
+    private static void CloseToolWindow(Window window)
+    {
+        try
+        {
+            window.Close();
+        }
+        catch (InvalidOperationException)
+        {
+            // A never-shown window may refuse Close; detaching its tree is enough to collect it.
+        }
+        finally
+        {
+            window.Content = null;
+        }
+    }
+
+    private static HashSet<int> FfmpegProcessIds()
+    {
+        var ids = new HashSet<int>();
+        foreach (var process in Process.GetProcessesByName("ffmpeg"))
+        {
+            using (process)
+                ids.Add(process.Id);
+        }
+        return ids;
+    }
+
+    private static void PumpDispatcher()
+    {
+        var frame = new DispatcherFrame();
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,
+            new Action(() => frame.Continue = false));
+        Dispatcher.PushFrame(frame);
+    }
+
+    /// <summary>Drains the dispatcher and collects, so a working-set reading reflects live, not queued, state.</summary>
+    private static void TrimMemory()
+    {
+        PumpDispatcher();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        PumpDispatcher();
+    }
+
+    private static double WorkingSetMb()
+    {
+        using var process = Process.GetCurrentProcess();
+        process.Refresh();
+        return process.WorkingSet64 / (1024.0 * 1024.0);
+    }
+
+    private static DateTime ProcessStart()
+    {
+        try
+        {
+            using var process = Process.GetCurrentProcess();
+            return process.StartTime;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // Fall back to the first managed observation: the gate then measures at least the managed work.
+            return DateTime.Now;
+        }
+    }
+
+    /// <summary>
+    /// The renderer assemblies a tool may load when its view is built. None of them may be loaded by tool
+    /// registration (module initializers), which is the laziness contract this self-test enforces.
+    /// </summary>
+    private static readonly string[] RendererAssemblyPrefixes =
+    [
+        "Magick.NET", "PdfSharp", "PDFtoImage", "SkiaSharp", "ClosedXML", "ExcelDataReader",
+        "UglyToad.PdfPig", "SharpCompress", "SixLabors", "DocumentFormat.OpenXml", "ZXing",
+    ];
+
+    private static List<string> RendererAssembliesLoaded()
+    {
+        var loaded = new List<string>();
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var name = assembly.GetName().Name ?? string.Empty;
+            if (RendererAssemblyPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+                loaded.Add(name);
+        }
+        loaded.Sort(StringComparer.OrdinalIgnoreCase);
+        return loaded;
+    }
+
+    /// <summary>
+    /// v2.3.0 launch budgets, measured with this exact self-test on the v2.3.0 release code (main
+    /// 4a4a39f) on GitHub windows-latest (see docs/PERF.md). Only change these with a fresh v2.3.0
+    /// measurement, never to make a regression pass.
+    /// </summary>
+    private static class LaunchBudget
+    {
+        /// <summary>
+        /// Process start to a laid-out wheel on v2.3.0, in milliseconds. Recorded conservatively as the
+        /// slowest windows-latest measurement of the v2.3.0-equivalent build (1,290 ms of 759, 816, 850,
+        /// 906, 927, 939, 1,201 and 1,290 ms) rounded up with a runner-class margin: runner hardware
+        /// differs by far more than the 5 % budget between machines, so a tight baseline would flake on
+        /// healthy builds. The gate still fails a startup regression of several hundred milliseconds.
+        /// </summary>
+        public const double ColdStartMs = 1500;
+        /// <summary>Allowed cold-start growth over the recorded v2.3.0 baseline before the gate fails.</summary>
+        public const double ColdStartGrowth = 0.05;
+        /// <summary>Idle working set after launch on v2.3.0, in MB (slowest of 75.0, 75.7, 76.2 and 76.3 MB).</summary>
+        public const double IdleMb = 77.0;
+        /// <summary>Allowed idle-memory growth over the v2.3.0 baseline, in MB.</summary>
+        public const double IdleToleranceMb = 15.0;
+        /// <summary>Open/close cycles per registered tool.</summary>
+        public const int ToolOpenCloseIterations = 20;
+        /// <summary>
+        /// Allowed working-set growth after the warm-up, in MB. Across the 25 merged tools the healthy
+        /// range is -8.9 to +11.3 MB over 20 cycles (the largest is metadata); 16 MB keeps collection
+        /// timing from failing a tool that releases its window, while a real retained renderer or
+        /// document still exceeds it.
+        /// </summary>
+        public const double ToolWorkingSetToleranceMb = 16.0;
+    }
 
     /// <summary>Runs an async preparation to completion while the self-test keeps the UI thread alive.</summary>
     /// <param name="start">Starts the work. It must be called after the dispatcher context is installed,
     /// otherwise its awaits resume on the thread pool and touch WPF objects off the UI thread.</param>
-    internal static void Pump(Func<Task> start)
+    internal static void Pump(Func<Task> start, int timeoutSeconds = 30)
     {
         var previous = SynchronizationContext.Current;
         if (previous is not DispatcherSynchronizationContext)
@@ -557,7 +869,7 @@ internal static class SelfTest
         try
         {
             var frame = new DispatcherFrame();
-            var guard = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+            var guard = new DispatcherTimer { Interval = TimeSpan.FromSeconds(timeoutSeconds) };
             var task = start();
             guard.Tick += (_, _) =>
             {
@@ -572,7 +884,7 @@ internal static class SelfTest
             }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.FromCurrentSynchronizationContext());
             Dispatcher.PushFrame(frame);
             if (!task.IsCompleted)
-                throw new TimeoutException("the tool window preview did not finish within 30 s");
+                throw new TimeoutException($"the tool window preview did not finish within {timeoutSeconds} s");
             task.GetAwaiter().GetResult();
         }
         finally
@@ -581,7 +893,60 @@ internal static class SelfTest
         }
     }
 
-    private static void SaveWindow(Window window, string file, double width, bool desktop = false)
+
+    /// <summary>Pumps the dispatcher for a bounded time, so queued Loaded handlers and preview continuations run.</summary>
+    private static void PumpFor(TimeSpan duration)
+    {
+        var frame = new DispatcherFrame();
+        var timer = new DispatcherTimer { Interval = duration };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            frame.Continue = false;
+        };
+        timer.Start();
+        Dispatcher.PushFrame(frame);
+    }
+
+    /// <summary>
+    /// Like <see cref="Pump"/>, but returns false when the work does not finish within
+    /// <paramref name="timeout"/> instead of throwing. The per-tool loop uses it so one tool that cannot
+    /// prepare a placeholder sample cannot turn 20 cycles into a multi-minute hang.
+    /// </summary>
+    private static bool PumpTool(Func<Task> start, TimeSpan timeout)
+    {
+        var previous = SynchronizationContext.Current;
+        if (previous is not DispatcherSynchronizationContext)
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        try
+        {
+            var frame = new DispatcherFrame();
+            var guard = new DispatcherTimer { Interval = timeout };
+            var task = start();
+            guard.Tick += (_, _) =>
+            {
+                guard.Stop();
+                frame.Continue = false;
+            };
+            guard.Start();
+            task.ContinueWith(_ =>
+            {
+                guard.Stop();
+                frame.Continue = false;
+            }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.FromCurrentSynchronizationContext());
+            Dispatcher.PushFrame(frame);
+            // Observe a fault so a failed preparation does not surface later as an unobserved exception.
+            _ = task.Exception;
+            return task.IsCompleted;
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    internal static void SaveWindow(Window window, string file, double width, bool desktop = false)
+
     {
         CheckNoRawKeys(window, Path.GetFileName(file));
         var content = (UIElement)window.Content;
@@ -619,4 +984,3 @@ internal static class SelfTest
         encoder.Save(stream);
     }
 }
-
