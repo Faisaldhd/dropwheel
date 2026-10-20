@@ -31,8 +31,18 @@ Runner: `treosh/lighthouse-ci-action@v12`, Lighthouse CI against an explicit
 static server (`python3 -m http.server 8080 --directory docs/site --bind
 127.0.0.1`) with the **desktop preset** and two runs per category. The job
 first proves `/robots.txt` is served as HTTP 200 `text/plain` from the origin
-root; LHCI's built-in `staticDistDir` server did not serve `/robots.txt`, which
-made Lighthouse score SEO 0.92 with `robots-txt` = 0.
+root.
+
+Two page/harness facts matter for the robots audit:
+
+- LHCI's built-in `staticDistDir` server did not serve `/robots.txt`, which made
+  Lighthouse report `robots-txt = 0` and SEO 0.92, so the workflow now runs an
+  explicit server.
+- Chrome's `Network.loadNetworkResource` (used by Lighthouse's protocol
+  fetcher) enforces the document CSP. The page therefore uses
+  `connect-src 'self'`: `connect-src 'none'` blocked `/robots.txt` with a CSP
+  violation even though curl got 200. `'self'` still blocks every third-party
+  or outbound connection.
 
 Assertions are hard errors, not warnings:
 
@@ -91,12 +101,17 @@ Below-the-fold assets are deliberately excluded:
 - anything outside `docs/site/index.html`'s initial document (for example
   `docs/site/README.md`).
 
-At the time of writing (commit `3665790`, 2026-10-20) the measured payload is
-**407,459 bytes**: 130,937 HTML + 53,161 CSS + 17,168 app JS + 1,244 boot JS +
-1,983 favicon + 52,660 apple-touch-icon + 3,644 brand mark + 146,662 hero
-candidates. That is 81.5% of the 500,000 byte budget, with 92,541 bytes of
-headroom. The script prints the per-file table and the total on every run and
-writes the same table to the job summary.
+At the time of writing (commit `042a71d`, including feat `db01f16`,
+2026-10-20) the measured payload is **390,552 bytes**: 129,854 HTML + 52,785
+CSS + 16,680 app JS + 1,208 boot JS + 1,983 favicon + 52,660 apple-touch-icon +
+3,644 brand mark + 131,738 hero candidates. That is 78.1% of the 500,000 byte
+budget, with 109,448 bytes of headroom. The script prints the per-file table and
+the total on every run and writes the same table to the job summary.
+
+Numbers above are the bytes in the Git tree (LF), which is what GitHub Pages
+serves and what CI measures. A Windows working tree with `core.autocrlf=true`
+reports about 3.5 KB more because CRLF adds one byte per line; the CI number is
+authoritative for the budget.
 
 ## Gate 3: link check
 
@@ -153,10 +168,14 @@ Playwright Chromium and captures full-page PNGs for four states at two widths:
 | `390 x 844` | EN dark, EN light, AR dark, AR light |
 
 Files are named `home-1440-en-dark.png`, `home-1440-ar-light.png`, and so on.
-Before each capture the script walks the document in ~800 px steps with a 60 ms
-pause (the page reveals sections with `IntersectionObserver`, so a naive
-full-page shot would be blank below the fold), scrolls back to the top, waits
-300 ms and only then screenshots. At 390 px it hard-fails the step when
+Before each capture the script forces `scroll-behavior: auto` (the page sets
+`smooth`, which otherwise makes rapid programmatic jumps animate and never
+reach the bottom), walks the document in ~800 px steps with a 60 ms pause,
+checks that the scroll actually reached the bottom, asserts that zero
+`[data-reveal]` nodes remain hidden, waits for pending images, scrolls back to
+the top, blurs the active element and parks the pointer at (0,0) so the skip
+link is not captured in its focus-visible state, waits 300 ms and only then
+screenshots. At 390 px it hard-fails the step when
 `document.scrollingElement.scrollWidth > window.innerWidth + 1`, which catches
 horizontal overflow in either direction or language.
 
@@ -211,7 +230,7 @@ Before anything is uploaded, the deploy job:
 markers themselves stay). Version, MiB, bytes and SHA-256 may repeat — the
 page uses them in the release bar, hero facts, For IT commands, release card,
 download card and installer filenames — and every occurrence is replaced.
-At commit `3665790` the page has 8 version, 4 MiB, 2 SHA-256, 1 bytes and 1
+At commit `042a71d` the page has 8 version, 4 MiB, 2 SHA-256, 1 bytes and 1
 status pair; the status pair must appear exactly once. There is no note marker
 to stamp: the top status strip is the only status surface.
 
@@ -284,7 +303,7 @@ release or from `SHA256SUMS.txt`, any marker is missing, or a stale
 | Symptom | Meaning | Action |
 | --- | --- | --- |
 | Lighthouse category < 0.95 | page regression | report the failing audit from `lighthouse-report` to the lead; do not lower the threshold |
-| SEO 0.92 with `robots-txt` score 0 | `docs/site/robots.txt` is missing or unreadable | page owner adds a valid `robots.txt` (User-agent / Allow / Sitemap) |
+| SEO 0.92 with `robots-txt` score 0 | `/robots.txt` missing, or CSP `connect-src` blocks the protocol fetch | page owner adds a valid `robots.txt` and keeps `connect-src 'self'` (Chrome's fetcher enforces CSP) |
 | `size_budget.py` exits 1 | initial payload > 500,000 B | identify the added file in the per-file table; report to the lead |
 | `check_links.py` DEAD 404/410 | broken internal path or external URL | report the exact `file:line` to the lead; do not delete the check |
 | stamp exits 2 "marker(s) missing" | page lacks one of the five marker pairs | page owner adds the marker; deploy stays blocked |
