@@ -42,9 +42,10 @@ lock feature.
 | Wheel | **PASS with defects** | purple identity, modal depth, stagger; mode-switch affordance unproven (F-23), stale captures (F-22) |
 | Shipped evidence | **FAIL** | `docs/screenshots/en/wheel-*.png` are pre-2.4 orange-accent captures (F-22) |
 
-Tool rows: **13 PASS / 13 FAIL** when the shared gutter defect (F-03) is attributed to each window it
+Tool rows: **14 PASS / 12 FAIL** when the shared gutter defect (F-03) is attributed to each window it
 visibly affects. Counting only window-specific deviations — the annex's convention — it is
-**18 PASS / 8 FAIL**. Both numbers are derived from the same table in §9.
+**19 PASS / 7 FAIL** (QR moved to PASS when F-11 landed in `835758c`, matching `DESIGN-AUDIT.md`
+round 2). Both numbers are derived from the same table in §9.
 
 **Evidence standard (rule 5).** Every count here comes from a named grep, file and line, or a commit;
 every pixel number was measured with PIL on a committed poster (§5.1) and is labelled *capture pixels*,
@@ -266,7 +267,7 @@ Legend — **Theme parity**: `PASS (cap)` = light+dark capture exists; `PASS (st
 | 20 | `tools.pdforganize` | Organize Pages | تنظيم الصفحات | PASS (static) | ok (nit: title wording) | F-12 | PASS |
 | 21 | `tools.compress` | Compress File | ضغط الملف | PASS (static) | ok (nit: title wording) | F-12 | PASS |
 | 22 | `tools.metadata` | Edit Metadata | تعديل البيانات الوصفية | PASS (static) | ok (nit: title wording) | F-12 | PASS |
-| 23 | `tools.qr` | QR Code | رمز QR | PASS (static) | ok; primary says `Apply` on a read-only window (fixed here, §11) | F-11 | FAIL |
+| 23 | `tools.qr` | QR Code | رمز QR | PASS (static) | ok; primary now reads `Copy and Close` (F-11 fixed in `835758c`) | — | PASS |
 | 24 | `tools.protect` | Password protection | الحماية بكلمة مرور | PASS (static) | ok | — | PASS |
 | 25 | `tools.unlock` | Remove password | إزالة كلمة المرور | PASS (static) | ok | — | PASS |
 | 26 | `tools.lock` | Lock | قفل الملفات | PASS (static) | ok; `Encrypt`/`Open` switches through `IToolActionLabel` | — | PASS |
