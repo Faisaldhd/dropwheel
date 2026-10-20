@@ -68,3 +68,32 @@ the source. Tests live in `tests/FileAction.Tests/AddBackgroundTests.cs`.
 | E-11 | Every string exists in both tables | 29 `tool.editphotos.*` keys in en and ar (502 keys per table after the 2.4.0 train); no placeholders; Arabic is not a copy of English | PASS | `PhotoEditTests.Every_tool_string_exists_in_both_tables`, with `LocalizationTests` parity |
 
 **How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~PhotoEditTests"` (26 cases), or the CI `Build + test` job. The local 24 MP measurements are from a Release build on the builder's workstation (ImageMagick Q8 in-process); CI hardware will differ.
+
+
+## Protect / Unlock — `tools.protect`, `tools.unlock`
+
+Protect writes one password-protected ZIP (`<name> Protected.zip`), or an AES-256 PDF when a single PDF is
+selected; Unlock writes `<name> Unlocked.zip` / `<name> Unlocked.pdf`. Tests live in
+`tests/FileAction.Tests/PasswordProtectionTests.cs`.
+
+| ID | Check | Expected / assertion | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| P-1 | Tool identity and localized labels | Specs register as `tools.protect` and `tools.unlock`; `tool.protect.title` / `tool.unlock.title` exist in both tables; 62 `tool.protect.*` / `tool.unlock.*` keys have identical key sets and placeholders and Arabic differs from English | PASS | `New_strings_have_matching_keys_placeholders_and_neutral_values`; `LocalizationTests` |
+| P-2 | Selection rules | Protect accepts one file, one folder, or several files and rejects a folder mixed with files; Unlock accepts exactly one ZIP or PDF and rejects other formats/folders | PASS (inspection) | `ProtectTool.Applies` / `UnlockTool.Applies`, exercised by the wheel operation |
+| P-3 | ZIP is AES-256 and round-trips | `AesZipWriter.Create` writes an AE-2 WinZip AES-256 entry; SharpCompress opens it with the correct password and reads the exact UTF-8 text | PASS | `Zip_round_trips_with_the_correct_password` |
+| P-4 | ZIP rejects a wrong password | Opening an encrypted entry with a wrong password fails; no output is accepted | PASS | `Zip_rejects_the_wrong_password` |
+| P-5 | Never overwrites | A second create at the same path throws `IOException` and leaves the first file byte-identical; callers use `OutputPaths.ProduceAsync`’s unique name | PASS | `Zip_never_overwrites_an_existing_output` |
+| P-6 | Folder recursion is stable | Nested folders are walked in ordinal order; directory and file entries carry `project/`, `project/a/`, `project/a/one.txt`, `project/b/two.txt` | PASS | `Plan_walks_nested_folders_in_a_stable_order` |
+| P-7 | Empty folder is refused | A folder with no file entries throws `Empty` and writes no ZIP, so no fake “protected” archive exists | PASS | `Empty_folder_is_not_a_fake_protected_archive` |
+| P-8 | Unlock ZIP | The correct password produces an unencrypted ZIP whose entry reads back unchanged; a wrong password leaves no partial output file | PASS | `Unlock_creates_an_unencrypted_zip_and_never_leaves_a_partial_file` |
+| P-9 | Plain ZIP is not called protected | An unencrypted ZIP reports `NotEncrypted` and is not rewritten | PASS | `A_plain_zip_is_reported_as_not_encrypted` |
+| P-10 | PDF AES-256 and round-trip | The protected PDF contains `/AESV3`; the wrong password is rejected; the correct password opens it and Unprotect writes an unencrypted PDF | PASS | `Pdf_uses_aes_256_and_round_trips_with_the_correct_password` |
+| P-11 | Password rules, strength and KDF | Short/mismatched/overlong values are refused; unlock accepts any non-empty value; strength is ordered and never strong for one repeated character; PBKDF2 output is deterministic and password-dependent | PASS | `Validation_rejects_short_mismatched_and_overlong_passwords`; `Unlock_validation_accepts_any_non_empty_password`; `Strength_meter_is_ordered_and_never_strong_for_one_repeated_character`; `Key_derivation_is_deterministic_and_password_dependent` |
+| P-12 | Defaults, match gate and eye reset | One PDF defaults to PDF, everything else to ZIP; permissions start permissive; primary is disabled until both fields match and length ≥ 8; reveal state resets on reset/close | PASS | `Protect_defaults_suggest_pdf_for_one_pdf_and_zip_otherwise`; `Protect_primary_stays_disabled_until_both_fields_match_and_are_long_enough`; `Eye_toggle_state_is_hidden_after_reset_and_close` |
+| P-13 | Capabilities are honest | ZIP key size 256, ZIP names are not encrypted (the note is shown), PDF key size 256, PDF owner permissions are supported | PASS | `Capabilities_do_not_pretend_zip_can_hide_names` |
+| P-14 | Theme and RTL | Window uses the shared purple `Theme.*` brushes and shared `ToolWindow` chrome; controls inherit `FlowDirection.RightToLeft`; the hex/format row and eye toggle use logical columns | PASS (inspection) | `ProtectView` / `UnlockView` / `PasswordField`; screenshots need a desktop session |
+| P-15 | No password logging | Password values never enter `AppLog`, diagnostics, toast text or exception messages; fields are cleared and hidden on close/focus loss | PASS (inspection) | No `AppLog`/`Notifications` call receives a password; `PasswordProtectionException` has no password parameter |
+| P-16 | Cancellation and progress | ZIP protect checks every 80 KB and reports byte progress; the Cancel button cancels; ZIP unlock checks between entries; PDF saves are sync and cannot cancel mid-save | PASS (inspection) | `AesZipWriter` chunk loop, `BusyRow`, `CancellationTokenSource` in both views |
+| P-17 | Library/licence decision | No package added: SharpCompress 0.50.5 (MIT) reads AES but cannot write it; PDFsharp 6.2.4 (MIT) writes PDF AES-256 V5; WinZip AE-2 writing is implemented with BCL crypto | PASS (inspection) | `PasswordZip.cs`, `PasswordPdf.cs`, `THIRD-PARTY-NOTICES.md` |
+
+**How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~PasswordProtection"` (17 cases), or the CI `Build + test` job. Evidence run [39339048279](https://github.com/Faisaldhd/dropwheel/actions/runs/39339048279) on `5f2b375`: 264 passed, 0 failed; the merged head is re-run by the same PR’s Build + test job.

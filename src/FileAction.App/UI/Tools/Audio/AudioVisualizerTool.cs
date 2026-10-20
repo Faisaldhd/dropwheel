@@ -320,9 +320,9 @@ internal sealed class AudioVisualizerView
 /// <summary>Draws the chosen video frame with a sample of the animation; it never runs ffmpeg.</summary>
 internal sealed class VisualizerPreview : FrameworkElement
 {
-    private static readonly Brush Backdrop = CreateBackdrop();
-    private static readonly Brush WaveFill = CreateWaveFill();
-    private static readonly Pen WavePen = CreateWavePen();
+    private static readonly Brush Backdrop = AudioTheme.VisualizerBackdrop;
+    private static readonly Brush WaveFill = AudioTheme.VisualizerWaveFill;
+    private static readonly Pen WavePen = AudioTheme.VisualizerWavePen;
     private static readonly Pen FramePen = new(Theme.PanelBorder, 1);
 
     private AudioVisualizerOrientation _orientation = AudioVisualizerOrientation.Landscape;
@@ -409,30 +409,5 @@ internal sealed class VisualizerPreview : FrameworkElement
         }
         geometry.Freeze();
         dc.DrawGeometry(WaveFill, WavePen, geometry);
-    }
-
-    private static Brush CreateBackdrop()
-    {
-        var brush = new LinearGradientBrush(
-            Color.FromRgb(0x18, 0x12, 0x20),
-            Color.FromRgb(0x35, 0x1B, 0x50),
-            new Point(0, 0),
-            new Point(1, 1));
-        brush.Freeze();
-        return brush;
-    }
-
-    private static Brush CreateWaveFill()
-    {
-        var brush = new SolidColorBrush(Color.FromArgb(0x66, 0x82, 0x24, 0xD4));
-        brush.Freeze();
-        return brush;
-    }
-
-    private static Pen CreateWavePen()
-    {
-        var pen = new Pen(new SolidColorBrush(Color.FromRgb(0xB4, 0x8A, 0xE0)), 2);
-        pen.Freeze();
-        return pen;
     }
 }
