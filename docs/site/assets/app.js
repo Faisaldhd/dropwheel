@@ -152,7 +152,7 @@
     var labelled = document.querySelectorAll('[data-label-en]');
     for (var i = 0; i < labelled.length; i += 1) {
       var element = labelled[i];
-      if (element.hasAttribute('data-theme-toggle')) {
+      if (element.hasAttribute('data-theme-toggle') || element.classList.contains('tool-play')) {
         continue;
       }
       var text = arabic ? element.getAttribute('data-label-ar') : element.getAttribute('data-label-en');
