@@ -1,4 +1,4 @@
-﻿# PR queue - TEAM B audit lanes
+# PR queue - TEAM B audit lanes
 
 Each lane owns exactly ONE row below. Edit only your own row (PR number + CI state); never rewrite,
 reorder or delete another lane's row. Branch prefix is `audit/`. TEAM A's supervisor merges; these
@@ -13,6 +13,6 @@ lanes never merge to `main` and never tag.
 | pending | `audit/arelease` | Release/installer | `docs/audit/RELEASE-AUDIT.md` | pending |
 | pending | `audit/adocs` | Docs | `CHANGES.md`, `README*`, tool docs, release notes en+ar | pending |
 | pending | `audit/afunc` | Drag and drop | `docs/FUNCTION-MATRIX.md` rows | pending |
-| pending | `audit/asec` | Hostile input | `docs/audit/HOSTILE-INPUT-AUDIT.md` | pending |
+| [#32](https://github.com/Faisaldhd/dropwheel/pull/32) | `audit/asec` | Hostile input | `docs/audit/HOSTILE-INPUT-AUDIT.md` | running |
 | pending | `audit/aperf` | Performance (reserve) | `docs/audit/PERF-AUDIT.md` | pending |
 | pending | `audit/aweb` | Website (reserve) | `docs/audit/WEB-AUDIT.md` | pending |
