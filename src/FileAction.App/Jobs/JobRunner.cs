@@ -203,11 +203,12 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
         return true;
     }
 
-    private void Remember(Operation op, IReadOnlyDictionary<string, string>? parameters)
+    internal void Remember(Operation op, IReadOnlyDictionary<string, string>? parameters, bool save = true)
     {
         settings.LastOperationId = op.Id;
         settings.LastParameters = parameters is { Count: > 0 } ? new Dictionary<string, string>(parameters) : null;
-        settings.Save();
+        if (save)
+            settings.Save();
     }
 
     private static string Friendly(Exception ex) => ex switch

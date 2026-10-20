@@ -23,6 +23,8 @@ public static class PdfBackend
     {
         var bytes = await File.ReadAllBytesAsync(item.Path, ctx.CancellationToken).ConfigureAwait(false);
         var count = PDFtoImage.Conversion.GetPageCount(bytes);
+        if (count <= 0)
+            throw new ConversionException(T("error.pdf.noPages"));
         var options = new PDFtoImage.RenderOptions(Dpi: ctx.Settings.PdfDpi, BackgroundColor: SkiaSharp.SKColors.White, WithAnnotations: true, WithFormFill: true);
         var dir = ctx.OutputDirFor(item.Path);
 
@@ -59,6 +61,8 @@ public static class PdfBackend
     {
         var bytes = File.ReadAllBytes(pdf);
         var count = PDFtoImage.Conversion.GetPageCount(bytes);
+        if (count <= 0)
+            throw new ConversionException(T("error.pdf.noPages"));
         var options = new PDFtoImage.RenderOptions(Dpi: dpi, BackgroundColor: SkiaSharp.SKColors.White, WithAnnotations: true, WithFormFill: true);
         var pages = new List<string>();
         for (var i = 0; i < count; i++)
@@ -207,32 +211,41 @@ public static class PdfBackend
 
     public static async Task<IEnumerable<string>> SplitAsync(FileItem item, OperationContext ctx, IProgress<double> progress)
     {
+        // Check before creating the output folder, so a zero-page PDF cannot leave an empty "(pages)".
+        if (PageCount(item.Path) <= 0)
+            throw new ConversionException(T("error.pdf.noPages"));
+
         var dir = ctx.OutputDirFor(item.Path);
-        var folder = OutputPaths.UniqueDirectory(dir, $"{item.BaseName} ({T("suffix.pages")})");
-        Directory.CreateDirectory(folder);
+        string? folder = null;
         try
         {
             await Task.Run(() =>
             {
                 using var source = Open(item.Path, PdfDocumentOpenMode.Import);
                 var count = source.PageCount;
+                if (count <= 0)
+                    throw new ConversionException(T("error.pdf.noPages"));
+                var created = OutputPaths.UniqueDirectory(dir, $"{item.BaseName} ({T("suffix.pages")})");
+                folder = created;
+                Directory.CreateDirectory(created);
                 var digits = count.ToString().Length;
                 for (var i = 0; i < count; i++)
                 {
                     ctx.CancellationToken.ThrowIfCancellationRequested();
                     using var single = new PdfSharp.Pdf.PdfDocument();
                     single.AddPage(source.Pages[i]);
-                    single.Save(Path.Combine(folder, $"{item.BaseName} - {(i + 1).ToString().PadLeft(digits, '0')}.pdf"));
+                    single.Save(Path.Combine(created, $"{item.BaseName} - {(i + 1).ToString().PadLeft(digits, '0')}.pdf"));
                     progress.Report((i + 1.0) / count);
                 }
             }, ctx.CancellationToken).ConfigureAwait(false);
         }
         catch
         {
-            OutputPaths.TryDelete(folder);
+            if (folder is not null)
+                OutputPaths.TryDelete(folder);
             throw;
         }
-        return [folder];
+        return [folder!];
     }
 
     public static void Rotate(string input, string output, int degrees)
