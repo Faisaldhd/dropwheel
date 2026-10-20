@@ -1,207 +1,488 @@
 'use strict';
 
 /*
- * DropWheel download page.
- * - Language toggle (EN / العربية) remembered in localStorage.
- * - SHA-256 is never hard-coded: it is read from the release's SHA256SUMS.txt.
- *   If the request fails (CORS, offline, release not published yet) the page
- *   shows a link to SHA256SUMS.txt instead of a possibly wrong hash.
+ * DropWheel site behaviour.
+ * - Theme and language switches (remembered in localStorage).
+ * - Tool filters, motion clips and a copy button.
+ * No analytics, no cookies, no network requests of any kind.
  */
 (function () {
-  var LANG_KEY = 'dropwheel.download.lang';
-  var SUMS_URL = 'https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt';
-  var TITLES = {
-    en: 'DropWheel — Download for Windows',
-    ar: 'DropWheel — التحميل لنظام ويندوز'
+  var root = document.documentElement;
+  var THEME_KEY = 'dropwheel.site.theme';
+  var LANG_KEY = 'dropwheel.site.lang';
+  var TOTAL_TOOLS = 26;
+
+  var META = {
+    en: {
+      title: 'DropWheel — 26 file tools at your cursor for Windows',
+      description: 'DropWheel puts 26 file tools on one radial wheel: convert, crop, edit, compress, protect and lock. Everything runs on your PC. Free and open source for Windows 10/11 64-bit.'
+    },
+    ar: {
+      title: 'DropWheel — 26 أداة ملفات عند مؤشرك لويندوز',
+      description: 'يضع DropWheel 26 أداة ملفات على عجلة واحدة: تحويل واقتصاص وتعديل وضغط وحماية وقفل. كل شيء يعمل على جهازك. مجاني ومفتوح المصدر لويندوز 10/11 64 بت.'
+    }
   };
-  var SETUP_LINE = /^([0-9a-f]{64})\s+\*?(DropWheel-Setup(?:-[0-9A-Za-z.]+)?\.exe)\s*$/i;
-  var CHECKSUM_TIMEOUT_MS = 8000;
 
-  function readLanguage() {
+  var THEME_COLORS = { dark: '#120D1A', light: '#F5F1FB' };
+  var reduceQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  var lightQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+
+  function isReduced() {
+    return !!(reduceQuery && reduceQuery.matches);
+  }
+
+  function currentTheme() {
+    return root.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  }
+
+  function currentLang() {
+    return root.getAttribute('lang') === 'ar' ? 'ar' : 'en';
+  }
+
+  function isLocked() {
+    return root.getAttribute('data-theme-locked') === 'true';
+  }
+
+  function store(key, value) {
     try {
-      var value = window.localStorage.getItem(LANG_KEY);
-      return value === 'ar' || value === 'en' ? value : null;
+      window.localStorage.setItem(key, value);
     } catch (error) {
-      return null;
+      /* Private mode: the toggle still works for this page view. */
     }
   }
 
-  function saveLanguage(lang) {
-    try {
-      window.localStorage.setItem(LANG_KEY, lang);
-    } catch (error) {
-      /* Storage can be unavailable (private mode, blocked cookies); the toggle still works. */
+  function setMeta(attribute, name, value) {
+    var element = document.querySelector('meta[' + attribute + '="' + name + '"]');
+    if (element && value) {
+      element.setAttribute('content', value);
     }
   }
 
-  function applyLanguage(lang, persist) {
-    var isArabic = lang === 'ar';
-    var root = document.documentElement;
+  /* ---------------------------------------------------------------- theme */
 
-    root.lang = isArabic ? 'ar' : 'en';
-    root.dir = isArabic ? 'rtl' : 'ltr';
-    document.title = isArabic ? TITLES.ar : TITLES.en;
+  function themeButtonLabel() {
+    if (currentTheme() === 'dark') {
+      return currentLang() === 'ar' ? 'التبديل إلى المظهر الفاتح' : 'Switch to light theme';
+    }
+    return currentLang() === 'ar' ? 'التبديل إلى المظهر الداكن' : 'Switch to dark theme';
+  }
 
-    var blocks = document.querySelectorAll('[data-language]');
-    for (var i = 0; i < blocks.length; i += 1) {
-      blocks[i].hidden = blocks[i].getAttribute('data-language') !== lang;
+  function paintThemeImages() {
+    var dark = currentTheme() === 'dark';
+
+    var images = document.querySelectorAll('img[data-dark][data-light]');
+    for (var i = 0; i < images.length; i += 1) {
+      var image = images[i];
+      var source = dark ? image.getAttribute('data-dark') : image.getAttribute('data-light');
+      var media = image.closest ? image.closest('.tool-media') : null;
+      if (media) {
+        var play = media.querySelector('.tool-play');
+        if (play && play.getAttribute('aria-pressed') === 'true') {
+          var clip = dark ? play.getAttribute('data-clip-dark') : play.getAttribute('data-clip-light');
+          if (clip) {
+            source = clip;
+          }
+        }
+      }
+      if (source && image.getAttribute('src') !== source) {
+        image.setAttribute('src', source);
+      }
+    }
+
+    var pictures = document.querySelectorAll('picture[data-motion]');
+    for (var j = 0; j < pictures.length; j += 1) {
+      paintMotionPicture(pictures[j]);
+    }
+  }
+
+  function addSource(picture, media, source) {
+    var element = document.createElement('source');
+    element.setAttribute('type', 'image/webp');
+    if (media) {
+      element.setAttribute('media', media);
+    }
+    element.setAttribute('srcset', source);
+    var image = picture.querySelector('img');
+    picture.insertBefore(element, image);
+  }
+
+  function paintMotionPicture(picture) {
+    var image = picture.querySelector('img');
+    if (!image) {
+      return;
+    }
+    var dark = currentTheme() === 'dark';
+    var poster = picture.getAttribute(dark ? 'data-poster-dark' : 'data-poster-light');
+    var clip = picture.getAttribute(dark ? 'data-clip-dark' : 'data-clip-light');
+
+    var old = picture.querySelectorAll('source');
+    for (var i = 0; i < old.length; i += 1) {
+      old[i].parentNode.removeChild(old[i]);
+    }
+
+    if (isReduced() || !clip) {
+      addSource(picture, null, poster);
+      image.setAttribute('src', poster);
+      return;
+    }
+
+    addSource(picture, '(prefers-reduced-motion: reduce)', poster);
+    addSource(picture, null, clip);
+    image.setAttribute('src', poster);
+  }
+
+  function setTheme(theme, persist) {
+    var next = theme === 'light' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    setMeta('name', 'theme-color', THEME_COLORS[next]);
+    if (persist) {
+      root.setAttribute('data-theme-locked', 'true');
+      store(THEME_KEY, next);
+    }
+    paintThemeImages();
+    applyLabels();
+  }
+
+  /* ---------------------------------------------------------------- language */
+
+  function applyLabels() {
+    var lang = currentLang();
+    var arabic = lang === 'ar';
+
+    var labelled = document.querySelectorAll('[data-label-en]');
+    for (var i = 0; i < labelled.length; i += 1) {
+      var element = labelled[i];
+      if (element.hasAttribute('data-theme-toggle') || element.classList.contains('tool-play')) {
+        continue;
+      }
+      var text = arabic ? element.getAttribute('data-label-ar') : element.getAttribute('data-label-en');
+      if (text) {
+        element.setAttribute('aria-label', text);
+      }
+    }
+
+    var images = document.querySelectorAll('img[data-alt-en]');
+    for (var j = 0; j < images.length; j += 1) {
+      var alt = arabic ? images[j].getAttribute('data-alt-ar') : images[j].getAttribute('data-alt-en');
+      if (alt) {
+        images[j].setAttribute('alt', alt);
+      }
+    }
+
+    var themeButton = document.querySelector('[data-theme-toggle]');
+    if (themeButton) {
+      themeButton.setAttribute('aria-label', themeButtonLabel());
     }
 
     var buttons = document.querySelectorAll('[data-lang-button]');
-    for (var j = 0; j < buttons.length; j += 1) {
-      var active = buttons[j].getAttribute('data-lang-button') === lang;
-      buttons[j].setAttribute('aria-pressed', active ? 'true' : 'false');
-    }
-
-    if (persist) {
-      saveLanguage(lang);
+    for (var k = 0; k < buttons.length; k += 1) {
+      buttons[k].setAttribute('aria-pressed', buttons[k].getAttribute('data-lang-button') === lang ? 'true' : 'false');
     }
   }
 
-  function setStatus(block, text) {
-    var status = block.querySelector('[data-hash-status]');
+  function applyMeta(lang) {
+    var meta = META[lang] || META.en;
+    document.title = meta.title;
+    setMeta('name', 'description', meta.description);
+    setMeta('property', 'og:title', meta.title);
+    setMeta('property', 'og:description', meta.description);
+    setMeta('property', 'og:locale', lang === 'ar' ? 'ar_AR' : 'en_US');
+    setMeta('property', 'og:locale:alternate', lang === 'ar' ? 'en_US' : 'ar_AR');
+    setMeta('name', 'twitter:title', meta.title);
+    setMeta('name', 'twitter:description', meta.description);
+  }
+
+  function setLanguage(lang, persist) {
+    var next = lang === 'ar' ? 'ar' : 'en';
+    root.setAttribute('lang', next);
+    root.setAttribute('dir', next === 'ar' ? 'rtl' : 'ltr');
+    if (persist) {
+      store(LANG_KEY, next);
+    }
+    applyMeta(next);
+    applyLabels();
+    updatePlayLabels();
+    updateFilterStatus();
+  }
+
+  /* ---------------------------------------------------------------- filters */
+
+  function setFilter(filter, announce) {
+    var cards = document.querySelectorAll('.tool-card');
+    var visible = 0;
+    for (var i = 0; i < cards.length; i += 1) {
+      var show = filter === 'all' || cards[i].getAttribute('data-cat') === filter;
+      cards[i].hidden = !show;
+      if (show) {
+        visible += 1;
+      }
+    }
+
+    var chips = document.querySelectorAll('[data-filter]');
+    for (var j = 0; j < chips.length; j += 1) {
+      var active = chips[j].getAttribute('data-filter') === filter;
+      chips[j].classList.toggle('is-active', active);
+      chips[j].setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+
+    if (announce) {
+      updateFilterStatus();
+    }
+    return visible;
+  }
+
+  function updateFilterStatus() {
+    var status = document.getElementById('tools-status');
     if (!status) {
       return;
     }
-    status.textContent = text || '';
-    status.hidden = !text;
+    var visible = 0;
+    var cards = document.querySelectorAll('.tool-card');
+    for (var i = 0; i < cards.length; i += 1) {
+      if (!cards[i].hidden) {
+        visible += 1;
+      }
+    }
+    status.textContent = currentLang() === 'ar'
+      ? 'عرض ' + visible + ' من ' + TOTAL_TOOLS + ' أداة'
+      : 'Showing ' + visible + ' of ' + TOTAL_TOOLS + ' tools';
   }
 
-  function showChecksum(blocks, hash, fileName) {
-    for (var i = 0; i < blocks.length; i += 1) {
-      var block = blocks[i];
-      var value = block.querySelector('[data-hash-value]');
-      var file = block.querySelector('[data-hash-file]');
-      var fallback = block.querySelector('[data-hash-fallback]');
+  /* ---------------------------------------------------------------- motion */
 
-      if (value) {
-        value.textContent = hash;
-        value.hidden = false;
-      }
-      if (file) {
-        file.textContent = fileName;
-        file.hidden = false;
-      }
-      if (fallback) {
-        fallback.hidden = true;
-      }
-      setStatus(block, '');
+  function playLabels(pressed) {
+    var arabic = currentLang() === 'ar';
+    if (pressed) {
+      return {
+        label: arabic ? 'إظهار الصورة الثابتة' : 'Show the still image',
+        text: arabic ? 'إيقاف' : 'Still'
+      };
+    }
+    return {
+      label: arabic ? 'تشغيل الحركة' : 'Play motion',
+      text: arabic ? 'حركة' : 'Motion'
+    };
+  }
+
+  function paintPlayButton(button) {
+    var pressed = button.getAttribute('aria-pressed') === 'true';
+    var labels = playLabels(pressed);
+    button.setAttribute('aria-label', labels.label);
+    var text = button.querySelector('.tool-play__text');
+    if (text) {
+      text.textContent = labels.text;
     }
   }
 
-  function showChecksumFallback(blocks) {
-    for (var i = 0; i < blocks.length; i += 1) {
-      var block = blocks[i];
-      var value = block.querySelector('[data-hash-value]');
-      var file = block.querySelector('[data-hash-file]');
-      var fallback = block.querySelector('[data-hash-fallback]');
+  function setPlayState(button, pressed) {
+    var media = button.closest ? button.closest('.tool-media') : null;
+    var image = media ? media.querySelector('img') : null;
+    var dark = currentTheme() === 'dark';
 
-      if (value) {
-        value.textContent = '';
-        value.hidden = true;
+    button.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    if (image) {
+      var source = pressed
+        ? button.getAttribute(dark ? 'data-clip-dark' : 'data-clip-light')
+        : button.getAttribute(dark ? 'data-poster-dark' : 'data-poster-light');
+      if (source) {
+        image.setAttribute('src', source);
       }
-      if (file) {
-        file.textContent = '';
-        file.hidden = true;
-      }
-      if (fallback) {
-        fallback.hidden = false;
-      }
-      setStatus(block, '');
+    }
+    paintPlayButton(button);
+  }
+
+  function updatePlayLabels() {
+    var buttons = document.querySelectorAll('.tool-play');
+    for (var i = 0; i < buttons.length; i += 1) {
+      paintPlayButton(buttons[i]);
     }
   }
 
-  function findSetupLine(text) {
-    var lines = text.split(/\r?\n/);
-    var match = null;
-
-    for (var i = 0; i < lines.length; i += 1) {
-      var candidate = SETUP_LINE.exec(lines[i].trim());
-      if (!candidate) {
-        continue;
-      }
-      /* Prefer the unversioned alias when the release provides one. */
-      if (!match || candidate[2].toLowerCase() === 'dropwheel-setup.exe') {
-        match = candidate;
+  function applyMotionPreference() {
+    var buttons = document.querySelectorAll('.tool-play');
+    for (var i = 0; i < buttons.length; i += 1) {
+      buttons[i].hidden = isReduced();
+      if (isReduced() && buttons[i].getAttribute('aria-pressed') === 'true') {
+        setPlayState(buttons[i], false);
       }
     }
-
-    return match;
+    paintThemeImages();
   }
 
-  function loadChecksum() {
-    var blocks = document.querySelectorAll('[data-checksum]');
-    if (!blocks.length) {
+  /* ---------------------------------------------------------------- copy */
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    return Promise.reject(new Error('clipboard unavailable'));
+  }
+
+  function wireCopy(button) {
+    var target = document.getElementById(button.getAttribute('data-copy-target'));
+    var status = document.getElementById('copy-status');
+    if (!target) {
       return;
     }
 
-    for (var i = 0; i < blocks.length; i += 1) {
-      setStatus(blocks[i], blocks[i].getAttribute('data-status-checking') || '');
-    }
-
-    var controller = typeof window.AbortController === 'function' ? new window.AbortController() : null;
-    var timer = controller
-      ? window.setTimeout(function () {
-          controller.abort();
-        }, CHECKSUM_TIMEOUT_MS)
-      : 0;
-
-    function finish() {
-      if (timer) {
-        window.clearTimeout(timer);
-        timer = 0;
-      }
-    }
-
-    try {
-      window
-        .fetch(SUMS_URL, {
-          cache: 'no-store',
-          credentials: 'omit',
-          referrerPolicy: 'no-referrer',
-          signal: controller ? controller.signal : undefined
-        })
-        .then(function (response) {
-          if (!response.ok) {
-            throw new Error('HTTP ' + response.status);
+    button.addEventListener('click', function () {
+      var text = target.textContent.replace(/\s+/g, '');
+      copyText(text).then(function () {
+        var textNode = button.querySelector('.copy-button__text');
+        if (textNode) {
+          textNode.textContent = currentLang() === 'ar' ? 'تم النسخ' : 'Copied';
+        }
+        if (status) {
+          status.textContent = currentLang() === 'ar' ? 'نُسخت البصمة إلى الحافظة.' : 'Hash copied to the clipboard.';
+        }
+        window.setTimeout(function () {
+          if (textNode) {
+            textNode.textContent = currentLang() === 'ar' ? 'نسخ' : 'Copy';
           }
-          return response.text();
-        })
-        .then(function (text) {
-          var match = findSetupLine(text);
-          if (!match) {
-            throw new Error('No DropWheel-Setup line in SHA256SUMS.txt');
+          if (status) {
+            status.textContent = '';
           }
-          showChecksum(blocks, match[1].toLowerCase(), match[2]);
-        })
-        .catch(function () {
-          showChecksumFallback(blocks);
-        })
-        .then(finish);
-    } catch (error) {
-      finish();
-      showChecksumFallback(blocks);
-    }
+        }, 2200);
+      }).catch(function () {
+        if (status) {
+          status.textContent = currentLang() === 'ar'
+            ? 'تعذّر النسخ. حدّد البصمة يدويًا.'
+            : 'Copy failed. Select the hash manually.';
+        }
+      });
+    });
   }
 
-  var storedLanguage = readLanguage();
-  applyLanguage(storedLanguage || 'en', false);
+  /* ---------------------------------------------------------------- wiring */
 
-  var buttons = document.querySelectorAll('[data-lang-button]');
-  for (var b = 0; b < buttons.length; b += 1) {
-    buttons[b].addEventListener('click', function () {
-      var lang = this.getAttribute('data-lang-button');
-      if (lang === 'en' || lang === 'ar') {
-        applyLanguage(lang, true);
+  var themeToggle = document.querySelector('[data-theme-toggle]');
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function () {
+      setTheme(currentTheme() === 'dark' ? 'light' : 'dark', true);
+    });
+  }
+
+  var languageButtons = document.querySelectorAll('[data-lang-button]');
+  for (var l = 0; l < languageButtons.length; l += 1) {
+    languageButtons[l].addEventListener('click', function () {
+      var next = this.getAttribute('data-lang-button');
+      if (next === 'en' || next === 'ar') {
+        setLanguage(next, true);
       }
     });
   }
 
-  window.addEventListener('storage', function (event) {
-    if (event.key === LANG_KEY && (event.newValue === 'en' || event.newValue === 'ar')) {
-      applyLanguage(event.newValue, false);
-    }
-  });
+  var chips = document.querySelectorAll('[data-filter]');
+  for (var c = 0; c < chips.length; c += 1) {
+    chips[c].addEventListener('click', function () {
+      setFilter(this.getAttribute('data-filter'), true);
+    });
+  }
 
-  loadChecksum();
+  var plays = document.querySelectorAll('.tool-play');
+  for (var p = 0; p < plays.length; p += 1) {
+    plays[p].addEventListener('click', function () {
+      setPlayState(this, this.getAttribute('aria-pressed') !== 'true');
+    });
+  }
+
+  var copies = document.querySelectorAll('[data-copy-target]');
+  for (var s = 0; s < copies.length; s += 1) {
+    wireCopy(copies[s]);
+  }
+
+  var header = document.querySelector('.site-header');
+  function paintHeader() {
+    if (header) {
+      header.classList.toggle('is-scrolled', window.scrollY > 8);
+    }
+  }
+  window.addEventListener('scroll', paintHeader, { passive: true });
+  paintHeader();
+
+  var year = document.getElementById('year');
+  if (year) {
+    year.textContent = String(new Date().getFullYear());
+  }
+
+  if (reduceQuery) {
+    if (reduceQuery.addEventListener) {
+      reduceQuery.addEventListener('change', applyMotionPreference);
+    } else if (reduceQuery.addListener) {
+      reduceQuery.addListener(applyMotionPreference);
+    }
+  }
+
+  if (lightQuery) {
+    var onSystemTheme = function () {
+      if (!isLocked()) {
+        setTheme(lightQuery.matches ? 'light' : 'dark', false);
+      }
+    };
+    if (lightQuery.addEventListener) {
+      lightQuery.addEventListener('change', onSystemTheme);
+    } else if (lightQuery.addListener) {
+      lightQuery.addListener(onSystemTheme);
+    }
+  }
+
+  /* ---------------------------------------------------------------- start */
+
+  setTheme(currentTheme(), false);
+  setLanguage(currentLang(), false);
+  setFilter('all', false);
+  updateFilterStatus();
+  applyMotionPreference();
+  updatePlayLabels();
+})();
+
+/* ---------------------------------------------------------------- scroll reveal
+ * Self-contained on purpose: transform/opacity only, one-shot per element, and it
+ * never hides anything when scripts, IntersectionObserver, or motion are unavailable. */
+(function () {
+  var root = document.documentElement;
+  var nodes = document.querySelectorAll('[data-reveal]');
+  if (!nodes.length) return;
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var i;
+  if (reduce || !('IntersectionObserver' in window)) {
+    for (i = 0; i < nodes.length; i++) nodes[i].classList.add('is-in');
+    return;
+  }
+  root.classList.add('reveal-ready');
+  var io = new IntersectionObserver(function (entries) {
+    for (var k = 0; k < entries.length; k++) {
+      if (entries[k].isIntersecting) {
+        entries[k].target.classList.add('is-in');
+        io.unobserve(entries[k].target);
+      }
+    }
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
+  for (i = 0; i < nodes.length; i++) io.observe(nodes[i]);
+})();
+
+/* ------------------------------------------------------- language status message
+ * WCAG 4.1.3: the switch rewrites lang/dir/title/alt but focus stays on the button,
+ * so a screen-reader user gets no confirmation. Announce the new language once. */
+(function () {
+  var status = document.getElementById('lang-status');
+  if (!status) return;
+  var buttons = document.querySelectorAll('[data-lang-button]');
+  for (var i = 0; i < buttons.length; i++) {
+    buttons[i].addEventListener('click', function () {
+      var next = this.getAttribute('data-lang-button');
+      status.textContent = next === 'ar' ? 'تم التبديل إلى العربية.' : 'Switched to English.';
+    });
+  }
+})();
+
+/* ------------------------------------------------------- reveal + focus safety
+ * A keyboard user can tab into a card that the observer has not revealed yet; reveal it
+ * before it can receive focus so focus is never invisible. Print always shows everything. */
+(function () {
+  document.addEventListener('focusin', function (event) {
+    var node = event.target;
+    var host = node && node.closest ? node.closest('[data-reveal]') : null;
+    if (host) host.classList.add('is-in');
+  });
 })();

@@ -1,0 +1,549 @@
+name: Site CI
+
+# Static-site gates for docs/site.  The page itself is owned by the website
+# lead; this workflow only measures it.  If a gate fails because of page
+# content, report the finding instead of weakening the gate.
+on:
+  pull_request:
+    paths:
+      - 'docs/site/**'
+      - 'scripts/site/**'
+      - 'docs/website/CI.md'
+      - '.github/workflows/site-ci.yml'
+  push:
+    branches:
+      - 'site/**'
+      - 'feat/2.4.0-website'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  size-budget:
+    name: Size budget (<= 500,000 B)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Measure initial-document payload
+        run: |
+          set -euo pipefail
+          python scripts/site/size_budget.py --root docs/site | tee "$RUNNER_TEMP/size-budget.txt"
+          {
+            echo '### Size budget'
+            echo ''
+            echo '```'
+            cat "$RUNNER_TEMP/size-budget.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Smoke-test release stamping with synthetic sums
+        run: |
+          set -euo pipefail
+          SUMS="$RUNNER_TEMP/synthetic-SHA256SUMS.txt"
+          HASH=$(python3 -c 'print("a" * 64)')
+          printf '%s  DropWheel-Setup.exe\n' "$HASH" > "$SUMS"
+          # Exercise the exact relative --index + --output shape pages.yml uses.
+          python scripts/site/stamp_release.py --index docs/site/index.html --sums "$SUMS" \
+            --version 9.9.9 --asset-size 12345678 --dry-run
+          python scripts/site/stamp_release.py --index docs/site/index.html --sums "$SUMS" \
+            --version 9.9.9 --asset-size 12345678 --output "$RUNNER_TEMP/stamp-smoke"
+          test -f "$RUNNER_TEMP/stamp-smoke/index.html"
+          grep -q '<!--release-version:start-->9.9.9<!--release-version:end-->' "$RUNNER_TEMP/stamp-smoke/index.html"
+          grep -q "<!--release-sha256:start-->$HASH<!--release-sha256:end-->" "$RUNNER_TEMP/stamp-smoke/index.html"
+          if grep -q 'releases/download/v2\.3\.0/' "$RUNNER_TEMP/stamp-smoke/index.html"; then
+            echo "::error::Synthetic stamp left a stale v2.3.0 download URL."
+            exit 1
+          fi
+
+  link-check:
+    name: Link check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check internal and external links
+        run: |
+          set -euo pipefail
+          python scripts/site/check_links.py --root docs/site --timeout 20 --retries 2 | tee "$RUNNER_TEMP/link-check.txt"
+          {
+            echo '### Link check'
+            echo ''
+            echo '```'
+            cat "$RUNNER_TEMP/link-check.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  lighthouse:
+    name: Lighthouse desktop (all categories >= 0.95)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the static origin serves robots.txt at /
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8081 --directory docs/site --bind 127.0.0.1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 50); do
+            if curl -fsS http://127.0.0.1:8081/ >/dev/null; then break; fi
+            sleep 0.1
+          done
+          CODE=$(curl -s -o "$RUNNER_TEMP/robots.txt" -w '%{http_code}' http://127.0.0.1:8081/robots.txt)
+          TYPE=$(curl -s -o /dev/null -w '%{content_type}' http://127.0.0.1:8081/robots.txt)
+          echo "robots.txt -> HTTP $CODE, content-type $TYPE"
+          cat "$RUNNER_TEMP/robots.txt"
+          test "$CODE" = "200"
+          echo "$TYPE" | grep -qi 'text/plain'
+          grep -q '^User-agent:' "$RUNNER_TEMP/robots.txt"
+      - name: Write Lighthouse CI config
+        run: |
+          cat > lighthouserc.json <<'JSON'
+          {
+            "ci": {
+              "collect": {
+                "startServerCommand": "python3 -m http.server 8080 --directory docs/site --bind 127.0.0.1",
+                "startServerReadyPattern": "Serving HTTP",
+                "startServerReadyTimeout": 15000,
+                "url": ["http://127.0.0.1:8080/"],
+                "numberOfRuns": 2,
+                "settings": {
+                  "preset": "desktop",
+                  "chromeFlags": "--no-sandbox --disable-dev-shm-usage"
+                }
+              },
+              "assert": {
+                "assertions": {
+                  "categories:performance": ["error", {"minScore": 0.95, "aggregationMethod": "optimistic"}],
+                  "categories:accessibility": ["error", {"minScore": 0.95, "aggregationMethod": "optimistic"}],
+                  "categories:best-practices": ["error", {"minScore": 0.95, "aggregationMethod": "optimistic"}],
+                  "categories:seo": ["error", {"minScore": 0.95, "aggregationMethod": "optimistic"}]
+                }
+              }
+            }
+          }
+          JSON
+      - name: Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          configPath: lighthouserc.json
+          uploadArtifacts: 'true'
+          artifactName: lighthouse-report
+
+  screenshots:
+    name: Page screenshots (1440/390 x EN/AR x dark/light)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pw" --no-audit --no-fund playwright@1.48.2
+          npx --yes playwright@1.48.2 install --with-deps chromium
+      - name: Capture full-page screenshots
+        run: |
+          set -euo pipefail
+          mkdir -p site-artifacts/screenshots
+          cat > "$RUNNER_TEMP/capture.cjs" <<'JS'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+
+          const BASE = 'http://127.0.0.1:8080/';
+          const DIAGNOSTICS_PATH = 'site-artifacts/screenshots/shot-diagnostics.json';
+          const STITCH_DIR = 'site-artifacts/stitch';
+          fs.mkdirSync(STITCH_DIR, { recursive: true });
+          const stitch = { states: [] };
+          const diagnostics = {
+            generatedAt: new Date().toISOString(),
+            states: [],
+            failures: [],
+          };
+          const STATES = [
+            { lang: 'en', theme: 'dark', suffix: 'en-dark' },
+            { lang: 'en', theme: 'light', suffix: 'en-light' },
+            { lang: 'ar', theme: 'dark', suffix: 'ar-dark' },
+            { lang: 'ar', theme: 'light', suffix: 'ar-light' },
+          ];
+          const VIEWPORTS = [
+            { width: 1440, height: 900, prefix: 'home-1440' },
+            { width: 390, height: 844, prefix: 'home-390' },
+          ];
+
+          async function applyState(page, state) {
+            await page.evaluate(({ lang, theme }) => {
+              const root = document.documentElement;
+              if (root.lang !== lang) {
+                const button = document.querySelector(`[data-lang-button="${lang}"]`);
+                if (!button) throw new Error(`language button missing: ${lang}`);
+                button.click();
+              }
+              if (root.getAttribute('data-theme') !== theme) {
+                const toggle = document.querySelector('[data-theme-toggle]');
+                if (!toggle) throw new Error('theme toggle missing');
+                toggle.click();
+              }
+            }, state);
+            await page.waitForTimeout(350);
+            const actual = await page.evaluate(() => ({
+              lang: document.documentElement.lang,
+              dir: document.documentElement.dir,
+              theme: document.documentElement.getAttribute('data-theme'),
+            }));
+            if (actual.lang !== state.lang || actual.theme !== state.theme) {
+              throw new Error(`state mismatch for ${state.suffix}: ${JSON.stringify(actual)}`);
+            }
+          }
+
+          async function waitForHero(page, state) {
+            // Theme/language toggles rebuild the <picture> sources and set
+            // img.src; wait for the new animated WebP to decode, then settle.
+            await page.waitForFunction(
+              () => {
+                const image = document.querySelector('.hero-motion img');
+                return Boolean(image && image.complete && image.naturalWidth > 0);
+              },
+              null,
+              { timeout: 3000 },
+            );
+            const hero = await page.evaluate(() => {
+              const image = document.querySelector('.hero-motion img');
+              return image
+                ? { complete: image.complete, naturalWidth: image.naturalWidth, src: image.currentSrc || image.src }
+                : null;
+            });
+            if (!hero || !hero.complete || hero.naturalWidth <= 0) {
+              throw new Error(`blank hero image for ${state.suffix}: ${JSON.stringify(hero)}`);
+            }
+            await page.waitForTimeout(400);
+          }
+
+          async function reveal(page) {
+            // The page sets html { scroll-behavior: smooth }, which makes rapid
+            // programmatic jumps animate and never reach the bottom. Force auto
+            // while walking, reveal every IntersectionObserver section, load
+            // every image and return to the top.
+            await page.evaluate(async () => {
+              const root = document.documentElement;
+              const previousBehavior = root.style.scrollBehavior;
+              root.style.scrollBehavior = 'auto';
+              const step = 800;
+              const scrolling = document.scrollingElement || root;
+              let maxY = 0;
+              for (let y = 0; y < scrolling.scrollHeight; y += step) {
+                window.scrollTo(0, y);
+                await new Promise((resolve) => setTimeout(resolve, 60));
+                maxY = Math.max(maxY, window.scrollY);
+              }
+              if (maxY + window.innerHeight < scrolling.scrollHeight - 10) {
+                throw new Error(
+                  `scroll did not reach the bottom: ${maxY} + ${window.innerHeight} < ${scrolling.scrollHeight}`,
+                );
+              }
+              await new Promise((resolve) => setTimeout(resolve, 300));
+              window.scrollTo(0, 0);
+              root.style.scrollBehavior = previousBehavior;
+              await new Promise((resolve) => setTimeout(resolve, 300));
+            });
+
+            const remaining = await page.evaluate(
+              () => document.querySelectorAll('[data-reveal]:not(.is-in)').length,
+            );
+            if (remaining > 0) {
+              throw new Error(`${remaining} [data-reveal] node(s) stayed hidden after scrolling`);
+            }
+
+            await page.waitForTimeout(300);
+            await page.evaluate(async () => {
+              // Lazy lock/tool images can report complete before the decoder has
+              // produced pixels. Wait for every image to be complete, then
+              // decode them, with a 3 s cap, and settle before the capture.
+              const images = Array.from(document.images);
+              const deadline = Date.now() + 3000;
+              while (Date.now() < deadline && !images.every((image) => image.complete)) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
+              await Promise.race([
+                Promise.all(
+                  images.map((image) =>
+                    image.decode ? image.decode().catch(() => {}) : Promise.resolve(),
+                  ),
+                ),
+                new Promise((resolve) => setTimeout(resolve, 3000)),
+              ]);
+              await new Promise((resolve) => setTimeout(resolve, 300));
+            });
+            const incomplete = await page.evaluate(
+              () => Array.from(document.images).filter((image) => !image.complete).length,
+            );
+            if (incomplete > 0) {
+              throw new Error(`${incomplete} image(s) were not complete at capture time`);
+            }
+          }
+
+          async function assertNoHorizontalOverflow(page, viewport, state) {
+            if (viewport.width !== 390) return;
+            const result = await page.evaluate(() => ({
+              scrollWidth: document.scrollingElement.scrollWidth,
+              innerWidth: window.innerWidth,
+            }));
+            if (result.scrollWidth > result.innerWidth + 1) {
+              throw new Error(
+                `horizontal overflow at 390 (${state.suffix}): ` +
+                  `${result.scrollWidth} > ${result.innerWidth}`,
+              );
+            }
+          }
+
+          async function inspectToolShots(page, viewport, state) {
+            const shots = await page.evaluate(async () => {
+              const results = [];
+              for (const image of document.querySelectorAll('.tool-shot')) {
+                let decode = 'ok';
+                try {
+                  if (image.decode) await image.decode();
+                } catch (error) {
+                  decode = `error: ${error.message}`;
+                }
+                const style = getComputedStyle(image);
+                const rect = image.getBoundingClientRect();
+                results.push({
+                  cardId: image.closest('[data-tool]') ? image.closest('[data-tool]').id : null,
+                  src: image.getAttribute('src'),
+                  currentSrc: image.currentSrc,
+                  complete: image.complete,
+                  naturalWidth: image.naturalWidth,
+                  naturalHeight: image.naturalHeight,
+                  opacity: style.opacity,
+                  visibility: style.visibility,
+                  display: style.display,
+                  rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+                  decode,
+                });
+              }
+              return results;
+            });
+            diagnostics.states.push({
+              viewport: `${viewport.width}x${viewport.height}`,
+              state: state.suffix,
+              toolShots: shots,
+            });
+            fs.writeFileSync(DIAGNOSTICS_PATH, JSON.stringify(diagnostics, null, 2));
+            const broken = shots.filter(
+              (shot) =>
+                !shot.complete ||
+                shot.naturalWidth <= 0 ||
+                shot.naturalHeight <= 0 ||
+                shot.decode !== 'ok',
+            );
+            if (broken.length) {
+              diagnostics.failures.push({
+                viewport: `${viewport.width}x${viewport.height}`,
+                state: state.suffix,
+                broken,
+              });
+              fs.writeFileSync(DIAGNOSTICS_PATH, JSON.stringify(diagnostics, null, 2));
+            }
+            return broken;
+          }
+
+          async function captureCard(page, selector, file) {
+            const card = page.locator(selector);
+            await card.scrollIntoViewIfNeeded();
+            await page.waitForTimeout(300);
+            await card.screenshot({ path: `site-artifacts/screenshots/${file}` });
+          }
+
+          async function captureStitched(page, viewport, state) {
+            // Chromium's captureBeyondViewport can discard images below the
+            // viewport. Capture viewport-sized tiles while scrolling instead,
+            // then stitch them with Pillow.
+            const info = await page.evaluate(() => {
+              const header = document.querySelector('.site-header');
+              if (header) header.style.setProperty('position', 'static', 'important');
+              document.documentElement.style.scrollBehavior = 'auto';
+              return {
+                scrollHeight: document.scrollingElement.scrollHeight,
+                viewportHeight: window.innerHeight,
+              };
+            });
+            const maxScroll = Math.max(0, info.scrollHeight - info.viewportHeight);
+            const positions = [];
+            if (maxScroll === 0) {
+              positions.push(0);
+            } else {
+              for (let y = 0; y < maxScroll; y += 800) positions.push(y);
+              positions.push(maxScroll);
+            }
+            const parts = [];
+            const prefix = `${viewport.width}x${viewport.height}-${state.suffix}`;
+            for (let i = 0; i < positions.length; i += 1) {
+              const target = positions[i];
+              const actualY = await page.evaluate((y) => {
+                window.scrollTo(0, y);
+                return Math.round(window.scrollY);
+              }, target);
+              await page.waitForTimeout(140);
+              const file = `${STITCH_DIR}/${prefix}-${String(i).padStart(3, '0')}.png`;
+              await page.screenshot({ path: file, fullPage: false });
+              parts.push({ file, y: actualY });
+            }
+            await page.evaluate(() => window.scrollTo(0, 0));
+            stitch.states.push({
+              viewport: { width: viewport.width, height: viewport.height },
+              state: state.suffix,
+              scrollHeight: info.scrollHeight,
+              viewportHeight: info.viewportHeight,
+              parts,
+              output: `site-artifacts/screenshots/${viewport.prefix}-${state.suffix}.png`,
+            });
+            fs.writeFileSync(`${STITCH_DIR}/manifest.json`, JSON.stringify(stitch, null, 2));
+          }
+
+          (async () => {
+            const browser = await chromium.launch();
+            for (const viewport of VIEWPORTS) {
+              for (const state of STATES) {
+                const context = await browser.newContext({
+                  viewport: { width: viewport.width, height: viewport.height },
+                  colorScheme: state.theme,
+                  reducedMotion: 'no-preference',
+                });
+                const page = await context.newPage();
+                await page.goto(BASE, { waitUntil: 'load' });
+                await page.waitForTimeout(400);
+                await applyState(page, state);
+                await waitForHero(page, state);
+                await reveal(page);
+                await inspectToolShots(page, viewport, state);
+                await assertNoHorizontalOverflow(page, viewport, state);
+                await page.evaluate(() => {
+                  if (document.activeElement && document.activeElement.blur) {
+                    document.activeElement.blur();
+                  }
+                  window.scrollTo(0, 0);
+                });
+                await page.mouse.move(0, 0);
+                await page.waitForTimeout(150);
+                await captureStitched(page, viewport, state);
+                if (viewport.width === 1440 && state.suffix === 'en-dark') {
+                  await captureCard(page, '#tool-editphotos', 'card-editphotos.png');
+                  await captureCard(page, '#tool-annotate', 'card-annotate.png');
+                  await captureCard(page, '#tool-addbackground', 'card-addbackground.png');
+                  await captureCard(page, '#tool-crop', 'card-crop.png');
+                  await captureCard(page, '#tool-redact', 'card-redact.png');
+                }
+                await context.close();
+              }
+            }
+            await browser.close();
+            fs.writeFileSync(DIAGNOSTICS_PATH, JSON.stringify(diagnostics, null, 2));
+            if (diagnostics.failures.length) {
+              throw new Error(
+                `blank/undecoded .tool-shot image(s): ${JSON.stringify(diagnostics.failures)}`,
+              );
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          JS
+          python3 -m http.server 8080 --directory docs/site --bind 127.0.0.1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 50); do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then break; fi
+            sleep 0.2
+          done
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node "$RUNNER_TEMP/capture.cjs"
+          ls -lh site-artifacts/screenshots
+      - name: Stitch full-page screenshots and check poster pixels
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --disable-pip-version-check pillow
+          cat > "$RUNNER_TEMP/stitch.py" <<'PY'
+          import json
+          import sys
+          from collections import Counter
+          from PIL import Image
+
+          MANIFEST = 'site-artifacts/stitch/manifest.json'
+          DIAGNOSTICS = 'site-artifacts/screenshots/shot-diagnostics.json'
+
+          manifest = json.load(open(MANIFEST, encoding='utf-8'))
+          diagnostics = json.load(open(DIAGNOSTICS, encoding='utf-8'))
+          shots_by_key = {
+              (state['viewport'], state['state']): state['toolShots']
+              for state in diagnostics['states']
+          }
+
+          failures = []
+          poster_checks = 0
+          for state in manifest['states']:
+              width = int(state['viewport']['width'])
+              height = int(state['scrollHeight'])
+              output = state['output']
+              canvas = Image.new('RGB', (width, height), (18, 13, 26))
+              for part in sorted(state['parts'], key=lambda item: item['y']):
+                  image = Image.open(part['file']).convert('RGB')
+                  y = max(0, min(int(part['y']), height - image.height))
+                  canvas.paste(image, (0, y))
+              canvas.save(output)
+              if abs(canvas.height - height) > 2:
+                  failures.append(f'{output}: stitched height {canvas.height} != {height}')
+              key = (f"{width}x{state['viewport']['height']}", state['state'])
+              for shot in shots_by_key.get(key, []):
+                  rect = shot['rect']
+                  x = max(0, min(width, round(rect['x'])))
+                  y = max(0, min(height, round(rect['y'])))
+                  x2 = max(0, min(width, round(rect['x'] + rect['width'])))
+                  y2 = max(0, min(height, round(rect['y'] + rect['height'])))
+                  region = canvas.crop((x, y, x2, y2))
+                  pixels = list(region.getdata())[::2]
+                  if not pixels:
+                      failures.append(f"{output} {shot['cardId']}: empty poster region")
+                      continue
+                  base = Counter((p[0] // 8, p[1] // 8, p[2] // 8) for p in pixels).most_common(1)[0][0]
+                  base = tuple(channel * 8 for channel in base)
+                  changed = sum(
+                      1
+                      for pixel in pixels
+                      if max(abs(pixel[i] - base[i]) for i in range(3)) > 32
+                  )
+                  ratio = changed / len(pixels)
+                  poster_checks += 1
+                  if ratio <= 0.005:
+                      failures.append(
+                          f"{output} {shot['cardId']}: flat poster region ratio={ratio:.4f}"
+                      )
+          print(f"stitched {len(manifest['states'])} pages; checked {poster_checks} poster regions")
+          if poster_checks < 5:
+              failures.append(f'only {poster_checks} poster regions checked, expected at least 5')
+          if failures:
+              for failure in failures:
+                  print(f'FAIL: {failure}')
+              sys.exit(1)
+          PY
+          python3 "$RUNNER_TEMP/stitch.py"
+          ls -lh site-artifacts/screenshots
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-screenshots
+          path: site-artifacts/screenshots
+          if-no-files-found: warn
+          retention-days: 14

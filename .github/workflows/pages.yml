@@ -1,14 +1,24 @@
 name: Pages
 
-# The download site is a static folder (docs/site). A branch source can only publish "/" or "/docs",
-# so GitHub Actions uploads exactly docs/site and deploys it to https://faisaldhd.github.io/dropwheel/.
+# Publishing is manual-only on purpose.  An ordinary push never deploys.
+# A maintainer triggers this workflow after the signed 2.4.0 release exists,
+# types "publish" in the confirm box, and the workflow:
+#   1. resolves the newest stable GitHub release,
+#   2. proves DropWheel-Setup.exe is listed in that release's SHA256SUMS.txt,
+#   3. stamps version / MiB / bytes / SHA-256 / status into every release marker,
+#   4. uploads the stamped copy of docs/site (never the repository file).
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'docs/site/**'
-      - '.github/workflows/pages.yml'
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type publish to confirm this deploy'
+        required: true
+        type: string
+      release_tag:
+        description: 'Release tag to publish, e.g. v2.4.0 (latest = newest stable release)'
+        required: false
+        default: latest
+        type: string
 
 permissions:
   contents: read
@@ -17,22 +27,160 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy download page
+    name: Stamp verified release and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Smoke-test release stamping with synthetic sums
+        run: |
+          set -euo pipefail
+          SUMS="$RUNNER_TEMP/synthetic-SHA256SUMS.txt"
+          HASH=$(python3 -c 'print("a" * 64)')
+          printf '%s  DropWheel-Setup.exe\n' "$HASH" > "$SUMS"
+          # Relative --index + --output must work; this caught the path bug that
+          # only appeared after release verification.
+          python scripts/site/stamp_release.py --index docs/site/index.html --sums "$SUMS" \
+            --version 9.9.9 --asset-size 12345678 --output "$RUNNER_TEMP/stamp-smoke"
+          test -f "$RUNNER_TEMP/stamp-smoke/index.html"
+          grep -q '<!--release-version:start-->9.9.9<!--release-version:end-->' "$RUNNER_TEMP/stamp-smoke/index.html"
+
+      - name: Refuse an unconfirmed deploy
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "publish" ]; then
+            echo "::error::This workflow deploys only when confirm=publish. Nothing was published."
+            exit 1
+          fi
+
+      - name: Resolve release and verify installer asset
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REQUESTED_TAG: ${{ inputs.release_tag || 'latest' }}
+        run: |
+          set -euo pipefail
+          if [ "$REQUESTED_TAG" = "latest" ]; then
+            endpoint="repos/$REPO/releases/latest"
+          else
+            case "$REQUESTED_TAG" in
+              v*) tag="$REQUESTED_TAG" ;;
+              *)  tag="v$REQUESTED_TAG" ;;
+            esac
+            endpoint="repos/$REPO/releases/tags/$tag"
+          fi
+
+          TAG=$(gh api "$endpoint" --jq '.tag_name')
+          DRAFT=$(gh api "$endpoint" --jq '.draft')
+          PRERELEASE=$(gh api "$endpoint" --jq '.prerelease')
+          ASSET_SIZE=$(gh api "$endpoint" --jq '.assets[] | select(.name == "DropWheel-Setup.exe") | .size')
+
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "::error::Could not resolve a release from $endpoint."
+            exit 1
+          fi
+          if [ "$DRAFT" = "true" ] || [ "$PRERELEASE" = "true" ]; then
+            echo "::error::Release $TAG is a draft or pre-release; refusing to publish it."
+            exit 1
+          fi
+          if [ -z "$ASSET_SIZE" ] || [ "$ASSET_SIZE" = "null" ]; then
+            echo "::error::Release $TAG has no DropWheel-Setup.exe asset. A release without the expected installer cannot be published."
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "asset_size=$ASSET_SIZE" >> "$GITHUB_OUTPUT"
+          echo "Resolved $TAG (DropWheel-Setup.exe = $ASSET_SIZE bytes)"
+
+      - name: Download and verify SHA256SUMS.txt
+        id: sums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "$TAG" --repo "$REPO" --pattern SHA256SUMS.txt --dir "$RUNNER_TEMP/release" --clobber
+          SUMS="$RUNNER_TEMP/release/SHA256SUMS.txt"
+          test -s "$SUMS" || { echo "::error::SHA256SUMS.txt is empty or missing for $TAG."; exit 1; }
+          SHA=$(grep -E '^[0-9a-fA-F]{64} +\*?DropWheel-Setup\.exe$' "$SUMS" | awk '{print $1}' | head -n1 | tr 'A-F' 'a-f')
+          if [ -z "$SHA" ]; then
+            echo "::error::$TAG/SHA256SUMS.txt has no DropWheel-Setup.exe line. Refusing to deploy."
+            cat "$SUMS"
+            exit 1
+          fi
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Verified DropWheel-Setup.exe SHA-256: $SHA"
+
+      - name: Stamp release facts into the deploy artifact
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          ASSET_SIZE: ${{ steps.release.outputs.asset_size }}
+          SHA: ${{ steps.sums.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          python scripts/site/stamp_release.py \
+            --index docs/site/index.html \
+            --sums "$RUNNER_TEMP/release/SHA256SUMS.txt" \
+            --version "$TAG" \
+            --asset-size "$ASSET_SIZE" \
+            --output build/site
+
+          test -f build/site/index.html
+          if cmp -s docs/site/index.html build/site/index.html; then
+            echo "::error::The stamped page is identical to the repository page; the markers were not replaced."
+            exit 1
+          fi
+          for marker in version mb bytes sha256 status; do
+            if ! grep -q "<!--release-$marker:start-->" build/site/index.html; then
+              echo "::error::Stamped page lost the release-$marker marker region."
+              exit 1
+            fi
+          done
+          if ! grep -q "<!--release-version:start-->${TAG#v}<!--release-version:end-->" build/site/index.html; then
+            echo "::error::Stamped version does not match $TAG."
+            exit 1
+          fi
+          if ! grep -q "<!--release-sha256:start-->$SHA<!--release-sha256:end-->" build/site/index.html; then
+            echo "::error::Stamped SHA-256 does not match SHA256SUMS.txt."
+            exit 1
+          fi
+          STALE=$(grep -Eo 'releases/download/v[0-9]+\.[0-9]+\.[0-9]+/' build/site/index.html | grep -Fv "/$TAG/" || true)
+          if [ -n "$STALE" ]; then
+            echo "::error::Stamped page still links to another release version: $STALE"
+            exit 1
+          fi
+
+      - name: Prove the repository page was not modified
+        run: |
+          set -euo pipefail
+          if ! git diff --exit-code -- docs/site; then
+            echo "::error::The repository copy of docs/site was modified; only build/site may be uploaded."
+            exit 1
+          fi
+
       - uses: actions/configure-pages@v5
-      - name: Upload docs/site
+
+      - name: Upload stamped site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/site
+          path: build/site
+
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4

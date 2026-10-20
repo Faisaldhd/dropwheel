@@ -1,152 +1,1084 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="en" dir="ltr" data-theme="dark" class="no-js">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DropWheel — Download for Windows</title>
-  <meta name="description" content="Download DropWheel 2.2.1 for Windows 10/11 (64-bit). A radial action wheel for your files. Free and open source, MIT licensed.">
-  <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#16121F">
+  <title>DropWheel — 26 file tools at your cursor for Windows</title>
+  <meta name="description" content="DropWheel puts 26 file tools on one radial wheel: convert, crop, edit, compress, protect and lock. Everything runs on your PC. Free and open source for Windows 10/11 64-bit.">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#100b18">
   <meta name="referrer" content="no-referrer">
-  <link rel="icon" href="assets/dropwheel-256.png" type="image/png">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <link rel="canonical" href="https://faisaldhd.github.io/dropwheel/">
+  <link rel="icon" href="assets/icon/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/icon/dropwheel-16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icon/dropwheel-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icon/dropwheel-180.png">
+  <link rel="manifest" href="site.webmanifest">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="DropWheel">
+  <meta property="og:url" content="https://faisaldhd.github.io/dropwheel/">
+  <meta property="og:title" content="DropWheel — 26 file tools at your cursor">
+  <meta property="og:description" content="Convert, edit, compress, protect and lock files from one radial wheel. Processed on your PC. Nothing is uploaded.">
+  <meta property="og:image" content="https://faisaldhd.github.io/dropwheel/assets/social/og-en.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="DropWheel social card: the headline 26 file tools at your cursor, the Free and open source MIT badge, the site URL, and the shipped Convert wheel screenshot.">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="ar_AR">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="DropWheel — 26 file tools at your cursor">
+  <meta name="twitter:description" content="Convert, edit, compress, protect and lock files from one radial wheel. Processed on your PC. Nothing is uploaded.">
+  <meta name="twitter:image" content="https://faisaldhd.github.io/dropwheel/assets/social/og-en.png">
+  <meta name="twitter:image:alt" content="DropWheel social card with the headline, the MIT badge and the shipped Convert wheel screenshot.">
+  <script src="assets/boot.js"></script>
   <link rel="stylesheet" href="assets/styles.css">
   <script src="assets/app.js" defer></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "DropWheel",
+    "description": "Windows 10/11 file tools on one radial wheel: convert, edit, compress, protect and lock. Everything runs locally on the PC.",
+    "url": "https://faisaldhd.github.io/dropwheel/",
+    "image": "https://faisaldhd.github.io/dropwheel/assets/social/og-en.png",
+    "applicationCategory": "UtilityApplication",
+    "operatingSystem": "Windows 10, Windows 11",
+    "inLanguage": ["en", "ar"],
+    "isAccessibleForFree": true,
+    "license": "https://github.com/Faisaldhd/dropwheel/blob/main/LICENSE",
+    "downloadUrl": "https://github.com/Faisaldhd/dropwheel/releases/latest/download/DropWheel-Setup.exe",
+    "sameAs": ["https://github.com/Faisaldhd/dropwheel"],
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
 </head>
-<body>
-  <a class="skip skip-en" href="#main">Skip to content</a>
-  <a class="skip skip-ar" href="#main" lang="ar" dir="rtl">تجاوز إلى المحتوى</a>
+<body id="top">
+  <a class="skip-link" href="#main"><span data-lang="en">Skip to content</span><span data-lang="ar" lang="ar">تجاوز إلى المحتوى</span></a>
+
+  <svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.4-3 7.4-7 9-4-1.6-7-4.6-7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v2.5"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="8" r="4"/><path d="m11 11 8 8"/><path d="m16 16 2-2"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15"/><path d="m14 7 5 5-5 5"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M19 14v5H5V5h5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5H6a2 2 0 0 0-2 2v9"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-wheel" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.4"/><path d="M12 3v6.6M21 12h-6.6M12 21v-6.6M3 12h6.6M18.4 5.6l-4.6 4.6M18.4 18.4l-4.6-4.6M5.6 18.4l4.6-4.6M5.6 5.6l4.6 4.6"/></symbol>
+    <symbol id="i-windows" viewBox="0 0 24 24"><path d="M3 5.5 10.5 4v7.5H3zM12 3.7 21 2.5v9H12zM3 12.5h7.5V20L3 18.5zM12 12.5h9v9l-9-1.2z"/></symbol>
+    <symbol id="i-hash" viewBox="0 0 24 24"><path d="M9 3 7 21M17 3l-2 18M3.5 8.5h17M3 15.5h17"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6.3 6.3l3 3M14.7 14.7l3 3M17.7 6.3l-3 3M9.3 14.7l-3 3"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></symbol>
+  </svg>
+
+  <div class="release-bar" role="region" data-label-en="Release status" data-label-ar="حالة الإصدار">
+    <div class="wrap release-bar__inner">
+      <!--release-status:start-->
+      <span class="release-bar__tag"><bdi dir="ltr">2.4.0</bdi></span>
+      <p class="release-bar__text">
+        <span data-lang="en">Final verification. Downloads stay on the last signed release (<bdi dir="ltr">2.3.0</bdi>) until <bdi dir="ltr">2.4.0</bdi> is published.</span>
+        <span data-lang="ar" lang="ar">التحقق النهائي. يبقى التنزيل على آخر إصدار موقَّع (<bdi dir="ltr">2.3.0</bdi>) حتى نشر <bdi dir="ltr">2.4.0</bdi>.</span>
+      </p>
+      <!--release-status:end-->
+      <a class="release-bar__link" href="#whats-new">
+        <span data-lang="en">What is new</span><span data-lang="ar" lang="ar">ما الجديد</span>
+        <svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-arrow"/></svg>
+      </a>
+    </div>
+  </div>
 
   <header class="site-header">
-    <div class="lang-switch" role="group" aria-label="Language / اللغة">
-      <button type="button" data-lang-button="en" lang="en" aria-pressed="true">EN</button>
-      <button type="button" data-lang-button="ar" lang="ar" aria-pressed="false">العربية</button>
+    <div class="wrap header-inner">
+      <a class="brand" href="#top" data-label-en="DropWheel home" data-label-ar="الصفحة الرئيسية لـ DropWheel">
+        <img class="brand__mark" src="assets/icon/dropwheel-128.webp" width="128" height="128" alt="" decoding="async">
+        <span class="brand__word">DropWheel</span>
+      </a>
+
+      <nav class="site-nav" aria-label="Sections" data-label-en="Sections" data-label-ar="الأقسام">
+        <a href="#wheel"><span data-lang="en">The wheel</span><span data-lang="ar" lang="ar">العجلة</span></a>
+        <a href="#tools"><span data-lang="en">Tools</span><span data-lang="ar" lang="ar">الأدوات</span></a>
+        <a href="#protect"><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">الحماية</span></a>
+        <a href="#convert"><span data-lang="en">Convert</span><span data-lang="ar" lang="ar">التحويل</span></a>
+        <a href="#whats-new"><span data-lang="en">What is new</span><span data-lang="ar" lang="ar">ما الجديد</span></a>
+        <a href="#verify"><span data-lang="en">Verify</span><span data-lang="ar" lang="ar">التحقق</span></a>
+        <a href="#faq"><span data-lang="en">FAQ</span><span data-lang="ar" lang="ar">الأسئلة</span></a>
+      </nav>
+
+      <div class="header-actions">
+        <button class="icon-button theme-toggle" type="button" data-theme-toggle data-label-en="Switch to light theme" data-label-ar="التبديل إلى المظهر الفاتح">
+          <svg class="icon icon--sun" width="20" height="20" aria-hidden="true"><use href="#i-sun"/></svg>
+          <svg class="icon icon--moon" width="20" height="20" aria-hidden="true"><use href="#i-moon"/></svg>
+        </button>
+        <p class="visually-hidden" id="lang-status" role="status" aria-live="polite"></p>
+        <div class="lang-switch" role="group" aria-label="Language" data-label-en="Language" data-label-ar="اللغة">
+          <button type="button" class="lang-switch__button" data-lang-button="en" aria-pressed="true" lang="en" dir="ltr">EN</button>
+          <button type="button" class="lang-switch__button" data-lang-button="ar" aria-pressed="false" lang="ar" dir="rtl">العربية</button>
+        </div>
+        <a class="btn btn--primary btn--small header-download" href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/DropWheel-Setup.exe" rel="noopener noreferrer">
+          <svg class="icon" width="17" height="17" aria-hidden="true"><use href="#i-download"/></svg>
+          <span data-lang="en">Download</span><span data-lang="ar" lang="ar">تنزيل</span>
+        </a>
+      </div>
     </div>
   </header>
 
   <main id="main" tabindex="-1">
-    <!-- English -->
-    <div class="lang lang-en" data-language="en" lang="en" dir="ltr">
-      <section class="hero" aria-labelledby="name-en">
-        <img class="app-icon" src="assets/dropwheel-256.png" width="128" height="128"
-             alt="DropWheel icon: a violet segmented wheel with an arrow dropping onto one segment.">
-        <h1 id="name-en">DropWheel</h1>
-        <p class="tagline">Grab a file, tap a key, drop it on the action you need.</p>
-
-        <a class="download-button"
-           href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/DropWheel-Setup.exe"
-           rel="noopener">Download DropWheel</a>
-        <p class="platform">Windows 10/11 · 64-bit</p>
-
-        <p class="version">Version <bdi>2.2.1</bdi></p>
-        <div class="checksum" data-checksum
-             data-status-checking="Reading the published checksum…" aria-live="polite">
-          <p class="checksum-label">SHA-256</p>
-          <code class="hash" data-hash-value hidden></code>
-          <p class="hash-file" data-hash-file hidden></p>
-          <p class="hash-status" data-hash-status></p>
-          <p class="hash-fallback" data-hash-fallback hidden>
-            Couldn’t load the checksum here.
-            <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt"
-               rel="noopener">Open SHA256SUMS.txt</a> to verify the download.
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">
+            <svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-windows"/></svg>
+            <span data-lang="en">Windows 10 (1809+) or 11 · 64-bit · Free and open source</span>
+            <span data-lang="ar" lang="ar">ويندوز 10 (1809 أو أحدث) أو 11 · 64 بت · مجاني ومفتوح المصدر</span>
           </p>
-          <noscript>
-            <p class="hash-fallback">
-              JavaScript is off.
-              <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt"
-                 rel="noopener">Open SHA256SUMS.txt</a> to verify the download.
-            </p>
-          </noscript>
-        </div>
-      </section>
-
-      <section class="shots" aria-labelledby="shots-en">
-        <h2 id="shots-en">Screenshots</h2>
-        <div class="shots-grid">
-          <figure>
-            <img src="assets/settings.png" width="840" height="1401" loading="lazy" decoding="async"
-                 alt="Settings window with six tabs: General, Wheels, Quality, Integration, Updates and About. The General tab shows the watch keyboard and mouse switch, language, theme, gesture keys and results.">
-            <figcaption>Settings: language, drag shortcuts and keyboard options.</figcaption>
-          </figure>
-          <figure>
-            <img src="assets/wheel-actions.png" width="663" height="663" loading="lazy" decoding="async"
-                 alt="The radial action wheel open over a file, with slices for Copy, Share, Move, Copy path, Terminal and Float, and the Shift+Ctrl+Alt shortcut shown in the middle.">
-            <figcaption>The action wheel: copy, share, move, copy path, terminal and float.</figcaption>
-          </figure>
-          <figure>
-            <img src="assets/jobs.png" width="570" height="718" loading="lazy" decoding="async"
-                 alt="Job list showing a failed PDF to DOCX conversion, a finished JPG compression and a video conversion in progress.">
-            <figcaption>Jobs: a failed conversion, a finished compression and one in progress.</figcaption>
-          </figure>
-        </div>
-      </section>
-    </div>
-
-    <!-- العربية -->
-    <div class="lang lang-ar" data-language="ar" lang="ar" dir="rtl" hidden>
-      <section class="hero" aria-labelledby="name-ar">
-        <img class="app-icon" src="assets/dropwheel-256.png" width="128" height="128"
-             alt="أيقونة DropWheel: عجلة بنفسجية مقسّمة إلى إجراءات، مع سهم يُفلت على أحد الأجزاء.">
-        <h1 id="name-ar">DropWheel</h1>
-        <p class="tagline">اسحب ملفًا، واضغط مفتاحًا، ثم ألقِه على الإجراء الذي تريده.</p>
-
-        <a class="download-button"
-           href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/DropWheel-Setup.exe"
-           rel="noopener">تحميل DropWheel</a>
-        <p class="platform">ويندوز 10/11 · 64 بت</p>
-
-        <p class="version">الإصدار <bdi>2.2.1</bdi></p>
-        <div class="checksum" data-checksum
-             data-status-checking="جارٍ قراءة البصمة المنشورة…" aria-live="polite">
-          <p class="checksum-label">بصمة SHA-256</p>
-          <code class="hash" data-hash-value hidden></code>
-          <p class="hash-file" data-hash-file hidden></p>
-          <p class="hash-status" data-hash-status></p>
-          <p class="hash-fallback" data-hash-fallback hidden>
-            تعذّر تحميل البصمة هنا.
-            <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt"
-               rel="noopener">افتح ملف SHA256SUMS.txt</a> للتحقق من التنزيل.
+          <h1 id="hero-title">DropWheel</h1>
+          <p class="lede">
+            <span data-lang="en">Grab a file, tap a key, drop it on the tool you need. Convert, edit, protect and lock — without opening an app.</span>
+            <span data-lang="ar" lang="ar">اسحب ملفًا، واضغط مفتاحًا، وأفلته على الأداة التي تريد. تحويل وتحرير وحماية وقفل — دون فتح تطبيق.</span>
           </p>
-          <noscript>
-            <p class="hash-fallback">
-              JavaScript معطّل.
-              <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt"
-                 rel="noopener">افتح ملف SHA256SUMS.txt</a> للتحقق من التنزيل.
-            </p>
-          </noscript>
-        </div>
-      </section>
 
-      <section class="shots" aria-labelledby="shots-ar">
-        <h2 id="shots-ar">لقطات الشاشة</h2>
-        <div class="shots-grid">
-          <figure>
-            <img src="assets/settings.png" width="840" height="1401" loading="lazy" decoding="async"
-                 alt="نافذة الإعدادات بستة تبويبات: عام والعجلات والجودة والتكامل والتحديثات وحول. يعرض تبويب عام مفتاح مراقبة لوحة المفاتيح والماوس واللغة والمظهر ومفاتيح الإيماءات والنتائج.">
-            <figcaption>الإعدادات: اللغة، واختصارات السحب، وخيارات لوحة المفاتيح.</figcaption>
-          </figure>
-          <figure>
-            <img src="assets/wheel-actions.png" width="663" height="663" loading="lazy" decoding="async"
-                 alt="عجلة الإجراءات مفتوحة فوق ملف، وتتضمن شرائح Copy وShare وMove وCopy path وTerminal وFloat، مع اختصار Shift+Ctrl+Alt في الوسط.">
-            <figcaption>عجلة الإجراءات: نسخ، ومشاركة، ونقل، ونسخ المسار، والطرفية، وتعليق.</figcaption>
-          </figure>
-          <figure>
-            <img src="assets/jobs.png" width="570" height="718" loading="lazy" decoding="async"
-                 alt="لقطة لقائمة المهام: فشل تحويل PDF إلى DOCX، واكتمل ضغط صورة JPG، وتحويل فيديو قيد التنفيذ.">
-            <figcaption>المهام: فشل تحويل، واكتمل ضغط، وتحويل قيد التنفيذ.</figcaption>
-          </figure>
+          <div class="hero-actions">
+            <a class="btn btn--primary btn--large" href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/DropWheel-Setup.exe" rel="noopener noreferrer">
+              <svg class="icon" width="20" height="20" aria-hidden="true"><use href="#i-download"/></svg>
+              <span data-lang="en">Download for Windows</span><span data-lang="ar" lang="ar">تنزيل لنظام ويندوز</span>
+            </a>
+            <a class="btn btn--ghost" href="#wheel">
+              <span data-lang="en">See how the wheel works</span><span data-lang="ar" lang="ar">كيف تعمل العجلة</span>
+              <svg class="icon icon--flip" width="17" height="17" aria-hidden="true"><use href="#i-arrow"/></svg>
+            </a>
+          </div>
+
+          <ul class="hero-facts">
+            <li>
+              <svg class="icon" width="17" height="17" aria-hidden="true"><use href="#i-windows"/></svg>
+              <span data-lang="en">Windows 10 (1809+) or 11 · 64-bit</span>
+              <span data-lang="ar" lang="ar">ويندوز 10 (1809 أو أحدث) أو 11 · 64 بت</span>
+            </li>
+            <li>
+              <svg class="icon" width="17" height="17" aria-hidden="true"><use href="#i-check"/></svg>
+              <span data-lang="en"><bdi dir="ltr">v<!--release-version:start-->2.3.0<!--release-version:end--></bdi> signed</span>
+              <span data-lang="ar" lang="ar"><bdi dir="ltr">v<!--release-version:start-->2.3.0<!--release-version:end--></bdi> موقَّع</span>
+            </li>
+            <li>
+              <svg class="icon" width="17" height="17" aria-hidden="true"><use href="#i-hash"/></svg>
+              <span data-lang="en"><!--release-mb:start-->60.05<!--release-mb:end--> MB installer</span>
+              <span data-lang="ar" lang="ar">المثبّت <!--release-mb:start-->60.05<!--release-mb:end--> ميجابايت</span>
+            </li>
+          </ul>
+
+          <p class="hero-hash">
+            <span class="hero-hash__label">SHA-256</span>
+            <code dir="ltr"><!--release-sha256:start-->7381cbd5b59249f3279b62af31091d89d3d8d994faa57fcdd08ec4331d7156ce<!--release-sha256:end--></code>
+            <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a>
+          </p>
+
+          <p class="privacy-line">
+            <svg class="icon" width="19" height="19" aria-hidden="true"><use href="#i-shield"/></svg>
+            <span data-lang="en">Processed on your PC. Nothing is uploaded.</span>
+            <span data-lang="ar" lang="ar">تُعالَج على جهازك. لا يُرفَع أي شيء.</span>
+          </p>
+
         </div>
-      </section>
-    </div>
+
+        <div class="hero-art">
+          <div class="hero-art__glow" aria-hidden="true"></div>
+          <picture class="hero-motion" data-motion data-poster-dark="assets/motion/wheel-dark-poster.webp" data-poster-light="assets/motion/wheel-light-poster.webp" data-clip-dark="assets/motion/wheel-dark.webp" data-clip-light="assets/motion/wheel-light.webp">
+            <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: light)" srcset="assets/motion/wheel-light-poster.webp" type="image/webp">
+            <source media="(prefers-reduced-motion: reduce)" srcset="assets/motion/wheel-dark-poster.webp" type="image/webp">
+            <source media="(prefers-color-scheme: light)" srcset="assets/motion/wheel-light.webp" type="image/webp">
+            <source srcset="assets/motion/wheel-dark.webp" type="image/webp">
+            <img src="assets/motion/wheel-dark.webp" width="442" height="442" fetchpriority="high" decoding="async"
+                 alt="The Convert wheel open over a JPG file, with PNG, PDF, WEBP, ICO, AVIF and TIFF slices and the Shift, Ctrl and Alt keys in the centre."
+                 data-alt-en="The Convert wheel open over a JPG file, with PNG, PDF, WEBP, ICO, AVIF and TIFF slices and the Shift, Ctrl and Alt keys in the centre."
+                 data-alt-ar="عجلة التحويل مفتوحة فوق ملف JPG، بقطاعات PNG وPDF وWEBP وICO وAVIF وTIFF ومفاتيح Shift وCtrl وAlt في المنتصف.">
+          </picture>
+          <p class="hero-art__caption">
+            <span data-lang="en">Rendered from the shipped app. No mock-ups.</span>
+            <span data-lang="ar" lang="ar">لقطة من التطبيق المُسلَّم نفسه. بلا نماذج وهمية.</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="wheel" aria-labelledby="wheel-title">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-wheel"/></svg><span data-lang="en">The gesture</span><span data-lang="ar" lang="ar">الإيماءة</span></p>
+          <h2 id="wheel-title"><span data-lang="en">One drag. Three wheels.</span><span data-lang="ar" lang="ar">سحبة واحدة. ثلاث عجلات.</span></h2>
+          <p class="section-lede">
+            <span data-lang="en">The wheel opens at the pointer while you drag, and stays open until you drop, so you can release the key and tap another one to switch wheels; drop on a slice to run it. The gesture is off on a fresh install — turn it on once in Settings.</span>
+            <span data-lang="ar" lang="ar">تُفتح العجلة عند المؤشر أثناء السحب، وتبقى مفتوحة حتى الإفلات، فيمكنك رفع إصبعك عن المفتاح والضغط على مفتاح آخر لتبديل العجلة، ثم الإفلات على قطاع لتنفيذه. الإيماءة معطّلة في التثبيت الجديد — شغّلها مرة واحدة من الإعدادات.</span>
+          </p>
+        </header>
+
+        <div class="wheel-grid">
+          <div class="wheel-visual">
+            <picture class="wheel-still">
+              <img src="assets/motion/wheel-dark-poster.webp" data-dark="assets/motion/wheel-dark-poster.webp" data-light="assets/motion/wheel-light-poster.webp" width="442" height="442" loading="lazy" decoding="async"
+                   alt="The Convert wheel with a highlight on the PNG slice and the destination label in the hub."
+                   data-alt-en="The Convert wheel with a highlight on the PNG slice and the destination label in the hub."
+                   data-alt-ar="عجلة التحويل مع إبراز قطاع PNG ووجهة الحفظ في المنتصف.">
+            </picture>
+            <div class="key-stack" aria-hidden="true">
+              <kbd class="keycap">Shift</kbd>
+              <kbd class="keycap">Ctrl</kbd>
+              <kbd class="keycap">Alt</kbd>
+            </div>
+          </div>
+
+          <div class="modes">
+            <article class="mode">
+              <kbd class="keycap keycap--accent">Shift</kbd>
+              <div class="mode__body">
+                <h3><span data-lang="en">Convert</span><span data-lang="ar" lang="ar">تحويل</span></h3>
+                <p><span data-lang="en">Choose an output format. The original is only read; the result lands next to it or in the folder you drop on.</span><span data-lang="ar" lang="ar">اختر صيغة الإخراج. يُقرأ الأصل فقط، ويُكتب الناتج بجانبه أو في المجلد الذي تُفلته عليه.</span></p>
+                <p class="mode__examples" dir="ltr">JPG → PNG · MP4 → MP3 · DOCX → PDF</p>
+              </div>
+            </article>
+            <article class="mode">
+              <kbd class="keycap keycap--accent">Ctrl</kbd>
+              <div class="mode__body">
+                <h3><span data-lang="en">Tools</span><span data-lang="ar" lang="ar">الأدوات</span></h3>
+                <p><span data-lang="en">Open a floating tool that works on the file in place: crop, trim, compress, protect, lock and more.</span><span data-lang="ar" lang="ar">افتح أداة عائمة تعمل على الملف نفسه: اقتصاص وضغط وحماية وقفل والمزيد.</span></p>
+                <p class="mode__examples" dir="ltr">Crop · Trim · Compress · Protect</p>
+              </div>
+            </article>
+            <article class="mode">
+              <kbd class="keycap keycap--accent">Alt</kbd>
+              <div class="mode__body">
+                <h3><span data-lang="en">Actions</span><span data-lang="ar" lang="ar">الإجراءات</span></h3>
+                <p><span data-lang="en">Copy, move, copy the path, open a terminal, float the file on the shelf, or share it.</span><span data-lang="ar" lang="ar">انسخ أو انقل أو انسخ المسار أو افتح الطرفية أو علّق الملف على الرف أو شاركه.</span></p>
+                <p class="mode__examples" dir="ltr">Copy to… · Move to… · Copy path · Terminal</p>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <ul class="wheel-notes">
+          <li><svg class="icon" width="17" height="17" aria-hidden="true"><use href="#i-check"/></svg><span data-lang="en">Drop in the middle to cancel.</span><span data-lang="ar" lang="ar">الإفلات في المنتصف يلغي العملية.</span></li>
+          <li><svg class="icon" width="17" height="17" aria-hidden="true"><use href="#i-check"/></svg><span data-lang="en">Tap the same key again to repeat the last action.</span><span data-lang="ar" lang="ar">اضغط المفتاح نفسه مرة أخرى لتكرار آخر إجراء.</span></li>
+          <li><svg class="icon" width="17" height="17" aria-hidden="true"><use href="#i-check"/></svg><span data-lang="en">Keys are reassignable in Settings.</span><span data-lang="ar" lang="ar">المفاتيح قابلة للتغيير من الإعدادات.</span></li>
+          <li><svg class="icon" width="17" height="17" aria-hidden="true"><use href="#i-check"/></svg><span data-lang="en">No mouse: <bdi dir="ltr">Ctrl + Alt + Space</bdi>, arrows, Enter.</span><span data-lang="ar" lang="ar">بدون ماوس: <bdi dir="ltr">Ctrl + Alt + Space</bdi> والأسهم ومفتاح Enter.</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section section--tools" id="tools" aria-labelledby="tools-title">
+      <div class="wrap">
+        <header class="section-head section-head--split">
+          <div>
+            <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-spark"/></svg><span data-lang="en">26 floating tools</span><span data-lang="ar" lang="ar">26 أداة عائمة</span></p>
+            <h2 id="tools-title"><span data-lang="en">A whole toolbox, at the cursor.</span><span data-lang="ar" lang="ar">صندوق أدوات كامل عند المؤشر.</span></h2>
+          </div>
+          <p class="section-note">
+            <span data-lang="en">Each window sizes itself to the media: portrait stays tall, landscape stays wide, and the controls never shrink. Captures are app self-test renders; the set grows tool by tool.</span>
+            <span data-lang="ar" lang="ar">كل نافذة تُكيّف حجمها مع الوسائط: الطولي يبقى طويلًا والعرضي عريضًا، ولا تتقلّص عناصر التحكم. اللقطات من اختبار التطبيق الذاتي، وتُضاف أدوات جديدة تدريجيًا.</span>
+          </p>
+        </header>
+
+        <div class="filters" role="group" aria-label="Filter tools" data-label-en="Filter tools" data-label-ar="تصفية الأدوات">
+          <button type="button" class="chip is-active" data-filter="all" aria-pressed="true" aria-controls="tools-grid"><span data-lang="en">All</span><span data-lang="ar" lang="ar">الكل</span><span class="chip__count">26</span></button>
+          <button type="button" class="chip" data-filter="photos" aria-pressed="false" aria-controls="tools-grid"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="chip__count">6</span></button>
+          <button type="button" class="chip" data-filter="video" aria-pressed="false" aria-controls="tools-grid"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="chip__count">7</span></button>
+          <button type="button" class="chip" data-filter="audio" aria-pressed="false" aria-controls="tools-grid"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span><span class="chip__count">5</span></button>
+          <button type="button" class="chip" data-filter="pdf" aria-pressed="false" aria-controls="tools-grid"><span data-lang="en">PDF</span><span data-lang="ar" lang="ar">PDF</span><span class="chip__count">2</span></button>
+          <button type="button" class="chip" data-filter="protect" aria-pressed="false" aria-controls="tools-grid"><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">الحماية</span><span class="chip__count">3</span></button>
+          <button type="button" class="chip" data-filter="files" aria-pressed="false" aria-controls="tools-grid"><span data-lang="en">Files</span><span data-lang="ar" lang="ar">الملفات</span><span class="chip__count">3</span></button>
+        </div>
+        <p class="filter-status" id="tools-status" aria-live="polite"></p>
+
+        <div class="tools-grid" id="tools-grid">
+          <article class="tool-card" id="tool-compress" data-tool="compress" data-reveal data-cat="files">
+            <div class="tool-media tool-media--abstract tool-media--files">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Files</span><span data-lang="ar" lang="ar">الملفات</span><span class="tool-num">01</span></div>
+              <h3 id="tool-compress-title"><span data-lang="en">Compress</span><span data-lang="ar" lang="ar">ضغط</span></h3>
+              <p><span data-lang="en">Shrink one image, audio file, video or PDF to a target size or percentage; the source is untouched.</span><span data-lang="ar" lang="ar">اضغط صورة أو ملفًا صوتيًا أو فيديو أو PDF إلى حجم مستهدف أو نسبة، دون المساس بالمصدر.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Target size or percent</span><span data-lang="ar" lang="ar">حجم مستهدف أو نسبة</span></li><li><span data-lang="en">Image, audio, video, PDF</span><span data-lang="ar" lang="ar">صور وصوت وفيديو وPDF</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image, audio, video or PDF</span><span data-lang="ar" lang="ar">ملف واحد: صورة أو صوت أو فيديو أو PDF</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-metadata" data-tool="metadata" data-reveal data-cat="files">
+            <div class="tool-media tool-media--abstract tool-media--files">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Files</span><span data-lang="ar" lang="ar">الملفات</span><span class="tool-num">02</span></div>
+              <h3 id="tool-metadata-title"><span data-lang="en">Edit metadata</span><span data-lang="ar" lang="ar">تعديل البيانات الوصفية</span></h3>
+              <p><span data-lang="en">Edit EXIF, IPTC, XMP, PDF info and chapters — or clear camera and location in one action.</span><span data-lang="ar" lang="ar">حرّر EXIF وIPTC وXMP ومعلومات PDF والفصول — أو أزل الكاميرا والموقع بضغطة.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Camera and location</span><span data-lang="ar" lang="ar">الكاميرا والموقع</span></li><li><span data-lang="en">Remove per field</span><span data-lang="ar" lang="ar">إزالة حقلًا بحقل</span></li><li><span data-lang="en">Remove all</span><span data-lang="ar" lang="ar">إزالة الكل</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image, audio, video or PDF</span><span data-lang="ar" lang="ar">ملف واحد: صورة أو صوت أو فيديو أو PDF</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-qr" data-tool="qr" data-reveal data-cat="files">
+            <div class="tool-media tool-media--abstract tool-media--files">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Files</span><span data-lang="ar" lang="ar">الملفات</span><span class="tool-num">03</span></div>
+              <h3 id="tool-qr-title"><span data-lang="en">Read QR code</span><span data-lang="ar" lang="ar">قراءة رمز QR</span></h3>
+              <p><span data-lang="en">Decode a QR code from an image offline. Only http and https links can be opened.</span><span data-lang="ar" lang="ar">فكّ رمز QR من صورة محليًا. تُفتح روابط http وhttps فقط.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Decode from an image</span><span data-lang="ar" lang="ar">فك الرمز من صورة</span></li><li><span data-lang="en">Only http(s) links open</span><span data-lang="ar" lang="ar">لا تُفتح إلا روابط الويب</span></li><li><span data-lang="en">No code is not a crash</span><span data-lang="ar" lang="ar">غياب الرمز ليس عطلًا</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image</span><span data-lang="ar" lang="ar">صورة واحدة</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-editphotos" data-tool="editphotos" data-reveal data-cat="photos">
+            <div class="tool-media">
+              <img class="tool-shot" src="assets/tools/editphotos-dark.webp" data-dark="assets/tools/editphotos-dark.webp" data-light="assets/tools/editphotos-light.webp" data-kind="poster" width="420" height="648" loading="lazy" decoding="async"
+                   alt="Edit tool window: a photo preview above tabs and light, colour and grain sliders."
+                   data-alt-en="Edit tool window: a photo preview above tabs and light, colour and grain sliders."
+                   data-alt-ar="نافذة أداة التعديل: معاينة صورة فوق تبويبات وأشرطة للضوء واللون والحبيبات.">
+              <button type="button" class="tool-play" aria-describedby="tool-editphotos-title" data-clip-dark="assets/tools/editphotos-dark-clip.webp" data-clip-light="assets/tools/editphotos-light-clip.webp" data-poster-dark="assets/tools/editphotos-dark.webp" data-poster-light="assets/tools/editphotos-light.webp" aria-pressed="false" aria-label="Play motion" data-label-en="Play motion" data-label-ar="تشغيل الحركة">
+                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#i-play"/></svg>
+                <span class="tool-play__text" data-en="Motion" data-ar="حركة"></span>
+              </button>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="tool-num">04</span></div>
+              <h3 id="tool-editphotos-title"><span data-lang="en">Edit</span><span data-lang="ar" lang="ar">تعديل</span></h3>
+              <p><span data-lang="en">Sixteen sliders for light, colour and grain, previewed on the real image. A neutral edit is a byte-for-byte copy.</span><span data-lang="ar" lang="ar">ستة عشر شريطًا للضوء واللون والحبيبات، بمعاينة على الصورة الحقيقية. التعديل المحايد نسخة بايتية.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">16 sliders</span><span data-lang="ar" lang="ar">16 شريطًا</span></li><li><span data-lang="en">Live preview</span><span data-lang="ar" lang="ar">معاينة حيّة</span></li><li><span data-lang="en">Neutral edit stays identical</span><span data-lang="ar" lang="ar">التعديل المحايد مطابق</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 still image</span><span data-lang="ar" lang="ar">صورة ثابتة واحدة</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-annotate" data-tool="annotate" data-reveal data-cat="photos">
+            <div class="tool-media">
+              <img class="tool-shot" src="assets/tools/annotate-dark.webp" data-dark="assets/tools/annotate-dark.webp" data-light="assets/tools/annotate-light.webp" data-kind="poster" width="480" height="571" loading="lazy" decoding="async"
+                   alt="Annotate tool window: a photo with drawn arrows and shapes, tool pills, colours and stroke sizes."
+                   data-alt-en="Annotate tool window: a photo with drawn arrows and shapes, tool pills, colours and stroke sizes."
+                   data-alt-ar="نافذة أداة التعليقات: صورة بأسهم وأشكال مرسومة، وشرائح أدوات، وألوان وسماكات.">
+              <button type="button" class="tool-play" aria-describedby="tool-annotate-title" data-clip-dark="assets/tools/annotate-dark-clip.webp" data-clip-light="assets/tools/annotate-light-clip.webp" data-poster-dark="assets/tools/annotate-dark.webp" data-poster-light="assets/tools/annotate-light.webp" aria-pressed="false" aria-label="Play motion" data-label-en="Play motion" data-label-ar="تشغيل الحركة">
+                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#i-play"/></svg>
+                <span class="tool-play__text" data-en="Motion" data-ar="حركة"></span>
+              </button>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="tool-num">05</span></div>
+              <h3 id="tool-annotate-title"><span data-lang="en">Annotate</span><span data-lang="ar" lang="ar">تعليقات</span></h3>
+              <p><span data-lang="en">Arrows, shapes, text and stamps with colour and stroke controls. Undo, reorder, and export a flat copy.</span><span data-lang="ar" lang="ar">أسهم وأشكال ونصوص وأختام مع لون وسماكة. تراجع، وأعد الترتيب، وصدّر نسخة مسطّحة.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Arrows and shapes</span><span data-lang="ar" lang="ar">أسهم وأشكال</span></li><li><span data-lang="en">Text and stamps</span><span data-lang="ar" lang="ar">نص وأختام</span></li><li><span data-lang="en">Undo and reorder</span><span data-lang="ar" lang="ar">تراجع وإعادة ترتيب</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image</span><span data-lang="ar" lang="ar">صورة واحدة</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-addbackground" data-tool="addbackground" data-reveal data-cat="photos">
+            <div class="tool-media">
+              <img class="tool-shot" src="assets/tools/addbackground-dark.webp" data-dark="assets/tools/addbackground-dark.webp" data-light="assets/tools/addbackground-light.webp" data-kind="poster" width="423" height="648" loading="lazy" decoding="async"
+                   alt="Add BG tool window: a photo on a gradient background with padding, corners, shadow and ratio controls."
+                   data-alt-en="Add BG tool window: a photo on a gradient background with padding, corners, shadow and ratio controls."
+                   data-alt-ar="نافذة أداة الخلفية: صورة على خلفية متدرّجة مع حشوة وزوايا وظل وعناصر نسب.">
+              <button type="button" class="tool-play" aria-describedby="tool-addbackground-title" data-clip-dark="assets/tools/addbackground-dark-clip.webp" data-clip-light="assets/tools/addbackground-light-clip.webp" data-poster-dark="assets/tools/addbackground-dark.webp" data-poster-light="assets/tools/addbackground-light.webp" aria-pressed="false" aria-label="Play motion" data-label-en="Play motion" data-label-ar="تشغيل الحركة">
+                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#i-play"/></svg>
+                <span class="tool-play__text" data-en="Motion" data-ar="حركة"></span>
+              </button>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="tool-num">06</span></div>
+              <h3 id="tool-addbackground-title"><span data-lang="en">Background</span><span data-lang="ar" lang="ar">خلفية</span></h3>
+              <p><span data-lang="en">Pad, round and colour the frame around a photo: nine gradients, nine solids or your own image.</span><span data-lang="ar" lang="ar">أضف حشوة وزوايا ولونًا حول الصورة: تسعة تدرّجات وتسعة ألوان صلبة أو صورتك.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">9 gradients, 9 solids</span><span data-lang="ar" lang="ar">9 تدرّجات و9 ألوان</span></li><li><span data-lang="en">Padding and corners</span><span data-lang="ar" lang="ar">حشوة وزوايا</span></li><li><span data-lang="en">16:9, 1:1, 4:5</span><span data-lang="ar" lang="ar">16:9 و1:1 و4:5</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image</span><span data-lang="ar" lang="ar">صورة واحدة</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-crop" data-tool="crop" data-reveal data-cat="photos">
+            <div class="tool-media">
+              <img class="tool-shot" src="assets/tools/crop-dark.webp" data-dark="assets/tools/crop-dark.webp" data-light="assets/tools/crop-light.webp" data-kind="poster" width="480" height="508" loading="lazy" decoding="async"
+                   alt="Crop tool window: a crop rectangle over a photo, ratio chips and width and height boxes."
+                   data-alt-en="Crop tool window: a crop rectangle over a photo, ratio chips and width and height boxes."
+                   data-alt-ar="نافذة أداة قصّ الصورة: مستطيل قصّ فوق صورة، وشرائح نسب، ومربعا العرض والارتفاع.">
+              <button type="button" class="tool-play" aria-describedby="tool-crop-title" data-clip-dark="assets/tools/crop-dark-clip.webp" data-clip-light="assets/tools/crop-light-clip.webp" data-poster-dark="assets/tools/crop-dark.webp" data-poster-light="assets/tools/crop-light.webp" aria-pressed="false" aria-label="Play motion" data-label-en="Play motion" data-label-ar="تشغيل الحركة">
+                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#i-play"/></svg>
+                <span class="tool-play__text" data-en="Motion" data-ar="حركة"></span>
+              </button>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="tool-num">07</span></div>
+              <h3 id="tool-crop-title"><span data-lang="en">Crop</span><span data-lang="ar" lang="ar">قصّ</span></h3>
+              <p><span data-lang="en">Drag the rectangle, lock a ratio, and apply at the original pixel size. The source is never rewritten.</span><span data-lang="ar" lang="ar">اسحب المستطيل، وثبّت نسبة الأبعاد، وطبّق بالحجم الأصلي للبكسل. لا يُعاد كتابة المصدر أبدًا.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Lock a ratio</span><span data-lang="ar" lang="ar">تثبيت نسبة</span></li><li><span data-lang="en">Original pixel size</span><span data-lang="ar" lang="ar">بالحجم الأصلي</span></li><li><span data-lang="en">Never overwrites</span><span data-lang="ar" lang="ar">لا يستبدل الأصل</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image</span><span data-lang="ar" lang="ar">صورة واحدة</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-redact" data-tool="redact" data-reveal data-cat="photos">
+            <div class="tool-media">
+              <img class="tool-shot" src="assets/tools/redact-dark.webp" data-dark="assets/tools/redact-dark.webp" data-light="assets/tools/redact-light.webp" data-kind="poster" width="480" height="534" loading="lazy" decoding="async"
+                   alt="Redact tool window: a photo with solid redaction boxes and the solid, blur and pixelate mode chips."
+                   data-alt-en="Redact tool window: a photo with solid redaction boxes and the solid, blur and pixelate mode chips."
+                   data-alt-ar="نافذة أداة الحجب: صورة بمربعات حجب صلبة وشرائح الأنماط: صلب وتمويه وبكسلة.">
+              <button type="button" class="tool-play" aria-describedby="tool-redact-title" data-clip-dark="assets/tools/redact-dark-clip.webp" data-clip-light="assets/tools/redact-light-clip.webp" data-poster-dark="assets/tools/redact-dark.webp" data-poster-light="assets/tools/redact-light.webp" aria-pressed="false" aria-label="Play motion" data-label-en="Play motion" data-label-ar="تشغيل الحركة">
+                <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#i-play"/></svg>
+                <span class="tool-play__text" data-en="Motion" data-ar="حركة"></span>
+              </button>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="tool-num">08</span></div>
+              <h3 id="tool-redact-title"><span data-lang="en">Redact</span><span data-lang="ar" lang="ar">حجب</span></h3>
+              <p><span data-lang="en">Solid, blur or pixelate over the areas you draw — with automatic text detection.</span><span data-lang="ar" lang="ar">حجب صلب أو تمويه أو بكسلة فوق ما ترسمه — مع كشف تلقائي للنص.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Solid, blur or pixelate</span><span data-lang="ar" lang="ar">حجب صلب أو تمويه أو بكسلة</span></li><li><span data-lang="en">Automatic text detection</span><span data-lang="ar" lang="ar">كشف تلقائي للنص</span></li><li><span data-lang="en">Flattened export</span><span data-lang="ar" lang="ar">تصدير مسطّح</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image</span><span data-lang="ar" lang="ar">صورة واحدة</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-collage" data-tool="collage" data-reveal data-cat="photos">
+            <div class="tool-media tool-media--abstract tool-media--photos">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="tool-num">09</span></div>
+              <h3 id="tool-collage-title"><span data-lang="en">Collage</span><span data-lang="ar" lang="ar">تجميع</span></h3>
+              <p><span data-lang="en">Arrange two or more photos into 1080², 1920×1080 or 1080×1920, with spacing, rounded cells and a background.</span><span data-lang="ar" lang="ar">رتّب صورتين أو أكثر في 1080² أو 1920×1080 أو 1080×1920، مع فراغ وزوايا مستديرة وخلفية.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">1080, 1920 and portrait</span><span data-lang="ar" lang="ar">1080 و1920 والطولية</span></li><li><span data-lang="en">Grid with spacing</span><span data-lang="ar" lang="ar">شبكة بتباعد</span></li><li><span data-lang="en">Source files untouched</span><span data-lang="ar" lang="ar">الملفات المصدر دون تغيير</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">2+ images</span><span data-lang="ar" lang="ar">صورتان أو أكثر</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-videotrim" data-tool="videotrim" data-reveal data-cat="video">
+            <div class="tool-media tool-media--abstract tool-media--video">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">10</span></div>
+              <h3 id="tool-videotrim-title"><span data-lang="en">Trim</span><span data-lang="ar" lang="ar">اقتصاص</span></h3>
+              <p><span data-lang="en">Scrub the timeline, set in and out, and stream-copy when the codecs allow it — with a re-encode fallback.</span><span data-lang="ar" lang="ar">تنقّل في الخط الزمني، وحدّد البداية والنهاية، وانسخ البثّ متى سمحت الصيغ — مع إعادة ترميز بديلة.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Set start and end</span><span data-lang="ar" lang="ar">تحديد البداية والنهاية</span></li><li><span data-lang="en">Stream-copy when possible</span><span data-lang="ar" lang="ar">نسخ البثّ متى أمكن</span></li><li><span data-lang="en">Source kept</span><span data-lang="ar" lang="ar">المصدر محفوظ</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 video</span><span data-lang="ar" lang="ar">فيديو واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-videocrop" data-tool="videocrop" data-reveal data-cat="video">
+            <div class="tool-media tool-media--abstract tool-media--video">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">11</span></div>
+              <h3 id="tool-videocrop-title"><span data-lang="en">Crop</span><span data-lang="ar" lang="ar">قصّ</span></h3>
+              <p><span data-lang="en">Crop the frame with a draggable rectangle and ratio chips; output dimensions stay even.</span><span data-lang="ar" lang="ar">اقتصّ الإطار بمستطيل قابل للسحب وشرائح نسب، بأبعاد زوجية دائمًا.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Crop a region</span><span data-lang="ar" lang="ar">قص منطقة</span></li><li><span data-lang="en">Ratio chips</span><span data-lang="ar" lang="ar">شرائح نسب</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 video</span><span data-lang="ar" lang="ar">فيديو واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-videospeed" data-tool="videospeed" data-reveal data-cat="video">
+            <div class="tool-media tool-media--abstract tool-media--video">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">12</span></div>
+              <h3 id="tool-videospeed-title"><span data-lang="en">Speed</span><span data-lang="ar" lang="ar">السرعة</span></h3>
+              <p><span data-lang="en">0.25× to 4× with the audio pitch kept. A silent clip is fine.</span><span data-lang="ar" lang="ar">من 0.25× إلى 4× مع الحفاظ على طبقة الصوت. المقطع الصامت لا يمثّل مشكلة.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">0.25× to 4×</span><span data-lang="ar" lang="ar">من 0.25× إلى 4×</span></li><li><span data-lang="en">Audio pitch kept</span><span data-lang="ar" lang="ar">طبقة الصوت محفوظة</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 video</span><span data-lang="ar" lang="ar">فيديو واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-videojoin" data-tool="videojoin" data-reveal data-cat="video">
+            <div class="tool-media tool-media--abstract tool-media--video">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">13</span></div>
+              <h3 id="tool-videojoin-title"><span data-lang="en">Join</span><span data-lang="ar" lang="ar">دمج</span></h3>
+              <p><span data-lang="en">Reorder clips by drag. The first clip sets the size and frame rate; the rest are scaled and padded to fit.</span><span data-lang="ar" lang="ar">رتّب المقاطع بالسحب؛ يحدّد المقطع الأول الحجم ومعدل الإطارات، وتُحجَّم بقية المقاطع لتلائمه وتُضاف إليها حواف سوداء.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Join in order</span><span data-lang="ar" lang="ar">دمج بالترتيب</span></li><li><span data-lang="en">First clip sets the format</span><span data-lang="ar" lang="ar">المقطع الأول يحدّد التنسيق</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">2+ videos</span><span data-lang="ar" lang="ar">فيديوهان أو أكثر</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-videoframes" data-tool="videoframes" data-reveal data-cat="video">
+            <div class="tool-media tool-media--abstract tool-media--video">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">14</span></div>
+              <h3 id="tool-videoframes-title"><span data-lang="en">Save frames</span><span data-lang="ar" lang="ar">حفظ الإطارات</span></h3>
+              <p><span data-lang="en">Stop on a frame, step one at a time, and save full-resolution PNGs into a new folder.</span><span data-lang="ar" lang="ar">توقّف عند إطار، وتقدّم إطارًا واحدًا، واحفظ صور PNG بالدقة الكاملة في مجلد جديد.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Full-resolution PNGs</span><span data-lang="ar" lang="ar">لقطات PNG بالدقة الكاملة</span></li><li><span data-lang="en">Pick the moment</span><span data-lang="ar" lang="ar">اختيار اللحظة</span></li><li><span data-lang="en">Into a new folder</span><span data-lang="ar" lang="ar">إلى مجلد جديد</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 video</span><span data-lang="ar" lang="ar">فيديو واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-videosplit" data-tool="videosplit" data-reveal data-cat="video">
+            <div class="tool-media tool-media--abstract tool-media--video">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">15</span></div>
+              <h3 id="tool-videosplit-title"><span data-lang="en">Split</span><span data-lang="ar" lang="ar">تقسيم</span></h3>
+              <p><span data-lang="en">Cut one video into equal parts or exact ranges, each part written to its own file.</span><span data-lang="ar" lang="ar">اقسم فيديو واحدًا إلى أجزاء متساوية أو مقاطع دقيقة، كل جزء في ملفه.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Equal parts or exact ranges</span><span data-lang="ar" lang="ar">أجزاء متساوية أو نطاقات محددة</span></li><li><span data-lang="en">Every part saved</span><span data-lang="ar" lang="ar">حفظ كل الأجزاء</span></li><li><span data-lang="en">Source untouched</span><span data-lang="ar" lang="ar">المصدر دون تغيير</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 video</span><span data-lang="ar" lang="ar">فيديو واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-videoredact" data-tool="videoredact" data-reveal data-cat="video">
+            <div class="tool-media tool-media--abstract tool-media--video">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">16</span></div>
+              <h3 id="tool-videoredact-title"><span data-lang="en">Redact video</span><span data-lang="ar" lang="ar">حجب الفيديو</span></h3>
+              <p><span data-lang="en">Draw a rectangle over what must be hidden, give it a time range, and pick a solid colour or blur.</span><span data-lang="ar" lang="ar">ارسم مستطيلًا فوق ما يجب إخفاؤه، وحدّد مدته، واختر لونًا صلبًا أو تمويهًا.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Blur or box</span><span data-lang="ar" lang="ar">تمويه أو صندوق</span></li><li><span data-lang="en">Across the clip</span><span data-lang="ar" lang="ar">عبر المقطع</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 video</span><span data-lang="ar" lang="ar">فيديو واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-audiotrim" data-tool="audiotrim" data-reveal data-cat="audio">
+            <div class="tool-media tool-media--abstract tool-media--audio">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span><span class="tool-num">17</span></div>
+              <h3 id="tool-audiotrim-title"><span data-lang="en">Trim</span><span data-lang="ar" lang="ar">اقتصاص</span></h3>
+              <p><span data-lang="en">Waveform handles, exact time boxes, automatic silent-end trimming and playback of the selection.</span><span data-lang="ar" lang="ar">مقابض على الموجة، ومربعات زمنية دقيقة، وقصّ الأطراف الصامتة تلقائيًا، وتشغيل المقطع.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Set start and end</span><span data-lang="ar" lang="ar">تحديد البداية والنهاية</span></li><li><span data-lang="en">Waveform preview</span><span data-lang="ar" lang="ar">معاينة الموجة</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 audio file</span><span data-lang="ar" lang="ar">ملف صوتي واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-audiobleep" data-tool="audiobleep" data-reveal data-cat="audio">
+            <div class="tool-media tool-media--abstract tool-media--audio">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span><span class="tool-num">18</span></div>
+              <h3 id="tool-audiobleep-title"><span data-lang="en">Bleep</span><span data-lang="ar" lang="ar">صافرة</span></h3>
+              <p><span data-lang="en">Drag sections on the bleep layer, resize their edges, and hear the tone before applying.</span><span data-lang="ar" lang="ar">اسحب مقاطع على طبقة الصافرة، وحرّك حوافها، واستمع إلى النغمة قبل التطبيق.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Replace with a tone</span><span data-lang="ar" lang="ar">استبدال بنغمة</span></li><li><span data-lang="en">Place more than one</span><span data-lang="ar" lang="ar">أكثر من تنبيه</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 audio file</span><span data-lang="ar" lang="ar">ملف صوتي واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-audiochannels" data-tool="audiochannels" data-reveal data-cat="audio">
+            <div class="tool-media tool-media--abstract tool-media--audio">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span><span class="tool-num">19</span></div>
+              <h3 id="tool-audiochannels-title"><span data-lang="en">Channels</span><span data-lang="ar" lang="ar">القنوات</span></h3>
+              <p><span data-lang="en">Choose mono or stereo, set each side's level, and solo one side on the real waveform.</span><span data-lang="ar" lang="ar">اختر أحاديًا أو ستيريو، واضبط مستوى كل جانب، واعزل جانبًا واحدًا على الموجة الحقيقية.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Mono or stereo</span><span data-lang="ar" lang="ar">أحادي أو ستيريو</span></li><li><span data-lang="en">Channel controls</span><span data-lang="ar" lang="ar">تحكّم بالقنوات</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 audio file</span><span data-lang="ar" lang="ar">ملف صوتي واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-audionormalize" data-tool="audionormalize" data-reveal data-cat="audio">
+            <div class="tool-media tool-media--abstract tool-media--audio">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span><span class="tool-num">20</span></div>
+              <h3 id="tool-audionormalize-title"><span data-lang="en">Normalize</span><span data-lang="ar" lang="ar">تطبيع</span></h3>
+              <p><span data-lang="en">Target EBU R128 loudness with an analysis pass that predicts the result, then a two-pass apply.</span><span data-lang="ar" lang="ar">استهدف مستوى صوت EBU R128 مع تحليل يتوقّع النتيجة وتطبيق على مرحلتين.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Even loudness</span><span data-lang="ar" lang="ar">تسوية الجهارة</span></li><li><span data-lang="en">EBU R128 target</span><span data-lang="ar" lang="ar">هدف EBU R128</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 audio file</span><span data-lang="ar" lang="ar">ملف صوتي واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-audiovisualizer" data-tool="audiovisualizer" data-reveal data-cat="audio">
+            <div class="tool-media tool-media--abstract tool-media--audio">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span><span class="tool-num">21</span></div>
+              <h3 id="tool-audiovisualizer-title"><span data-lang="en">Visualizer</span><span data-lang="ar" lang="ar">مرئي</span></h3>
+              <p><span data-lang="en">Turn audio into an MP4 with a moving waveform or vector scope, on black or a still, in three shapes.</span><span data-lang="ar" lang="ar">حوّل الصوت إلى MP4 بموجة متحركة أو نطاق متجه، على خلفية سوداء أو صورة، بثلاثة أُطُر: أفقي ورأسي ومربّع.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Waveform or vector scope</span><span data-lang="ar" lang="ar">موجة أو نطاق متجه</span></li><li><span data-lang="en">Colour and size</span><span data-lang="ar" lang="ar">لون وحجم</span></li><li><span data-lang="en">MP4 output</span><span data-lang="ar" lang="ar">إخراج MP4</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 audio file</span><span data-lang="ar" lang="ar">ملف صوتي واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-pdfmerge" data-tool="pdfmerge" data-reveal data-cat="pdf">
+            <div class="tool-media tool-media--abstract tool-media--pdf">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">PDF</span><span data-lang="ar" lang="ar">PDF</span><span class="tool-num">22</span></div>
+              <h3 id="tool-pdfmerge-title"><span data-lang="en">Merge to PDF</span><span data-lang="ar" lang="ar">الدمج إلى PDF</span></h3>
+              <p><span data-lang="en">Merge two or more PDFs or images, reorder them with arrows; page rotation and text are preserved.</span><span data-lang="ar" lang="ar">ادمج ملفّي PDF أو أكثر أو صورًا، ورتّبها بالأسهم؛ يُحافَظ على تدوير الصفحات ونصها.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">2+ files</span><span data-lang="ar" lang="ar">ملفان أو أكثر</span></li><li><span data-lang="en">Order is the plan order</span><span data-lang="ar" lang="ar">الترتيب كما تخطط</span></li><li><span data-lang="en">Rotation preserved</span><span data-lang="ar" lang="ar">يحفظ الدوران</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">2+ PDFs or images</span><span data-lang="ar" lang="ar">ملفّا PDF أو أكثر أو صور</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-pdforganize" data-tool="pdforganize" data-reveal data-cat="pdf">
+            <div class="tool-media tool-media--abstract tool-media--pdf">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">PDF</span><span data-lang="ar" lang="ar">PDF</span><span class="tool-num">23</span></div>
+              <h3 id="tool-pdforganize-title"><span data-lang="en">Organize Pages</span><span data-lang="ar" lang="ar">تنظيم الصفحات</span></h3>
+              <p><span data-lang="en">Rotate, duplicate, delete and drag pages into order, and make every page the same width.</span><span data-lang="ar" lang="ar">دوّر الصفحات وكرّرها واحذفها وأعد ترتيبها بالسحب، ووحّد عرضها.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Rotate pages</span><span data-lang="ar" lang="ar">تدوير الصفحات</span></li><li><span data-lang="en">Duplicate or delete</span><span data-lang="ar" lang="ar">تكرار أو حذف</span></li><li><span data-lang="en">One PDF in</span><span data-lang="ar" lang="ar">ملف PDF واحد</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 PDF</span><span data-lang="ar" lang="ar">ملف PDF واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-protect" data-tool="protect" data-reveal data-cat="protect">
+            <div class="tool-media tool-media--abstract tool-media--protect">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">الحماية</span><span class="tool-num">24</span></div>
+              <h3 id="tool-protect-title"><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">حماية</span></h3>
+              <p><span data-lang="en">AES-256 for a password-protected ZIP, or an AES-256 PDF with print and copy permissions.</span><span data-lang="ar" lang="ar">حماية ZIP بترميز AES-256، أو PDF بترميز AES-256 وصلاحيات طباعة ونسخ.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">AES-256 ZIP</span><span data-lang="ar" lang="ar">ZIP بترميز AES-256</span></li><li><span data-lang="en">Password protected</span><span data-lang="ar" lang="ar">محمي بكلمة مرور</span></li><li><span data-lang="en">Round-trips</span><span data-lang="ar" lang="ar">يفتح بكلمة المرور</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-shield"/></svg><span data-lang="en">1 file, folder or several files</span><span data-lang="ar" lang="ar">ملف أو مجلد أو عدة ملفات</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-unlock" data-tool="unlock" data-reveal data-cat="protect">
+            <div class="tool-media tool-media--abstract tool-media--protect">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">الحماية</span><span class="tool-num">25</span></div>
+              <h3 id="tool-unlock-title"><span data-lang="en">Unlock</span><span data-lang="ar" lang="ar">فتح</span></h3>
+              <p><span data-lang="en">Make an unprotected copy with the right password. Password recovery is not attempted.</span><span data-lang="ar" lang="ar">أنشئ نسخة غير محمية بكلمة المرور الصحيحة. لا تُجرَّب استعادة كلمة المرور.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">Remove the password</span><span data-lang="ar" lang="ar">إزالة كلمة المرور</span></li><li><span data-lang="en">Round-trips</span><span data-lang="ar" lang="ar">يفتح بكلمة المرور</span></li><li><span data-lang="en">Never overwrites</span><span data-lang="ar" lang="ar">لا يستبدل الأصل</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-key"/></svg><span data-lang="en">1 ZIP or PDF</span><span data-lang="ar" lang="ar">ملف ZIP أو PDF واحد</span></p>
+            </div>
+          </article>
+
+          <article class="tool-card" id="tool-lock" data-tool="lock" data-reveal data-cat="protect">
+            <div class="tool-media tool-media--abstract tool-media--protect">
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
+            </div>
+            <div class="tool-body">
+              <div class="tool-kicker"><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">الحماية</span><span class="tool-num">26</span></div>
+              <h3 id="tool-lock-title"><span data-lang="en">Lock</span><span data-lang="ar" lang="ar">قفل</span><span class="beta">Beta</span></h3>
+              <p><span data-lang="en">Turn one file or folder in place into an encrypted container, with three ways in and auto-relock.</span><span data-lang="ar" lang="ar">حوّل ملفًا أو مجلدًا في مكانه إلى حاوية مشفّرة واحدة، بثلاث طرق للدخول وقفل تلقائي.</span></p>
+              <ul class="tool-options"><li><span data-lang="en">File password (Beta)</span><span data-lang="ar" lang="ar">كلمة مرور للملف (بيتا)</span></li><li><span data-lang="en">24-character recovery key</span><span data-lang="ar" lang="ar">مفتاح استرداد من 24 حرفًا</span></li><li><span data-lang="en">Auto-relock</span><span data-lang="ar" lang="ar">إعادة قفل تلقائية</span></li></ul>
+              <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-lock"/></svg><span data-lang="en">1 file or folder</span><span data-lang="ar" lang="ar">ملف أو مجلد واحد</span></p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="protect" aria-labelledby="protect-title">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-shield"/></svg><span data-lang="en">Protect and Lock</span><span data-lang="ar" lang="ar">الحماية والقفل</span></p>
+          <h2 id="protect-title"><span data-lang="en">Protect what matters.</span><span data-lang="ar" lang="ar">احمِ ما يهمّك.</span></h2>
+          <p class="section-lede">
+            <span data-lang="en">Two levels: a portable password-protected ZIP or PDF, and the new in-place Lock container with a Rescuer password and a one-time recovery key.</span>
+            <span data-lang="ar" lang="ar">مستويان: ZIP أو PDF محمي بكلمة مرور، وحاوية القفل الجديدة في المكان مع كلمة مرور المُنقِذ ومفتاح استرداد يُعرض مرة واحدة.</span>
+          </p>
+        </header>
+
+        <div class="protect-grid">
+          <article class="panel">
+            <div class="panel__head">
+              <span class="panel__icon"><svg class="icon" width="24" height="24" aria-hidden="true"><use href="#i-shield"/></svg></span>
+              <h3><span data-lang="en">Protect and Unlock</span><span data-lang="ar" lang="ar">حماية وفتح</span></h3>
+            </div>
+            <p class="panel__lede"><span data-lang="en">AES-256 in a format other apps already open.</span><span data-lang="ar" lang="ar">ترميز AES-256 بصيغة تفتحها تطبيقات أخرى.</span></p>
+            <ul class="ticks">
+              <li><span data-lang="en">A ZIP with AES-256 entries, or a PDF with AES-256 and owner permissions.</span><span data-lang="ar" lang="ar">ZIP بمدخلات AES-256، أو PDF بترميز AES-256 وصلاحيات مالك.</span></li>
+              <li><span data-lang="en">Password strength, confirmation and a reveal toggle; nothing is logged.</span><span data-lang="ar" lang="ar">قوة كلمة المرور وتأكيدها وزر إظهار؛ لا يُسجَّل أي شيء.</span></li>
+              <li><span data-lang="en">Unlock makes a new unprotected copy; the protected file is never overwritten.</span><span data-lang="ar" lang="ar">ينشئ «فتح» نسخة غير محمية جديدة، ولا يُستبدل الملف المحمي أبدًا.</span></li>
+            </ul>
+            <p class="panel__note"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-info"/></svg><span data-lang="en">Honest limit: a ZIP keeps file names visible; the PDF path is the one with permissions.</span><span data-lang="ar" lang="ar">حدّ صريح: يُبقي ZIP أسماء الملفات ظاهرة؛ مسار PDF هو الذي يوفّر الصلاحيات.</span></p>
+          </article>
+
+          <article class="panel panel--lock">
+            <div class="panel__head">
+              <span class="panel__icon"><svg class="icon" width="24" height="24" aria-hidden="true"><use href="#i-lock"/></svg></span>
+              <h3><span data-lang="en">Lock</span><span data-lang="ar" lang="ar">قفل</span><span class="beta">Beta</span></h3>
+            </div>
+            <p class="panel__lede"><span data-lang="en">One file or folder becomes one encrypted container, in place.</span><span data-lang="ar" lang="ar">ملف أو مجلد واحد يتحوّل في مكانه إلى حاوية مشفّرة واحدة.</span></p>
+            <ol class="keys">
+              <li><span class="keys__num">1</span><span><strong><span data-lang="en">File password</span><span data-lang="ar" lang="ar">كلمة مرور الملف</span></strong><small><span data-lang="en">Opens this one container.</span><span data-lang="ar" lang="ar">تفتح هذه الحاوية وحدها.</span></small></span></li>
+              <li><span class="keys__num">2</span><span><strong><span data-lang="en">Rescuer password</span><span data-lang="ar" lang="ar">كلمة مرور المُنقِذ</span></strong><small><span data-lang="en">One password for every protected file.</span><span data-lang="ar" lang="ar">كلمة واحدة لكل ملفاتك المحمية.</span></small></span></li>
+              <li><span class="keys__num">3</span><span><strong><span data-lang="en">Recovery key</span><span data-lang="ar" lang="ar">مفتاح الاسترداد</span></strong><small><span data-lang="en">24 characters, shown once, never stored.</span><span data-lang="ar" lang="ar">24 حرفًا، يُعرض مرة واحدة، ولا يُخزَّن.</span></small></span></li>
+            </ol>
+            <ul class="ticks ticks--tight">
+              <li><span data-lang="en">Atomic, verified replacement; auto-relock when the app closes; crash recovery.</span><span data-lang="ar" lang="ar">استبدال ذرّي متحقَّق منه، وقفل تلقائي عند إغلاق التطبيق، واستعادة بعد التعطّل.</span></li>
+              <li><span data-lang="en">No secrets written under <bdi dir="ltr">%LOCALAPPDATA%</bdi>; per-user associations only.</span><span data-lang="ar" lang="ar">لا تُكتب أي أسرار تحت <bdi dir="ltr">%LOCALAPPDATA%</bdi>؛ والاقترانات لكل مستخدم فقط.</span></li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="badges">
+          <div class="badges__copy">
+            <h3><span data-lang="en">A purple badge on the real icons.</span><span data-lang="ar" lang="ar">شارة بنفسجية على الأيقونات الحقيقية.</span></h3>
+            <p><span data-lang="en">Locked files and folders keep their identity and gain the two-tone badge in Explorer. These previews come from the shipped icon set, over real document and folder glyphs.</span><span data-lang="ar" lang="ar">تحتفظ الملفات والمجلدات المقفلة بهويتها وتكتسب الشارة ثنائية اللون في المستكشف. هذه المعاينات من مجموعة الأيقونات المُسلَّمة، فوق أيقونات مستند ومجلد حقيقية.</span></p>
+          </div>
+          <div class="badges__tiles">
+            <figure class="badge-tile">
+              <img class="theme-image" src="assets/lock/document-dark.webp" data-dark="assets/lock/document-dark.webp" data-light="assets/lock/document-light.webp" width="256" height="256" loading="lazy" decoding="async"
+                   alt="A document icon with the purple DropWheel padlock badge at the bottom-left."
+                   data-alt-en="A document icon with the purple DropWheel padlock badge at the bottom-left."
+                   data-alt-ar="أيقونة مستند مع شارة قفل DropWheel البنفسجية أسفل اليسار.">
+              <figcaption><span data-lang="en">Locked file</span><span data-lang="ar" lang="ar">ملف مقفل</span></figcaption>
+            </figure>
+            <figure class="badge-tile">
+              <img class="theme-image" src="assets/lock/folder-dark.webp" data-dark="assets/lock/folder-dark.webp" data-light="assets/lock/folder-light.webp" width="256" height="256" loading="lazy" decoding="async"
+                   alt="A folder icon with the purple DropWheel padlock badge at the bottom-left."
+                   data-alt-en="A folder icon with the purple DropWheel padlock badge at the bottom-left."
+                   data-alt-ar="أيقونة مجلد مع شارة قفل DropWheel البنفسجية أسفل اليسار.">
+              <figcaption><span data-lang="en">Locked folder</span><span data-lang="ar" lang="ar">مجلد مقفل</span></figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="convert" aria-labelledby="convert-title">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-arrow"/></svg><span data-lang="en">Convert</span><span data-lang="ar" lang="ar">التحويل</span></p>
+          <h2 id="convert-title"><span data-lang="en">Convert without opening anything.</span><span data-lang="ar" lang="ar">حوّل دون فتح أي شيء.</span></h2>
+          <p class="section-lede">
+            <span data-lang="en">Drop on a format. The original is only read, and the result goes next to it or into the folder you drop on.</span>
+            <span data-lang="ar" lang="ar">أفلت على صيغة. يُقرأ الأصل فقط، ويُكتب الناتج بجانبه أو في المجلد الذي تُفلته عليه.</span>
+          </p>
+        </header>
+
+        <div class="format-grid">
+          <article class="format-card">
+            <h3><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span></h3>
+            <ul class="pills"><li>JPG</li><li>PNG</li><li>WEBP</li><li>AVIF</li><li>TIFF</li><li>ICO</li><li>PDF</li></ul>
+          </article>
+          <article class="format-card">
+            <h3><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span></h3>
+            <ul class="pills"><li>MP4</li><li>MOV</li><li>MKV</li><li>WEBM</li><li>GIF</li><li>MP3</li></ul>
+          </article>
+          <article class="format-card">
+            <h3><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span></h3>
+            <ul class="pills"><li>MP3</li><li>M4A</li><li>WAV</li><li>FLAC</li><li>OGG</li><li>OPUS</li><li>AIFF</li></ul>
+          </article>
+          <article class="format-card">
+            <h3><span data-lang="en">Documents</span><span data-lang="ar" lang="ar">المستندات</span></h3>
+            <ul class="pills"><li>DOCX</li><li>PDF</li><li>ODT</li><li>MD</li><li>HTML</li><li>TXT</li><li>EPUB</li><li>RTF</li></ul>
+          </article>
+          <article class="format-card">
+            <h3><span data-lang="en">Slides</span><span data-lang="ar" lang="ar">العروض</span></h3>
+            <ul class="pills"><li>PDF</li><li>PNG</li><li>JPG</li><li>PPTX</li><li>ODP</li></ul>
+          </article>
+          <article class="format-card">
+            <h3><span data-lang="en">Sheets</span><span data-lang="ar" lang="ar">الجداول</span></h3>
+            <ul class="pills"><li>XLSX</li><li>CSV</li><li>TSV</li><li>ODS</li><li>PDF</li></ul>
+          </article>
+          <article class="format-card">
+            <h3><span data-lang="en">From PDF</span><span data-lang="ar" lang="ar">من PDF</span></h3>
+            <ul class="pills"><li>JPG</li><li>PNG</li><li>PPTX</li><li>XLSX</li><li>TXT</li><li>MD</li><li>HTML</li><li>EPUB</li><li>DOCX</li></ul>
+          </article>
+          <article class="format-card">
+            <h3><span data-lang="en">Archives</span><span data-lang="ar" lang="ar">الأرشيف</span></h3>
+            <ul class="pills"><li>ZIP</li><li>TAR</li><li>TAR.GZ</li></ul>
+          </article>
+        </div>
+
+        <p class="section-footnote">
+          <svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-info"/></svg>
+          <span data-lang="en">FFmpeg and Pandoc are optional for video, audio and documents. DropWheel finds them on <bdi dir="ltr">PATH</bdi>, or fetches them only when you allow downloads; company-safe defaults keep that off.</span>
+          <span data-lang="ar" lang="ar">FFmpeg وPandoc اختياريان للفيديو والصوت والمستندات. يبحث عنهما DropWheel في <bdi dir="ltr">PATH</bdi>، أو ينزّلهما فقط عندما تسمح بالتنزيل؛ والإعدادات الآمنة للشركات تُبقي ذلك معطّلًا.</span>
+        </p>
+      </div>
+    </section>
+
+    <section class="section section--privacy" id="privacy" aria-labelledby="privacy-title">
+      <div class="wrap">
+        <div class="privacy-panel">
+          <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-shield"/></svg><span data-lang="en">Privacy</span><span data-lang="ar" lang="ar">الخصوصية</span></p>
+          <h2 id="privacy-title"><span data-lang="en">Processed on your PC. Nothing is uploaded.</span><span data-lang="ar" lang="ar">تُعالَج على جهازك. لا يُرفَع أي شيء.</span></h2>
+          <p class="privacy-panel__lede"><span data-lang="en">No account, no cloud conversion, no telemetry. Outbound requests are limited to the update check, the optional FFmpeg/Pandoc downloads (off by default), and a file or link you drop on the wheel from a browser.</span><span data-lang="ar" lang="ar">لا حساب ولا تحويل سحابي ولا قياسات. تقتصر الطلبات الصادرة على فحص التحديث، وتنزيل FFmpeg وPandoc الاختياري (وهو معطّل افتراضيًا)، وملف أو رابط تُفلته على العجلة من المتصفح.</span></p>
+          <div class="privacy-grid">
+            <article>
+              <h3><span data-lang="en">Local by default</span><span data-lang="ar" lang="ar">محلي افتراضيًا</span></h3>
+              <p><span data-lang="en">Conversions, edits and encryption run in the app on your machine. Your files never leave the folder you dropped them from.</span><span data-lang="ar" lang="ar">تجري التحويلات والتحرير والتشفير داخل التطبيق على جهازك. لا تغادر ملفاتك المجلد الذي سحبتها منه.</span></p>
+            </article>
+            <article>
+              <h3><span data-lang="en">One signed update check</span><span data-lang="ar" lang="ar">فحص تحديث موقَّع واحد</span></h3>
+              <p><span data-lang="en">DropWheel checks GitHub 60 seconds after start and then once a day. Nothing downloads until you press Update; the download is checked by SHA-256 and an ECDSA P-256 signature.</span><span data-lang="ar" lang="ar">يفحص DropWheel GitHub بعد 60 ثانية من التشغيل ثم مرة يوميًا. لا يُنزَّل شيء قبل ضغط «تحديث»، ويُفحص التنزيل ببصمة SHA-256 وتوقيع ECDSA P-256.</span></p>
+            </article>
+            <article>
+              <h3><span data-lang="en">This page has no trackers</span><span data-lang="ar" lang="ar">هذه الصفحة بلا متتبّعات</span></h3>
+              <p><span data-lang="en">No cookies, analytics, external fonts or scripts. The Content-Security-Policy blocks every outbound network request from the page; the GitHub links open only when you click them.</span><span data-lang="ar" lang="ar">لا ملفات تعريف ارتباط ولا تحليلات ولا خطوط أو نصوص خارجية. تمنع سياسة أمان المحتوى كل طلب شبكي صادر من الصفحة؛ ولا تُفتح روابط GitHub إلا بنقرك عليها.</span></p>
+            </article>
+            <article>
+              <h3><span data-lang="en">Open source, MIT</span><span data-lang="ar" lang="ar">مفتوح المصدر بترخيص MIT</span></h3>
+              <p><span data-lang="en">Read the code, build it yourself, or compare the published hash with the source you reviewed.</span><span data-lang="ar" lang="ar">اقرأ الشيفرة، أو ابنِها بنفسك، أو قارن البصمة المنشورة بالمصدر الذي راجعته.</span></p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="whats-new" aria-labelledby="whats-new-title">
+      <div class="wrap">
+        <header class="section-head section-head--split">
+          <div>
+            <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-spark"/></svg><span data-lang="en">Version 2.4.0</span><span data-lang="ar" lang="ar">الإصدار 2.4.0</span></p>
+            <h2 id="whats-new-title"><span data-lang="en">What is new.</span><span data-lang="ar" lang="ar">ما الجديد.</span></h2>
+          </div>
+          <p class="version-badge"><span class="dot" aria-hidden="true"></span><span data-lang="en">In final verification — ships with the signed release</span><span data-lang="ar" lang="ar">قيد التحقق النهائي — يُنشر مع الإصدار الموقَّع</span></p>
+        </header>
+
+        <ol class="changes">
+          <li>
+            <span class="changes__num">01</span>
+            <div>
+              <h3><span data-lang="en">Twenty-six tools, one gesture</span><span data-lang="ar" lang="ar">ست وعشرون أداة بإيماءة واحدة</span></h3>
+              <p><span data-lang="en">Six photo tools, seven video, five audio, PDF pages, protection and file utilities — every window sizes itself to the media it opens.</span><span data-lang="ar" lang="ar">ست أدوات للصور وسبع للفيديو وخمس للصوت وصفحات PDF وحماية وأدوات ملفات — كل نافذة تُكيّف حجمها مع الوسائط.</span></p>
+            </div>
+          </li>
+          <li>
+            <span class="changes__num">02</span>
+            <div>
+              <h3><span data-lang="en">Photo work that stays local</span><span data-lang="ar" lang="ar">عمل الصور يبقى محليًا</span></h3>
+              <p><span data-lang="en">Crop, Edit, Annotate, Redact, Collage and Background, with real previews and a new-file output path that never rewrites the source.</span><span data-lang="ar" lang="ar">اقتصاص وتعديل وتعليقات وحجب وتجميع وخلفية، بمعاينات حقيقية ومسار إخراج في ملف جديد لا يعيد كتابة المصدر.</span></p>
+            </div>
+          </li>
+          <li>
+            <span class="changes__num">03</span>
+            <div>
+              <h3><span data-lang="en">Video without a timeline app</span><span data-lang="ar" lang="ar">فيديو دون تطبيق مونتاج</span></h3>
+              <p><span data-lang="en">Trim, Split, Join, Speed, Crop, Save frames and Redact video — stream-copy when possible, re-encode when not.</span><span data-lang="ar" lang="ar">اقتصاص وتقسيم ودمج وتغيير السرعة وقصّ الفيديو وحفظ الإطارات وحجب الفيديو — نسخ البثّ متى أمكن وإعادة الترميز عند الحاجة.</span></p>
+            </div>
+          </li>
+          <li>
+            <span class="changes__num">04</span>
+            <div>
+              <h3><span data-lang="en">Audio, down to the waveform</span><span data-lang="ar" lang="ar">الصوت حتى أدقّ تفاصيل الموجة</span></h3>
+              <p><span data-lang="en">Trim, Bleep, Channels, Normalize to EBU R128, and Visualizer to MP4.</span><span data-lang="ar" lang="ar">اقتصاص وصافرة وقنوات وتطبيع وفق EBU R128 ومرئي إلى MP4.</span></p>
+            </div>
+          </li>
+          <li>
+            <span class="changes__num">05</span>
+            <div>
+              <h3><span data-lang="en">PDF pages, rearranged</span><span data-lang="ar" lang="ar">صفحات PDF كما تريد</span></h3>
+              <p><span data-lang="en">Merge PDFs and images, then rotate, duplicate, delete and reorder pages before saving a new file.</span><span data-lang="ar" lang="ar">ادمج ملفات PDF والصور، ثم دوّر الصفحات وكرّرها واحذفها وأعد ترتيبها قبل الحفظ في ملف جديد.</span></p>
+            </div>
+          </li>
+          <li>
+            <span class="changes__num">06</span>
+            <div>
+              <h3><span data-lang="en">Protect and Unlock</span><span data-lang="ar" lang="ar">حماية وفتح</span></h3>
+              <p><span data-lang="en">AES-256 ZIP and PDF protection, with explicit permissions and no password recovery.</span><span data-lang="ar" lang="ar">حماية ZIP وPDF بترميز AES-256، بصلاحيات صريحة ودون استعادة كلمات المرور.</span></p>
+            </div>
+          </li>
+          <li>
+            <span class="changes__num">07</span>
+            <div>
+              <h3><span data-lang="en">Lock, in place <span class="beta">Beta</span></span><span data-lang="ar" lang="ar">قفل في المكان <span class="beta">تجريبي</span></span></h3>
+              <p><span data-lang="en">A file or folder becomes one <bdi dir="ltr">.dwenc</bdi>/<bdi dir="ltr">.dwdir</bdi> container: file password, Rescuer password and a one-time 24-character recovery key. Atomic verified replacement, auto-relock, crash recovery and a per-user purple badge.</span><span data-lang="ar" lang="ar">يتحوّل الملف أو المجلد إلى حاوية <bdi dir="ltr">.dwenc</bdi>/<bdi dir="ltr">.dwdir</bdi> واحدة: كلمة مرور الملف، وكلمة مرور المُنقِذ، ومفتاح استرداد من 24 حرفًا يُعرض مرة واحدة. استبدال ذرّي متحقَّق منه، وقفل تلقائي، واستعادة بعد التعطّل، وشارة بنفسجية لكل مستخدم.</span></p>
+            </div>
+          </li>
+          <li>
+            <span class="changes__num">08</span>
+            <div>
+              <h3><span data-lang="en">Motion you can turn off</span><span data-lang="ar" lang="ar">حركة يمكن إيقافها</span></h3>
+              <p><span data-lang="en">One token set: 150 ms for the wheel, 180 ms for windows, and reduced motion honoured from Windows or the app. No animation timers: when the app is idle, no storyboard runs.</span><span data-lang="ar" lang="ar">مجموعة قيم واحدة: 150 مللي ثانية للعجلة و180 للنوافذ، مع احترام تقليل الحركة من ويندوز أو من التطبيق. بلا مؤقتات للحركة: لا يعمل أي عرض حركي عندما يكون التطبيق خاملًا.</span></p>
+            </div>
+          </li>
+          <li>
+            <span class="changes__num">09</span>
+            <div>
+              <h3><span data-lang="en">Measured in CI</span><span data-lang="ar" lang="ar">قياس داخل CI</span></h3>
+              <p><span data-lang="en">Budgets for package size, cold start and idle memory; a motion gate checks UI frame p95, idle CPU and retention on every run.</span><span data-lang="ar" lang="ar">ميزانيات لحجم الحزمة وبدء التشغيل والذاكرة الخاملة؛ وبوابة حركة تفحص زمن الإطار واستهلاك المعالج والاحتفاظ بالذاكرة في كل تشغيل.</span></p>
+            </div>
+          </li>
+          <li>
+            <span class="changes__num">10</span>
+            <div>
+              <h3><span data-lang="en">Smaller files, cleaner metadata, offline QR</span><span data-lang="ar" lang="ar">ملفات أصغر وبيانات أنظف وQR دون اتصال</span></h3>
+              <p><span data-lang="en">Compress to a target size, edit or strip metadata, and read QR codes without a network.</span><span data-lang="ar" lang="ar">اضغط إلى حجم مستهدف، وحرّر البيانات الوصفية أو أزلها، واقرأ رموز QR دون شبكة.</span></p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section" id="verify" aria-labelledby="verify-title">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-hash"/></svg><span data-lang="en">Verify</span><span data-lang="ar" lang="ar">التحقق</span></p>
+          <h2 id="verify-title"><span data-lang="en">Verify before you run.</span><span data-lang="ar" lang="ar">تحقّق قبل التشغيل.</span></h2>
+          <p class="section-lede">
+            <span data-lang="en">Every release publishes <bdi dir="ltr">SHA256SUMS.txt</bdi> and a detached <bdi dir="ltr">.sig</bdi>. Compare both before you run the installer.</span>
+            <span data-lang="ar" lang="ar">ينشر كل إصدار ملف <bdi dir="ltr">SHA256SUMS.txt</bdi> وتوقيعًا منفصلًا <bdi dir="ltr">.sig</bdi>. طابقهما قبل تشغيل المثبّت.</span>
+          </p>
+        </header>
+
+        <div class="verify-grid">
+          <article class="verify-card">
+            <h3><span class="verify-card__step">1</span><span data-lang="en">SHA-256</span><span data-lang="ar" lang="ar">بصمة SHA-256</span></h3>
+            <pre dir="ltr" tabindex="0"><code>Get-FileHash .\DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-Setup.exe -Algorithm SHA256</code></pre>
+            <p><span data-lang="en">Compare the result with the setup line in <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a>.</span><span data-lang="ar" lang="ar">قارن الناتج بسطر المثبّت في <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a>.</span></p>
+          </article>
+          <article class="verify-card">
+            <h3><span class="verify-card__step">2</span><span data-lang="en">Signature</span><span data-lang="ar" lang="ar">التوقيع</span></h3>
+            <pre dir="ltr" tabindex="0"><code>pwsh ./scripts/verify-signature.ps1 .\DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-Setup.exe</code></pre>
+            <p><span data-lang="en">Exit code 0 means the ECDSA P-256 signature matches the key compiled into DropWheel. Any other code: do not run the file.</span><span data-lang="ar" lang="ar">رمز الخروج 0 يعني أن توقيع ECDSA P-256 يطابق المفتاح المضمَّن في DropWheel. أي رمز آخر: لا تشغّل الملف.</span></p>
+          </article>
+        </div>
+
+        <div class="release-card">
+          <div class="release-card__head">
+            <div>
+              <p class="release-card__label"><span data-lang="en">Latest signed release</span><span data-lang="ar" lang="ar">آخر إصدار موقَّع</span></p>
+              <p class="release-card__version"><bdi dir="ltr"><!--release-version:start-->2.3.0<!--release-version:end--></bdi></p>
+            </div>
+            <a class="btn btn--primary" href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/DropWheel-Setup.exe" rel="noopener noreferrer">
+              <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#i-download"/></svg>
+              <span data-lang="en">Download installer · <!--release-mb:start-->60.05<!--release-mb:end--> MB</span><span data-lang="ar" lang="ar">تنزيل المثبّت · <!--release-mb:start-->60.05<!--release-mb:end--> ميجابايت</span>
+            </a>
+          </div>
+          <dl class="release-files">
+            <div>
+              <dt><span data-lang="en">Installer</span><span data-lang="ar" lang="ar">المثبّت</span></dt>
+              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/DropWheel-2.3.0-Setup.exe" rel="noopener noreferrer"><bdi dir="ltr">DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-Setup.exe</bdi></a></dd>
+            </div>
+            <div>
+              <dt><span data-lang="en">Portable ZIP</span><span data-lang="ar" lang="ar">أرشيف محمول</span></dt>
+              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/DropWheel-2.3.0-portable-win-x64.zip" rel="noopener noreferrer"><bdi dir="ltr">DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-portable-win-x64.zip</bdi></a></dd>
+            </div>
+            <div>
+              <dt><span data-lang="en">Checksums</span><span data-lang="ar" lang="ar">البصمات</span></dt>
+              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer"><bdi dir="ltr">SHA256SUMS.txt</bdi></a><a class="inline-link" href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/DropWheel-2.3.0-Setup.exe.sig" rel="noopener noreferrer"><bdi dir="ltr">.sig</bdi></a></dd>
+            </div>
+          </dl>
+
+          <details class="for-it">
+            <summary class="for-it__summary">
+              <span class="for-it__title"><span data-lang="en">For IT · full SHA-256</span><span data-lang="ar" lang="ar">للاطّلاع التقني · بصمة SHA-256 الكاملة</span></span>
+              <span class="for-it__hint"><span data-lang="en">Hash and copy</span><span data-lang="ar" lang="ar">البصمة والنسخ</span></span>
+            </summary>
+            <div class="hash-block">
+              <div class="hash-block__head">
+                <span class="hash-block__label">SHA-256 · <bdi dir="ltr">DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-Setup.exe</bdi></span>
+                <button type="button" class="copy-button" data-copy-target="sha-setup" data-label-en="Copy" data-label-ar="نسخ">
+                  <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-copy"/></svg>
+                  <span class="copy-button__text" data-en="Copy" data-ar="نسخ">Copy</span>
+                </button>
+              </div>
+              <code class="hash-block__value" id="sha-setup" dir="ltr"><!--release-sha256:start-->7381cbd5b59249f3279b62af31091d89d3d8d994faa57fcdd08ec4331d7156ce<!--release-sha256:end--></code>
+              <p class="hash-block__meta"><span data-lang="en">Installer size</span><span data-lang="ar" lang="ar">حجم المثبّت</span><bdi dir="ltr"><!--release-bytes:start-->62,967,948<!--release-bytes:end--> B</bdi></p>
+              <p class="copy-status" id="copy-status" aria-live="polite"></p>
+            </div>
+          </details>
+
+          <p class="release-card__note">
+            <svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-info"/></svg>
+            <span data-lang="en">The installer is not Authenticode-signed yet, so SmartScreen may warn. Verify the hash and signature first; only then choose <em>More info → Run anyway</em>. The <a href="https://github.com/Faisaldhd/dropwheel/blob/main/docs/signing-updates.md" rel="noopener noreferrer">signing reference</a> documents the exact format.</span>
+            <span data-lang="ar" lang="ar">المثبّت غير موقَّع بـAuthenticode بعد، لذا قد يُحذّر SmartScreen. تحقّق من البصمة والتوقيع أولًا، وبعدها فقط اختر <em>مزيد من المعلومات ← التشغيل على أي حال</em>. يوثّق <a href="https://github.com/Faisaldhd/dropwheel/blob/main/docs/signing-updates.md" rel="noopener noreferrer">مرجع التوقيع</a> الصيغة الدقيقة.</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="faq" aria-labelledby="faq-title">
+      <div class="wrap">
+        <header class="section-head">
+          <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-info"/></svg><span data-lang="en">FAQ</span><span data-lang="ar" lang="ar">الأسئلة الشائعة</span></p>
+          <h2 id="faq-title"><span data-lang="en">Questions, answered plainly.</span><span data-lang="ar" lang="ar">أسئلة بإجابات صريحة.</span></h2>
+        </header>
+
+        <div class="faq">
+          <details>
+            <summary><span data-lang="en">Windows says “Windows protected your PC”. What now?</span><span data-lang="ar" lang="ar">يقول ويندوز «قام Windows بحماية جهازك». ماذا أفعل؟</span></summary>
+            <p><span data-lang="en">The installer is not Authenticode-signed yet, so SmartScreen may warn. Do not click through blindly: compare the SHA-256 with <bdi dir="ltr">SHA256SUMS.txt</bdi> and verify the <bdi dir="ltr">.sig</bdi> first. If both match, choose <em>More info → Run anyway</em>. A security team can allow-list the binary by hash.</span><span data-lang="ar" lang="ar">المثبّت غير موقَّع بـAuthenticode بعد، لذا قد يُحذّر SmartScreen. لا تتجاوز التحذير دون فحص: طابق بصمة SHA-256 مع <bdi dir="ltr">SHA256SUMS.txt</bdi> وتحقّق من <bdi dir="ltr">.sig</bdi> أولًا. إذا تطابقا، اختر <em>مزيد من المعلومات ← التشغيل على أي حال</em>. ويمكن لفريق الأمان إدراج الملف في قائمة السماح بالبصمة.</span></p>
+          </details>
+          <details>
+            <summary><span data-lang="en">How do updates work?</span><span data-lang="ar" lang="ar">كيف تعمل التحديثات؟</span></summary>
+            <p><span data-lang="en">DropWheel checks GitHub 60 seconds after start, then once a day, and when you press <em>Check for updates</em>. Nothing is downloaded until you press <em>Update now</em>. The file is checked twice — SHA-256 and an ECDSA P-256 signature against the key compiled into the app. A failed check deletes it and shows “Update could not be verified”.</span><span data-lang="ar" lang="ar">يفحص DropWheel GitHub بعد 60 ثانية من التشغيل ثم مرة يوميًا وعند ضغط <em>التحقّق من التحديثات</em>. لا يُنزَّل شيء قبل ضغط <em>تحديث الآن</em>. ويُفحص الملف مرتين: ببصمة SHA-256 وتوقيع ECDSA P-256 بالمفتاح المضمَّن في التطبيق. وإذا فشل الفحص يُحذف الملف وتظهر رسالة «تعذّر التحقق من التحديث».</span></p>
+          </details>
+          <details>
+            <summary><span data-lang="en">Does it need administrator rights?</span><span data-lang="ar" lang="ar">هل يحتاج صلاحيات المسؤول؟</span></summary>
+            <p><span data-lang="en">No for the default install. <em>Install for me only</em> puts DropWheel in <bdi dir="ltr">%LOCALAPPDATA%\Programs\DropWheel</bdi>. <em>Install for all users</em> needs administrator rights and writes to <bdi dir="ltr">%ProgramFiles%\DropWheel</bdi>.</span><span data-lang="ar" lang="ar">لا، ليس في التثبيت الافتراضي. يضع <em>التثبيت لي فقط</em> التطبيق في <bdi dir="ltr">%LOCALAPPDATA%\Programs\DropWheel</bdi>. أما <em>التثبيت لكل المستخدمين</em> فيحتاج صلاحيات المسؤول ويكتب في <bdi dir="ltr">%ProgramFiles%\DropWheel</bdi>.</span></p>
+          </details>
+          <details>
+            <summary><span data-lang="en">Are my files uploaded?</span><span data-lang="ar" lang="ar">هل تُرفَع ملفاتي؟</span></summary>
+            <p><span data-lang="en">No. Everything is processed locally; there is no account, telemetry or cloud conversion. Nothing you drop is uploaded. The only outbound requests are the update check described above, the optional FFmpeg/Pandoc downloads when you allow them, and a file or link you drop on the wheel from a browser.</span><span data-lang="ar" lang="ar">لا. تُعالَج كل الملفات محليًا، ولا حساب ولا قياسات ولا تحويل سحابي، ولا يُرفَع أي شيء تُفلته. لا تخرج طلبات شبكية إلا لفحص التحديث المذكور أعلاه، أو لتنزيل FFmpeg وPandoc عند السماح به، أو لملف أو رابط تُفلته على العجلة من المتصفح.</span></p>
+          </details>
+          <details>
+            <summary><span data-lang="en">Where do results go?</span><span data-lang="ar" lang="ar">أين تُحفظ النتائج؟</span></summary>
+            <p><span data-lang="en">Next to the original, or in the folder you drop the file on. The original is never modified, and a second run gets a numbered name instead of overwriting the first result.</span><span data-lang="ar" lang="ar">بجانب الأصل، أو في المجلد الذي تُسقط عليه الملف. لا يُعدَّل الأصل أبدًا، ويحصل التشغيل الثاني على اسم مرقّم بدل استبدال الناتج الأول.</span></p>
+          </details>
+          <details>
+            <summary><span data-lang="en">Why is Lock marked Beta?</span><span data-lang="ar" lang="ar">لماذا القفل تجريبي؟</span></summary>
+            <p><span data-lang="en">Lock rewrites a real file or folder in place into a new container format. The format is versioned and every replacement is verified, but it is new in 2.4.0: test it on a copy before you protect irreplaceable data. Protect (ZIP/PDF) is the mature path.</span><span data-lang="ar" lang="ar">يعيد القفل كتابة ملف أو مجلد حقيقي في مكانه إلى صيغة حاوية جديدة. الصيغة تحمل رقم إصدار، وكل استبدال متحقَّق منه، لكنها جديدة في 2.4.0: جرّبها على نسخة قبل حماية بيانات لا يمكن تعويضها. و«حماية» (ZIP/PDF) هي المسار الناضج.</span></p>
+          </details>
+          <details>
+            <summary><span data-lang="en">What are the requirements?</span><span data-lang="ar" lang="ar">ما المتطلبات؟</span></summary>
+            <p><span data-lang="en">Windows 10 version 1809 or newer, or Windows 11; 64-bit. The installer is self-contained, so no .NET install. FFmpeg and Pandoc are optional for video, audio and document conversions.</span><span data-lang="ar" lang="ar">ويندوز 10 إصدار 1809 أو أحدث، أو ويندوز 11؛ 64 بت. المثبّت مكتفٍ ذاتيًا فلا حاجة لتثبيت .NET. وFFmpeg وPandoc اختياريان لتحويلات الفيديو والصوت والمستندات.</span></p>
+          </details>
+          <details>
+            <summary><span data-lang="en">Which languages does it speak?</span><span data-lang="ar" lang="ar">ما اللغات المدعومة؟</span></summary>
+            <p><span data-lang="en">English and Arabic with a full right-to-left layout, including the installer. Technical values stay left-to-right.</span><span data-lang="ar" lang="ar">الإنجليزية والعربية بتخطيط كامل من اليمين إلى اليسار، بما في ذلك المثبّت. وتبقى القيم التقنية من اليسار إلى اليمين.</span></p>
+          </details>
+          <details>
+            <summary><span data-lang="en">Is it really open source?</span><span data-lang="ar" lang="ar">هل هو مفتوح المصدر فعلًا؟</span></summary>
+            <p><span data-lang="en">Yes. MIT licence, source on GitHub. DropWheel is based on FileAction by Metamorfolog and is not affiliated with Tangerine.</span><span data-lang="ar" lang="ar">نعم. ترخيص MIT والشيفرة على GitHub. DropWheel مبني على FileAction من Metamorfolog، ولا صلة له بمشروع Tangerine.</span></p>
+          </details>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer">
-    <div class="lang lang-en" data-language="en" lang="en" dir="ltr">
-      <p class="license-line">Free &amp; open source (<a href="https://github.com/Faisaldhd/dropwheel/blob/main/LICENSE" rel="noopener">MIT</a>) · based on <a href="https://github.com/Metamorfolog/file_action" rel="noopener">FileAction</a> by Metamorfolog</p>
-      <p class="source-link"><a href="https://github.com/Faisaldhd/dropwheel" rel="noopener">Source code on GitHub</a></p>
-    </div>
-    <div class="lang lang-ar" data-language="ar" lang="ar" dir="rtl" hidden>
-      <p class="license-line"><span lang="en" dir="ltr">Free &amp; open source (<a href="https://github.com/Faisaldhd/dropwheel/blob/main/LICENSE" rel="noopener">MIT</a>) · based on <a href="https://github.com/Metamorfolog/file_action" rel="noopener">FileAction</a> by Metamorfolog</span></p>
-      <p class="source-link"><a href="https://github.com/Faisaldhd/dropwheel" rel="noopener">الشيفرة المصدرية على GitHub</a></p>
+    <div class="wrap">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="#top" data-label-en="Back to top" data-label-ar="العودة إلى الأعلى">
+            <img class="brand__mark" src="assets/icon/dropwheel-128.webp" width="128" height="128" alt="" loading="lazy" decoding="async">
+            <span class="brand__word">DropWheel</span>
+          </a>
+          <p><span data-lang="en">File tools that come to your cursor. Built for Windows, running entirely on your PC.</span><span data-lang="ar" lang="ar">أدوات ملفات تأتي إلى مؤشرك. مبنية لويندوز وتعمل بالكامل على جهازك.</span></p>
+          <p class="footer-privacy"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-shield"/></svg><span data-lang="en">No cookies · no analytics · no third-party requests</span><span data-lang="ar" lang="ar">لا ملفات تعريف الارتباط · لا تحليلات · لا طلبات خارجية</span></p>
+        </div>
+        <nav class="footer-col" aria-label="Product" data-label-en="Product" data-label-ar="المنتج">
+          <h2><span data-lang="en">Product</span><span data-lang="ar" lang="ar">المنتج</span></h2>
+          <ul>
+            <li><a href="#wheel"><span data-lang="en">The wheel</span><span data-lang="ar" lang="ar">العجلة</span></a></li>
+            <li><a href="#tools"><span data-lang="en">All 26 tools</span><span data-lang="ar" lang="ar">الأدوات الست والعشرون</span></a></li>
+            <li><a href="#protect"><span data-lang="en">Protect and Lock</span><span data-lang="ar" lang="ar">الحماية والقفل</span></a></li>
+            <li><a href="#convert"><span data-lang="en">Formats</span><span data-lang="ar" lang="ar">الصيغ</span></a></li>
+            <li><a href="#whats-new"><span data-lang="en">What is new in 2.4.0</span><span data-lang="ar" lang="ar">ما الجديد في 2.4.0</span></a></li>
+          </ul>
+        </nav>
+        <nav class="footer-col" aria-label="Project" data-label-en="Project" data-label-ar="المشروع">
+          <h2><span data-lang="en">Project</span><span data-lang="ar" lang="ar">المشروع</span></h2>
+          <ul>
+            <li><a href="https://github.com/Faisaldhd/dropwheel" rel="noopener noreferrer"><span data-lang="en">Source code</span><span data-lang="ar" lang="ar">الشيفرة المصدرية</span></a></li>
+            <li><a href="https://github.com/Faisaldhd/dropwheel/releases" rel="noopener noreferrer"><span data-lang="en">All releases</span><span data-lang="ar" lang="ar">كل الإصدارات</span></a></li>
+            <li><a href="https://github.com/Faisaldhd/dropwheel/blob/main/SECURITY.md" rel="noopener noreferrer"><span data-lang="en">Security policy</span><span data-lang="ar" lang="ar">سياسة الأمان</span></a></li>
+            <li><a href="https://github.com/Faisaldhd/dropwheel/blob/main/LICENSE" rel="noopener noreferrer"><span data-lang="en">MIT licence</span><span data-lang="ar" lang="ar">ترخيص MIT</span></a></li>
+          </ul>
+        </nav>
+        <nav class="footer-col" aria-label="Trust" data-label-en="Trust" data-label-ar="الثقة">
+          <h2><span data-lang="en">Trust</span><span data-lang="ar" lang="ar">الثقة</span></h2>
+          <ul>
+            <li><a href="#verify"><span data-lang="en">Verify a download</span><span data-lang="ar" lang="ar">التحقق من التنزيل</span></a></li>
+            <li><a href="https://github.com/Faisaldhd/dropwheel/blob/main/docs/signing-updates.md" rel="noopener noreferrer"><span data-lang="en">Signing reference</span><span data-lang="ar" lang="ar">مرجع التوقيع</span></a></li>
+            <li><a href="#privacy"><span data-lang="en">Privacy</span><span data-lang="ar" lang="ar">الخصوصية</span></a></li>
+            <li><a href="https://github.com/Metamorfolog/file_action" rel="noopener noreferrer"><span data-lang="en">Based on FileAction</span><span data-lang="ar" lang="ar">مبني على FileAction</span></a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="footer-bottom">
+        <p>© <span id="year">2026</span> DropWheel contributors · <span data-lang="en">MIT</span><span data-lang="ar" lang="ar">MIT</span></p>
+        <p><span data-lang="en">Independent Windows project. Not affiliated with Tangerine.</span><span data-lang="ar" lang="ar">مشروع ويندوز مستقل. لا صلة له بمشروع Tangerine.</span></p>
+      </div>
     </div>
   </footer>
 </body>
