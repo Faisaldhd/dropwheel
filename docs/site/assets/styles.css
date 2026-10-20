@@ -1906,3 +1906,12 @@ h1 {
   word-break: break-all;
   white-space: normal;
 }
+
+/* Arabic does not use Latin tracking: negative display tracking and uppercase tracking both
+ * distort the joins. Keep the scale, drop the tracking (design notes, RTL section). */
+html[lang="ar"] h1,
+html[lang="ar"] h2,
+html[lang="ar"] h3 { letter-spacing: 0; }
+html[lang="ar"] .eyebrow,
+html[lang="ar"] .tool-kicker,
+html[lang="ar"] .hero-hash__label { letter-spacing: 0.02em; }
