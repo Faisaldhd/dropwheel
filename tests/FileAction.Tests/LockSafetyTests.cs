@@ -1,4 +1,6 @@
+using System.Runtime.ExceptionServices;
 using System.Text;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using FileAction.App.Shell.Protection;
@@ -60,6 +62,9 @@ public class LockSafetyTests
     {
         public List<(string Path, bool Recycle)> Removed { get; } = [];
         public List<string> Notified { get; } = [];
+        public bool SessionOpen { get; set; }
+
+        public bool IsSessionOpen(string protectedPath) => SessionOpen;
 
         public void RemoveContainer(string protectedPath, bool recycleBin)
         {
@@ -641,36 +646,137 @@ public class LockSafetyTests
     // ------------------------------------------------------------------ icons, registry, desktop.ini
 
     [Fact]
-    public void Lock_icons_are_shipped_multi_size_png_frames_and_use_the_purple_tokens()
+    public void Padlock_is_the_only_shipped_badge_and_uses_the_purple_tokens()
     {
-        long total = 0;
-        foreach (var name in LockIcons.AssetNames)
+        var icon = LockIcons.PadlockBytes;
+        Assert.True(icon.Length < 200 * 1024, $"padlock.ico is {icon.Length} bytes");
+        Assert.True(LockIcons.HasAllFrames(icon), "padlock.ico must contain 16/24/32/48/64/256 PNG frames");
+        foreach (var size in LockIcons.FrameSizes)
         {
-            var icon = LockIcons.AssetBytes(name);
-            total += icon.Length;
-            Assert.True(LockIcons.HasAllFrames(icon), name + " must contain 16/24/32/48/64/256 PNG frames");
-            foreach (var size in LockIcons.FrameSizes)
-            {
-                var frame = LockIcons.ReadFrame(icon, size);
-                Assert.NotNull(frame);
-                var decoder = BitmapDecoder.Create(new MemoryStream(frame!),
-                    BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-                Assert.Equal(size, decoder.Frames[0].PixelWidth);
-                Assert.Equal(size, decoder.Frames[0].PixelHeight);
-            }
+            var frame = LockIcons.ReadFrame(icon, size);
+            Assert.NotNull(frame);
+            var decoder = BitmapDecoder.Create(new MemoryStream(frame!),
+                BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            Assert.Equal(size, decoder.Frames[0].PixelWidth);
+            Assert.Equal(size, decoder.Frames[0].PixelHeight);
         }
-        Assert.True(total < 200 * 1024, $"lock icons are {total} bytes; the budget is 200 KB");
-
         Assert.Equal(Color.FromRgb(0x82, 0x24, 0xD4), Theme.LockBadgeColor);
         Assert.Equal(Color.FromRgb(0xB4, 0x8A, 0xE0), Theme.LockBadgeHighlightColor);
         Assert.Equal(Theme.LockBadgeColor, ((SolidColorBrush)Theme.LockBadge).Color);
         Assert.Equal(Theme.LockBadgeHighlightColor, ((SolidColorBrush)Theme.LockBadgeHighlight).Color);
+    }
 
-        Assert.Equal("locked-image", LockIcons.AssetForPath("photo.JPG"));
-        Assert.Equal("locked-video", LockIcons.AssetForPath("clip.mp4"));
-        Assert.Equal("locked-archive", LockIcons.AssetForPath("bundle.zip"));
-        Assert.Equal("locked-document", LockIcons.AssetForPath("notes.pdf"));
-        Assert.Equal("locked-other", LockIcons.AssetForPath("data.bin"));
+    [Fact]
+    public void Composition_keeps_the_real_shell_icon_and_adds_purple_pixels_bottom_left()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var pdf = Path.Combine(directory, "sample.pdf");
+            var jpg = Path.Combine(directory, "sample.jpg");
+            var folder = Path.Combine(directory, "RealFolder");
+            File.WriteAllBytes(pdf, []);
+            File.WriteAllBytes(jpg, []);
+            Directory.CreateDirectory(folder);
+
+            RunSta(() =>
+            {
+                foreach (var (path, isFolder) in new[] { (pdf, false), (jpg, false), (folder, true) })
+                {
+                    foreach (var size in new[] { 48, 256 })
+                    {
+                        var baseIcon = LockIcons.SystemIconFor(path, isFolder, size);
+                        Assert.NotNull(baseIcon);
+                        var composed = LockIcons.Compose(path, isFolder, size);
+                        Assert.NotNull(composed);
+                        Assert.Equal(size, composed!.PixelWidth);
+                        Assert.Equal(size, composed.PixelHeight);
+
+                        var basePixels = ToPixels(Scale(baseIcon!, size));
+                        var pixels = ToPixels(composed);
+                        // The top-right area is untouched by the bottom-left badge.
+                        var topRight = ((size - 2) + (2 * size)) * 4;
+                        Assert.Equal(basePixels[topRight + 0], pixels[topRight + 0]);
+                        Assert.Equal(basePixels[topRight + 1], pixels[topRight + 1]);
+                        Assert.Equal(basePixels[topRight + 2], pixels[topRight + 2]);
+
+                        // Purple #8224D4 pixels exist in the bottom-left quadrant.
+                        var purple = 0;
+                        for (var y = size / 2; y < size; y++)
+                        {
+                            for (var x = 0; x < size / 2; x++)
+                            {
+                                var index = ((y * size) + x) * 4;
+                                var b = pixels[index];
+                                var g = pixels[index + 1];
+                                var r = pixels[index + 2];
+                                var a = pixels[index + 3];
+                                if (a > 200 && r is > 90 and < 180 && g < 90 && b > 170)
+                                    purple++;
+                            }
+                        }
+                        Assert.True(purple > 10, $"{Path.GetFileName(path)} {size}px has no purple badge pixels");
+                    }
+                }
+            });
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void Icon_cache_reuses_the_extension_cleans_items_and_builds_association_icons()
+    {
+        var directory = NewDirectory();
+        var previous = LockIconCache.RootOverride;
+        LockIconCache.RootOverride = directory;
+        try
+        {
+            RunSta(() =>
+            {
+                var pdf = Path.Combine(directory, "a.pdf");
+                var jpg = Path.Combine(directory, "b.jpg");
+                var folder = Path.Combine(directory, "Folder");
+                File.WriteAllBytes(pdf, []);
+                File.WriteAllBytes(jpg, []);
+                Directory.CreateDirectory(folder);
+
+                var first = LockIconCache.EnsureTypeIcon(pdf, folder: false);
+                var stamp = File.GetLastWriteTimeUtc(first);
+                Thread.Sleep(30);
+                var again = LockIconCache.EnsureTypeIcon(pdf, folder: false);
+                Assert.Equal(first, again);
+                Assert.Equal(stamp, File.GetLastWriteTimeUtc(again));
+
+                var other = LockIconCache.EnsureTypeIcon(jpg, folder: false);
+                Assert.NotEqual(first, other);
+                Assert.True(LockIcons.HasAllFrames(File.ReadAllBytes(first)));
+
+                var item = LockIconCache.EnsureItemIcon(pdf, folder: false);
+                Assert.True(File.Exists(item));
+                Assert.Equal(File.ReadAllBytes(first), File.ReadAllBytes(item));
+                LockIconCache.RemoveItem(pdf);
+                Assert.False(File.Exists(item));
+
+                var (fileIcon, folderIcon) = LockIconCache.EnsureAssociationIcons();
+                Assert.True(File.Exists(fileIcon));
+                Assert.True(File.Exists(folderIcon));
+                Assert.True(LockIcons.HasAllFrames(File.ReadAllBytes(fileIcon)));
+                Assert.True(LockIcons.HasAllFrames(File.ReadAllBytes(folderIcon)));
+
+                LockIconCache.Clear();
+                Assert.False(Directory.Exists(Path.Combine(directory, "items")));
+                Assert.False(Directory.Exists(Path.Combine(directory, "types")));
+                Assert.False(Directory.Exists(Path.Combine(directory, "assoc")));
+            });
+        }
+        finally
+        {
+            LockIconCache.RootOverride = previous;
+            Cleanup(directory);
+        }
     }
 
     [Fact]
@@ -1224,6 +1330,246 @@ public class LockSafetyTests
             service.Unprotect(container, "file-password-1", settings.RecycleContainerAfterUnlock);
             Assert.Single(host.Removed);
             Assert.False(host.Removed[0].Recycle);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+    private static void RunSta(Action action)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null)
+            ExceptionDispatchInfo.Capture(failure).Throw();
+    }
+
+    private static BitmapSource Scale(ImageSource source, int size)
+    {
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
+            context.DrawImage(source, new Rect(0, 0, size, size));
+        var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
+    }
+
+    private static byte[] ToPixels(BitmapSource source)
+    {
+        var converted = source.Format == PixelFormats.Bgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        var stride = converted.PixelWidth * 4;
+        var pixels = new byte[stride * converted.PixelHeight];
+        converted.CopyPixels(pixels, stride, 0);
+        return pixels;
+    }
+    [Fact]
+    public void Protect_writes_three_slots_that_each_open_the_same_container()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var file = Path.Combine(directory, "slots.txt");
+            WriteFile(file, "slots");
+            var credentials = Credentials();
+            var container = NewService().Protect(file, directory, credentials).OutputPath;
+            using var stream = new FileStream(container, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var header = LockContainer.ReadHeader(stream);
+            foreach (var secret in new[] { credentials.FilePassword, credentials.RescuerPassword,
+                         credentials.RescuerKey })
+            {
+                Assert.True(LockContainer.TryUnwrap(header, secret, out var key, out _));
+                LockSecrets.Wipe(key);
+            }
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void Protect_refuses_when_the_folder_changes_after_the_archive_started()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var folder = Path.Combine(directory, "Changing");
+            Directory.CreateDirectory(folder);
+            WriteFile(Path.Combine(folder, "big.bin"), new string('x', 2 * 1024 * 1024));
+            var added = 0;
+            var progress = new ActionProgress(value =>
+            {
+                if (value.Stage == LockStage.Encrypting && value.Done > 0 && Interlocked.Exchange(ref added, 1) == 0)
+                    WriteFile(Path.Combine(folder, "late.txt"), "late");
+            });
+            Assert.Throws<LockChangedException>(() =>
+                NewService().Protect(folder, directory, Credentials(), progress: progress));
+            Assert.True(Directory.Exists(folder));
+            Assert.True(File.Exists(Path.Combine(folder, "late.txt")));
+            Assert.Empty(Directory.GetFiles(directory, "*.dwdir*"));
+            Assert.Empty(Directory.GetFiles(directory, "*.tmp*"));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void Unprotect_refuses_the_key_alone_and_an_open_session()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var file = Path.Combine(directory, "policy.txt");
+            WriteFile(file, "policy");
+            var credentials = Credentials();
+            var host = new FakeHost();
+            var service = new LockService(new LockEnvironment([], []), host, minimumIterations: 1000,
+                newSlotIterations: 1000);
+            var container = service.Protect(file, directory, credentials).OutputPath;
+
+            Assert.Throws<LockPolicyException>(() =>
+                service.Unprotect(container, credentials.RescuerKey, recycleContainer: false));
+            Assert.True(File.Exists(container));
+            Assert.False(File.Exists(file));
+
+            host.SessionOpen = true;
+            Assert.Throws<LockPolicyException>(() =>
+                service.Unprotect(container, credentials.FilePassword, recycleContainer: false));
+            Assert.True(File.Exists(container));
+            host.SessionOpen = false;
+            Assert.True(File.Exists(service.Unprotect(container, credentials.FilePassword,
+                recycleContainer: false).RestoredPath));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+    [Fact]
+    public void Relock_encodes_the_current_folder_after_add_remove_and_rename()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var folder = Path.Combine(directory, "Tree");
+            Directory.CreateDirectory(folder);
+            WriteFile(Path.Combine(folder, "keep.txt"), "keep");
+            WriteFile(Path.Combine(folder, "remove.txt"), "remove");
+            var container = Path.Combine(directory, "Tree.dwdir");
+            var service = NewService();
+            var credentials = Credentials();
+            service.ProtectTo(folder, container, credentials, keepSource: true);
+
+            LockHeader header;
+            byte[] dataKey;
+            using (var source = new FileStream(container, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                header = LockContainer.ReadHeader(source);
+                dataKey = LockContainer.Unwrap(header, credentials.FilePassword, out _);
+            }
+            try
+            {
+                WriteFile(Path.Combine(folder, "added.txt"), "added");
+                File.Delete(Path.Combine(folder, "remove.txt"));
+                File.Move(Path.Combine(folder, "keep.txt"), Path.Combine(folder, "renamed.txt"));
+
+                service.RelockFromSession(container, header, dataKey, folder);
+                var restored = service.Unprotect(container, credentials.FilePassword, recycleContainer: false);
+                Assert.Equal("added", File.ReadAllText(Path.Combine(restored.RestoredPath, "added.txt")));
+                Assert.Equal("keep", File.ReadAllText(Path.Combine(restored.RestoredPath, "renamed.txt")));
+                Assert.False(File.Exists(Path.Combine(restored.RestoredPath, "remove.txt")));
+                Assert.False(File.Exists(Path.Combine(restored.RestoredPath, "keep.txt")));
+            }
+            finally
+            {
+                LockSecrets.Wipe(dataKey);
+            }
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+    [Fact]
+    public void Relock_keeps_a_rescuer_password_changed_during_the_session()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var folder = Path.Combine(directory, "Reset");
+            Directory.CreateDirectory(folder);
+            WriteFile(Path.Combine(folder, "file.txt"), "content");
+            var container = Path.Combine(directory, "Reset.dwdir");
+            var service = NewService();
+            var credentials = Credentials();
+            service.ProtectTo(folder, container, credentials, keepSource: true);
+
+            LockHeader oldHeader;
+            byte[] dataKey;
+            using (var source = new FileStream(container, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                oldHeader = LockContainer.ReadHeader(source);
+                dataKey = LockContainer.Unwrap(oldHeader, credentials.FilePassword, out _);
+            }
+            try
+            {
+                service.SetRescuerPassword(container, credentials.FilePassword, "rescuer-reset-during-session");
+                service.RelockFromSession(container, oldHeader, dataKey, folder);
+                var restored = service.Unprotect(container, "rescuer-reset-during-session",
+                    recycleContainer: false);
+                Assert.Equal("content", File.ReadAllText(Path.Combine(restored.RestoredPath, "file.txt")));
+            }
+            finally
+            {
+                LockSecrets.Wipe(dataKey);
+            }
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+    [Fact]
+    public void Tree_hash_changes_for_add_remove_and_rename()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var folder = Path.Combine(directory, "HashTree");
+            Directory.CreateDirectory(folder);
+            WriteFile(Path.Combine(folder, "a.txt"), "a");
+            WriteFile(Path.Combine(folder, "b.txt"), "b");
+            var first = LockArchive.TreeHash(folder);
+
+            WriteFile(Path.Combine(folder, "c.txt"), "c");
+            var added = LockArchive.TreeHash(folder);
+            Assert.NotEqual(first, added);
+
+            File.Delete(Path.Combine(folder, "b.txt"));
+            var removed = LockArchive.TreeHash(folder);
+            Assert.NotEqual(added, removed);
+
+            File.Move(Path.Combine(folder, "a.txt"), Path.Combine(folder, "renamed.txt"));
+            var renamed = LockArchive.TreeHash(folder);
+            Assert.NotEqual(removed, renamed);
         }
         finally
         {

@@ -46,7 +46,7 @@ internal sealed class CollageTool : IToolWindowSpec
         items.All(item => !item.IsDirectory && Formats.Images.Contains(item.Format));
 
     public ToolContent Create(IReadOnlyList<FileItem> items, DropTargets? targets) =>
-        new CollageView(items).Build();
+        new CollageView(items, targets).Build();
 }
 
 /// <summary>Registers the tool from its own file, so no shared list has to be edited.</summary>

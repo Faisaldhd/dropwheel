@@ -41,6 +41,9 @@ internal sealed class ProtectionHost : ILockHost
         NotifyShell(protectedPath);
     }
 
+    public bool IsSessionOpen(string protectedPath) =>
+        LockRuntime.IsInitialized && LockRuntime.Journal.FindByContainer(protectedPath) is not null;
+
     public void NotifyShell(string path)
     {
         try

@@ -152,9 +152,19 @@ internal sealed class LockSettingsWindow : Window
 
     private void ChangeRescuerPassword()
     {
-        if (LockRuntime.RequireRescuer(this) is null)
+        var stored = LockRuntime.Vault.Load();
+        string? knownKey = null;
+        if (stored is null || string.IsNullOrEmpty(stored.Password))
+        {
+            knownKey = LockRuntime.RequireRescuerKey(this);
+            if (knownKey is null)
+                return;
+        }
+        else if (LockRuntime.RequireRescuer(this) is null)
+        {
             return;
-        var window = new RescuerSetupWindow(RescuerSetupMode.ResetPassword) { Owner = this };
+        }
+        var window = new RescuerSetupWindow(RescuerSetupMode.ResetPassword, knownKey) { Owner = this };
         if (window.ShowDialog() != true)
             return;
         RefreshStatus();
@@ -164,8 +174,18 @@ internal sealed class LockSettingsWindow : Window
 
     private void CreateNewKey()
     {
-        if (LockRuntime.RequireRescuer(this) is null)
+        var stored = LockRuntime.Vault.Load();
+        if (stored is null || string.IsNullOrEmpty(stored.Password))
+        {
+            var key = LockRuntime.RequireRescuerKey(this);
+            if (key is null)
+                return;
+            LockRuntime.Vault.Save(new RescuerSecrets(key, null));
+        }
+        else if (LockRuntime.RequireRescuer(this) is null)
+        {
             return;
+        }
         var old = LockRuntime.Vault.Load();
         var window = new RescuerSetupWindow(RescuerSetupMode.NewKey) { Owner = this };
         if (window.ShowDialog() != true || window.Result is null)
@@ -186,8 +206,18 @@ internal sealed class LockSettingsWindow : Window
 
     private void UpdateProtectedFiles()
     {
-        if (LockRuntime.RequireRescuer(this) is null)
+        var stored = LockRuntime.Vault.Load();
+        string? knownKey = null;
+        if (stored is null || string.IsNullOrEmpty(stored.Password))
+        {
+            knownKey = LockRuntime.RequireRescuerKey(this);
+            if (knownKey is null)
+                return;
+        }
+        else if (LockRuntime.RequireRescuer(this) is null)
+        {
             return;
+        }
         var folder = PickFolder();
         if (folder is null)
             return;
@@ -198,7 +228,7 @@ internal sealed class LockSettingsWindow : Window
             return;
         }
 
-        var setup = new RescuerSetupWindow(RescuerSetupMode.ResetPassword) { Owner = this };
+        var setup = new RescuerSetupWindow(RescuerSetupMode.ResetPassword, knownKey) { Owner = this };
         if (setup.ShowDialog() != true || setup.Result is null)
             return;
         var newPassword = setup.Result.Password!;

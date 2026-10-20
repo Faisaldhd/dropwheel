@@ -216,6 +216,9 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
         UnauthorizedAccessException => T("error.output.notWritable"),
         System.IO.IOException => T("error.file", ex.Message),
         ImageMagick.MagickException => T("error.image.process", ex.Message),
+        // A hostile path (illegal characters, an unsupported path form) is still a file problem the user
+        // can act on; it must never reach the card as "ArgumentException: Illegal characters in path.".
+        ArgumentException or NotSupportedException => T("error.file", ex.Message),
         _ => $"{ex.GetType().Name}: {ex.Message}",
     };
 }

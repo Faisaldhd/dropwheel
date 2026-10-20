@@ -6,6 +6,7 @@ using FileAction.App.Diagnostics;
 using FileAction.App.Input;
 using FileAction.App.Jobs;
 using FileAction.App.Shell;
+using FileAction.App.Shell.Protection;
 using FileAction.App.UI;
 using FileAction.App.Updates;
 using FileAction.App.Wheel;
@@ -197,6 +198,7 @@ internal sealed class App : Application
             _tray.Show(T("app.running.title"), T("app.running.hint"), false);
         }
         HandleArgs(_args);
+        LockWiring.Startup();
 
         // A successful update restart passes --updated <version>; greet, then keep starting normally.
         AnnounceUpdatedIfRequested();
@@ -213,6 +215,8 @@ internal sealed class App : Application
 
     private void HandleArgs(string[] args)
     {
+        if (LockWiring.HandleArgs(args))
+            return;
         if (args.Contains("--settings"))
             OpenSettings();
         var wheelIndex = Array.IndexOf(args, "--wheel");
@@ -500,6 +504,7 @@ internal sealed class App : Application
         _updates = null;
         SettingsWindow.Updates = null;
         _tray?.Dispose();
+        LockWiring.Exit();
         _settings.Save();
         base.OnExit(e);
     }

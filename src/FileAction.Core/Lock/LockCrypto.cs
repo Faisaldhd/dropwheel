@@ -34,7 +34,7 @@ public sealed class LockCredentials
 }
 
 /// <summary>The result of writing a protected file.</summary>
-public readonly record struct LockProtectResult(LockHeader Header, LockDigest Digest);
+public readonly record struct LockProtectResult(LockHeader Header, LockDigest Digest, int EntryCount = 0);
 
 /// <summary>The result of opening one, and which slot accepted the secret.</summary>
 public sealed class LockReadResult
