@@ -1105,5 +1105,6 @@
   "tool.lock.rescuer.keyOnlyTitle": "استخدم مفتاح المنقذ",
   "tool.lock.rescuer.keyOnlyBody": "أدخل مفتاح الاسترداد المكوّن من 24 حرفاً لإعادة تعيين كلمة سر المنقذ. لا يُحفظ المفتاح.",
   "tool.lock.recovery.orphanTitle": "مجلدات فتح يتيمة",
-  "tool.lock.recovery.orphanBody": "وجد DropWheel {0} من مجلدات الجلسات بلا سجل. هل تريد حذفها؟ الملفات المحمية لم تتغير."
+  "tool.lock.recovery.orphanBody": "وجد DropWheel {0} من مجلدات الجلسات بلا سجل. هل تريد حذفها؟ الملفات المحمية لم تتغير.",
+  "tool.lock.panel.changedSalvage": "تغيّر المحتوى منذ آخر حفظ. تم رفض إعادة المحاولة؛ الملف المحمي السليم محفوظ. افتح العنصر واستعد النسخة."
 }

@@ -128,6 +128,9 @@ internal sealed class LockSessionManager
             State = LockSessionState.Open,
             EntryCount = extracted.Read.Meta.EntryCount,
             TreeHash = extracted.Read.Meta.IsDirectory ? LockArchive.TreeHash(extracted.Path) : null,
+            FileHash = extracted.Read.Meta.IsDirectory
+                ? null
+                : Convert.ToHexString(extracted.Read.Digest.Sha256),
         };
         _journal.Write(record);
         var session = new LockSession(record, extracted.Header, extracted.DataKey, extracted.Read.Meta.IsDirectory)
@@ -162,13 +165,38 @@ internal sealed class LockSessionManager
         if (session.Busy)
             return;
         session.Busy = true;
+        var wasError = session.Record.State == LockSessionState.Error;
+        (string? FileHash, string? TreeHash) before;
+        try
+        {
+            before = Snapshot(session.Record.PlaintextPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            session.Record = session.Record.WithState(LockSessionState.Error, ex.Message);
+            _journal.Write(session.Record);
+            session.Panel?.SetError(T("tool.lock.panel.changedSalvage"));
+            session.Busy = false;
+            return;
+        }
+        if (wasError && !MatchesSnapshot(session.Record, before))
+        {
+            session.Record = session.Record.WithState(LockSessionState.Error,
+                "The unlocked content changed since the last save. Retry refused so the good container is kept; open the item and salvage the copy.");
+            _journal.Write(session.Record);
+            session.Panel?.SetError(T("tool.lock.panel.changedSalvage"));
+            session.Busy = false;
+            return;
+        }
         session.Panel?.SetStatus(UnlockedStatus.Syncing);
         session.Record = session.Record.WithState(LockSessionState.Syncing);
         _journal.Write(session.Record);
         try
         {
             await Task.Run(() => _service.RelockFromSession(session.Record.ContainerPath, session.Header,
-                session.DataKey, session.Record.PlaintextPath));
+                session.DataKey, session.Record.PlaintextPath,
+                expectedFileHash: wasError ? session.Record.FileHash : null,
+                expectedTreeHash: wasError ? session.Record.TreeHash : null));
             _journal.Delete(session.Record.Id);
             NotifyLocked(session.Record);
             lock (_gate)
@@ -177,7 +205,11 @@ internal sealed class LockSessionManager
         }
         catch (Exception ex)
         {
-            session.Record = session.Record.WithState(LockSessionState.Error, ex.Message);
+            session.Record = session.Record.WithState(LockSessionState.Error, ex.Message) with
+            {
+                FileHash = before.FileHash ?? session.Record.FileHash,
+                TreeHash = before.TreeHash ?? session.Record.TreeHash,
+            };
             _journal.Write(session.Record);
             session.Panel?.SetError(LockRuntime.Describe(ex));
         }
@@ -187,6 +219,23 @@ internal sealed class LockSessionManager
         }
     }
 
+    private static (string? FileHash, string? TreeHash) Snapshot(string path)
+    {
+        if (Directory.Exists(path))
+            return (null, LockArchive.TreeHash(path));
+        if (File.Exists(path))
+            return (LockArchive.FileHash(path), null);
+        return (null, null);
+    }
+
+    private static bool MatchesSnapshot(LockSessionRecord record, (string? FileHash, string? TreeHash) current)
+    {
+        if (record.IsDirectory)
+            return record.TreeHash is null ||
+                   string.Equals(record.TreeHash, current.TreeHash, StringComparison.Ordinal);
+        return record.FileHash is null ||
+               string.Equals(record.FileHash, current.FileHash, StringComparison.Ordinal);
+    }
     private void NotifyLocked(LockSessionRecord record) =>
         Locked?.Invoke(T("tool.lock.panel.locked.title"),
             T("tool.lock.panel.locked.body", Bidi.Value(record.OriginalName)));

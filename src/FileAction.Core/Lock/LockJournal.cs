@@ -34,7 +34,8 @@ public sealed record LockSessionRecord(
     LockSessionState State,
     string? Error,
     int EntryCount = 0,
-    string? TreeHash = null)
+    string? TreeHash = null,
+    string? FileHash = null)
 {
     public LockSessionRecord WithState(LockSessionState state, string? error = null) =>
         this with { State = state, Error = error };
@@ -71,6 +72,7 @@ public sealed class LockJournalStore(string directory)
             "error=" + Encode(record.Error ?? string.Empty),
             "entries=" + record.EntryCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "tree=" + Encode(record.TreeHash ?? string.Empty),
+            "filehash=" + Encode(record.FileHash ?? string.Empty),
         };
         File.WriteAllLines(temp, lines, new UTF8Encoding(false));
         File.Move(temp, path, overwrite: true);
@@ -152,10 +154,12 @@ public sealed class LockJournalStore(string directory)
                 System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture,
                 out var parsedEntries) ? Math.Max(0, parsedEntries) : 0;
             var treeHash = Decode(values.GetValueOrDefault("tree"));
+            var fileHash = Decode(values.GetValueOrDefault("filehash"));
             return new LockSessionRecord(id, container, plaintext, string.IsNullOrEmpty(name)
                 ? LockPaths.DisplayName(container)
                 : name, directory, opened, state, string.IsNullOrEmpty(error) ? null : error, entryCount,
-                string.IsNullOrEmpty(treeHash) ? null : treeHash);
+                string.IsNullOrEmpty(treeHash) ? null : treeHash,
+                string.IsNullOrEmpty(fileHash) ? null : fileHash);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
