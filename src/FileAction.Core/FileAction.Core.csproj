@@ -23,6 +23,9 @@
     <PackageReference Include="PDFtoImage" Version="5.2.0" />
     <PackageReference Include="SharpCompress" Version="0.50.5" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <!-- QR decoding (tools.qr): Apache-2.0, one managed assembly, no native code and no further
+         dependencies. See THIRD-PARTY-NOTICES.md. -->
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
   </ItemGroup>
 
 </Project>

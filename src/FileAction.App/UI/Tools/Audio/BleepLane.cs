@@ -18,13 +18,13 @@ internal sealed class BleepLaneView : FrameworkElement
     private const double HandleWidth = 3;
     private const double LabelClearance = 54;
 
-    private static readonly Brush HitBrush = CreateBrush(Color.FromArgb(1, 0, 0, 0));
+    private static readonly Brush HitBrush = AudioTheme.HitBrush;
 
     private readonly Brush _trackBrush = Theme.Track;
     private readonly Brush _clipBrush = Theme.Accent;
     private readonly Brush _labelBrush = Theme.TextOnAccent;
-    private readonly Brush _handleBrush = CreateBrush(Color.FromArgb(0xD8, 0xFF, 0xFF, 0xFF));
-    private readonly Pen _selectedPen = CreateSelectedPen();
+    private readonly Brush _handleBrush = AudioTheme.HandleBrush;
+    private readonly Pen _selectedPen = AudioTheme.SelectedHandlePen;
     private readonly Typeface _typeface = new(Theme.UiFont, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
     private readonly List<AudioRange> _ranges = [];
 
@@ -295,18 +295,4 @@ internal sealed class BleepLaneView : FrameworkElement
 
     private double SecondsFor(double x) =>
         Duration <= 0 ? 0 : Math.Clamp(x / Math.Max(1, ActualWidth), 0, 1) * Duration;
-
-    private static Brush CreateBrush(Color color)
-    {
-        var brush = new SolidColorBrush(color);
-        brush.Freeze();
-        return brush;
-    }
-
-    private static Pen CreateSelectedPen()
-    {
-        var pen = new Pen(CreateBrush(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF)), 1.5);
-        pen.Freeze();
-        return pen;
-    }
 }

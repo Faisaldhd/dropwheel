@@ -68,3 +68,175 @@ the source. Tests live in `tests/FileAction.Tests/AddBackgroundTests.cs`.
 | E-11 | Every string exists in both tables | 29 `tool.editphotos.*` keys in en and ar (502 keys per table after the 2.4.0 train); no placeholders; Arabic is not a copy of English | PASS | `PhotoEditTests.Every_tool_string_exists_in_both_tables`, with `LocalizationTests` parity |
 
 **How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~PhotoEditTests"` (26 cases), or the CI `Build + test` job. The local 24 MP measurements are from a Release build on the builder's workstation (ImageMagick Q8 in-process); CI hardware will differ.
+
+
+## Protect / Unlock — `tools.protect`, `tools.unlock`
+
+Protect writes one password-protected ZIP (`<name> Protected.zip`), or an AES-256 PDF when a single PDF is
+selected; Unlock writes `<name> Unlocked.zip` / `<name> Unlocked.pdf`. Tests live in
+`tests/FileAction.Tests/PasswordProtectionTests.cs`.
+
+| ID | Check | Expected / assertion | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| P-1 | Tool identity and localized labels | Specs register as `tools.protect` and `tools.unlock`; `tool.protect.title` / `tool.unlock.title` exist in both tables; 62 `tool.protect.*` / `tool.unlock.*` keys have identical key sets and placeholders and Arabic differs from English | PASS | `New_strings_have_matching_keys_placeholders_and_neutral_values`; `LocalizationTests` |
+| P-2 | Selection rules | Protect accepts one file, one folder, or several files and rejects a folder mixed with files; Unlock accepts exactly one ZIP or PDF and rejects other formats/folders | PASS (inspection) | `ProtectTool.Applies` / `UnlockTool.Applies`, exercised by the wheel operation |
+| P-3 | ZIP is AES-256 and round-trips | `AesZipWriter.Create` writes an AE-2 WinZip AES-256 entry; SharpCompress opens it with the correct password and reads the exact UTF-8 text | PASS | `Zip_round_trips_with_the_correct_password` |
+| P-4 | ZIP rejects a wrong password | Opening an encrypted entry with a wrong password fails; no output is accepted | PASS | `Zip_rejects_the_wrong_password` |
+| P-5 | Never overwrites | A second create at the same path throws `IOException` and leaves the first file byte-identical; callers use `OutputPaths.ProduceAsync`’s unique name | PASS | `Zip_never_overwrites_an_existing_output` |
+| P-6 | Folder recursion is stable | Nested folders are walked in ordinal order; directory and file entries carry `project/`, `project/a/`, `project/a/one.txt`, `project/b/two.txt` | PASS | `Plan_walks_nested_folders_in_a_stable_order` |
+| P-7 | Empty folder is refused | A folder with no file entries throws `Empty` and writes no ZIP, so no fake “protected” archive exists | PASS | `Empty_folder_is_not_a_fake_protected_archive` |
+| P-8 | Unlock ZIP | The correct password produces an unencrypted ZIP whose entry reads back unchanged; a wrong password leaves no partial output file | PASS | `Unlock_creates_an_unencrypted_zip_and_never_leaves_a_partial_file` |
+| P-9 | Plain ZIP is not called protected | An unencrypted ZIP reports `NotEncrypted` and is not rewritten | PASS | `A_plain_zip_is_reported_as_not_encrypted` |
+| P-10 | PDF AES-256 and round-trip | The protected PDF contains `/AESV3`; the wrong password is rejected; the correct password opens it and Unprotect writes an unencrypted PDF | PASS | `Pdf_uses_aes_256_and_round_trips_with_the_correct_password` |
+| P-11 | Password rules, strength and KDF | Short/mismatched/overlong values are refused; unlock accepts any non-empty value; strength is ordered and never strong for one repeated character; PBKDF2 output is deterministic and password-dependent | PASS | `Validation_rejects_short_mismatched_and_overlong_passwords`; `Unlock_validation_accepts_any_non_empty_password`; `Strength_meter_is_ordered_and_never_strong_for_one_repeated_character`; `Key_derivation_is_deterministic_and_password_dependent` |
+| P-12 | Defaults, match gate and eye reset | One PDF defaults to PDF, everything else to ZIP; permissions start permissive; primary is disabled until both fields match and length ≥ 8; reveal state resets on reset/close | PASS | `Protect_defaults_suggest_pdf_for_one_pdf_and_zip_otherwise`; `Protect_primary_stays_disabled_until_both_fields_match_and_are_long_enough`; `Eye_toggle_state_is_hidden_after_reset_and_close` |
+| P-13 | Capabilities are honest | ZIP key size 256, ZIP names are not encrypted (the note is shown), PDF key size 256, PDF owner permissions are supported | PASS | `Capabilities_do_not_pretend_zip_can_hide_names` |
+| P-14 | Theme and RTL | Window uses the shared purple `Theme.*` brushes and shared `ToolWindow` chrome; controls inherit `FlowDirection.RightToLeft`; the hex/format row and eye toggle use logical columns | PASS (inspection) | `ProtectView` / `UnlockView` / `PasswordField`; screenshots need a desktop session |
+| P-15 | No password logging | Password values never enter `AppLog`, diagnostics, toast text or exception messages; fields are cleared and hidden on close/focus loss | PASS (inspection) | No `AppLog`/`Notifications` call receives a password; `PasswordProtectionException` has no password parameter |
+| P-16 | Cancellation and progress | ZIP protect checks every 80 KB and reports byte progress; the Cancel button cancels; ZIP unlock checks between entries; PDF saves are sync and cannot cancel mid-save | PASS (inspection) | `AesZipWriter` chunk loop, `BusyRow`, `CancellationTokenSource` in both views |
+| P-17 | Library/licence decision | No package added: SharpCompress 0.50.5 (MIT) reads AES but cannot write it; PDFsharp 6.2.4 (MIT) writes PDF AES-256 V5; WinZip AE-2 writing is implemented with BCL crypto | PASS (inspection) | `PasswordZip.cs`, `PasswordPdf.cs`, `THIRD-PARTY-NOTICES.md` |
+
+**How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~PasswordProtection"` (17 cases), or the CI `Build + test` job. Evidence run [39339048279](https://github.com/Faisaldhd/dropwheel/actions/runs/39339048279) on `5f2b375`: 264 passed, 0 failed; the merged head is re-run by the same PR’s Build + test job.
+## Compress — `tools.compress` (one image, audio, video or PDF)
+
+Window title "Compress File", primary button "Compress", output `<name> Compressed.<ext>` next to the source;
+the source is only read. Rules live in `tests/FileAction.Tests/CompressMetadataTests.cs`, real media in
+`CompressMetadataFunctionTests.cs`.
+
+| ID | Check | Expected / assertion | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| C-1 | Tool identity and localized labels | Id `tools.compress`, TitleKey `tool.compress.title` → "Compress File", PrimaryLabelKey `tool.compress.apply` → "Compress"; Arabic "ضغط" exists and differs | PASS | `CompressMetadataToolTests.Tool_identity_primary_labels_and_applicability` and `CompressMetadataStringTests.Addendum_keys_exist_in_both_languages_with_the_fixed_english` |
+| C-2 | Accepts exactly one supported file | jpg/png/mp3/m4a/mp4/mkv/pdf open; docx, a folder, two files and an empty list are rejected | PASS | same identity test |
+| C-3 | Defaults | Balanced preset (`CompressionPreset.Medium`), target-size and percentage off, 40 % reduction → 60 % kept, image sizes 2560/1920/1280/1024/640 px, "keep original dimensions" = 0 | PASS | `CompressionPlanTests.Defaults_are_the_balanced_preset_with_no_size_goal`, `Reduction_maps_onto_the_kept_percentage` |
+| C-4 | Image compress writes a smaller, resized copy | Generated 1200 × 900 noisy JPEG: output < 80 % of the source, exactly 600 × 450 (max long side), source SHA-256 identical afterwards, no `.part` files | PASS | `CompressMetadataFunctionTests.Compress_image_writes_a_smaller_resized_copy_and_never_touches_the_source` |
+| C-5 | Image plans follow target and percentage | Target 1 MB downscales 4000 × 3000 and estimates 0.9–1.1 MB; percentage 50 % keeps the best quality and scales the pixels to an estimate of 0.95–1.1 MB; never upscales | PASS | `CompressionPlanTests.Target_size_downscales_the_image_to_reach_the_target`, `Percentage_mode_keeps_the_quality_and_scales_the_pixels`, `Image_plan_never_upscales_and_honours_the_max_long_side` |
+| C-6 | Video target size, duration and audio | Generated 8 s noisy testsrc + sine, target 419430 B: output ≤ target + 10 % and > 60 % of it, < 50 % of the source; duration within ±0.25 s; the audio track is still there; source unchanged | PASS | `CompressMetadataFunctionTests.Compress_video_reaches_the_target_size_and_keeps_duration_and_audio`; with the maxrate cap a local noisy run produced 385438 B (92 % of the target), and CI held the ≤ +10 % ceiling |
+| C-7 | Audio gets smaller and keeps duration | Generated 6 s 192 kbps MP3, target 0.08 MB: output < 80 % of the source, duration within ±0.25 s, source unchanged | PASS | `CompressMetadataFunctionTests.Compress_audio_gets_smaller_and_keeps_its_duration` |
+| C-8 | Corrupt input fails cleanly | A fake JPEG throws with a message; only the source remains; no `.part` file | PASS | `CompressMetadataFunctionTests.A_corrupt_image_fails_without_leaving_any_file` |
+| C-9 | Unwritable output fails cleanly | A path whose parent is a file throws; the directory is never created; no partial file; source unchanged | PASS | `CompressMetadataFunctionTests.An_unwritable_output_folder_fails_without_partial_files` |
+| C-10 | Missing FFmpeg fails clearly | `ConversionException` with a message and no partial output; on machines where FFmpeg is installed the case reports a skip instead (CI installs it) | PASS (conditional) | `CompressMetadataFunctionTests.A_missing_ffmpeg_reports_a_clear_error_and_writes_nothing`; `CompressOperation.IsAvailable` hides audio/video without FFmpeg |
+| C-11 | Every string exists in both tables | 46 `tool.compress.*` keys, identical key sets in en and ar (823 keys per table after the merge train), same placeholders, Arabic is not a copy of English, fixed helper line verbatim | PASS | `CompressMetadataStringTests.Both_tables_have_the_same_tool_keys`, `Placeholders_match_for_every_tool_key`, `Addendum_keys_exist_in_both_languages_with_the_fixed_english` |
+| C-12 | Theme only | The view uses `Theme.*` brushes plus `Brushes.Transparent`; no hex colour, `Color.From`, `Colors.` or cached brush; `ToolWindow` calls `Theme.Refresh()` before building | PASS | `ToolThemeTests.Tool_views_use_theme_brushes_only`, `The_shared_window_refreshes_the_theme_before_it_builds` |
+
+## Edit metadata — `tools.metadata` (one image, audio, video or PDF)
+
+Window title "Edit Metadata", primary button "Save", output `<name> Edited metadata.<ext>` next to the
+source; the original is only read. Field groups, validation and the FFmpeg argument builder live in
+`src/FileAction.Core/MetadataModel.cs`.
+
+| ID | Check | Expected / assertion | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| M-1 | Tool identity and labels | Id `tools.metadata`, TitleKey `tool.metadata.title` → "Edit Metadata", PrimaryLabelKey `tool.metadata.save` → "Save"; Arabic "حفظ" exists and differs | PASS | `CompressMetadataToolTests.Tool_identity_primary_labels_and_applicability`, `CompressMetadataStringTests.Addendum_keys_exist_in_both_languages_with_the_fixed_english` |
+| M-2 | Searchable sections in display order | File, Image, Video track, Audio track, ExifIFD, IPTC, XMP, PDF info, Chapters; query matches label/value/group; editable rows come first inside their section | PASS | `MetadataModelTests.The_field_list_is_searchable_and_grouped_in_display_order`, `Editable_rows_come_first_inside_their_group` |
+| M-3 | Writable rows always exist | Media probe seeds title/artist/album plus the chapters row (existing chapters as `mm:ss Title`); image reader ensures Make/Model/Latitude/Longitude; PDF reader ensures the four info rows | PASS (inspection + probe test) | `The_probe_seeds_the_editable_rows_and_the_chapter_text`; `MetadataRunner.ReadImage`/`ReadPdf` `EnsureEditable` rows |
+| M-4 | Camera and GPS write and re-read | Real 640 × 480 JPEG: copy named `shot Edited metadata.jpg`; re-read EXIF has Make `TestCam`, Model `TestModel`, GPS refs `N`/`E` and both GPS values; source SHA-256 unchanged | PASS | `CompressMetadataFunctionTests.Metadata_edit_writes_camera_and_gps_and_remove_all_clears_them` |
+| M-5 | Remove All clears camera and location | A second save `shot Edited metadata (2).jpg` re-reads with no Make and no GPS value; processing/other hidden data is stripped by `image.Strip()` | PASS | same test (`RemoveAll`) |
+| M-6 | Per-field remove deletes that tag | Removed media tags are written as `-metadata title=`; removed chapters add `-map_chapters -1`; EXIF removals call `RemoveValue`; PDF removed fields are emptied; chapter removal drops the chapter track | PASS | `Removed_media_tags_are_written_as_empty_metadata`, `Removing_chapters_drops_the_chapter_track`, `Editable_keys_map_onto_the_edit`; EXIF/PDF removal in `MetadataRunner` |
+| M-7 | PDF info dictionary round-trips | Copy named `doc Edited metadata.pdf`; re-read via PDFsharp has Title/Author/Subject/Keywords as written, 1 page, source unchanged | PASS | `CompressMetadataFunctionTests.Metadata_edit_updates_the_pdf_info_dictionary` |
+| M-8 | Corrupt metadata input fails cleanly | A fake JPEG throws; no `.part` file; only the source remains | PASS | `CompressMetadataFunctionTests.A_corrupt_metadata_input_fails_without_writing_anything` |
+| M-9 | Footer note, Remove All and Save labels | The photo note "For photos, Remove All also clears hidden camera and processing data. HDR and portrait effects may change." and the labels "Search metadata", "Remove All", "Save" exist verbatim in English and are translated in Arabic | PASS | `CompressMetadataStringTests.Addendum_keys_exist_in_both_languages_with_the_fixed_english` |
+| M-10 | Every string exists in both tables | 50 `tool.metadata.*` keys with identical key sets and placeholders in en and ar; no key ends with a plural category (guards `Loc.PluralBaseKeys`) | PASS | `Both_tables_have_the_same_tool_keys`, `Placeholders_match_for_every_tool_key`, `No_tool_key_looks_like_a_plural_group` |
+| M-11 | Theme only | Same rule as Compress: `Theme.*` + `Brushes.Transparent` only, no cached brushes; the window repaints with the current palette when it opens | PASS | `ToolThemeTests.Tool_views_use_theme_brushes_only`, `The_shared_window_refreshes_the_theme_before_it_builds` |
+
+**How to reproduce the compress and metadata rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~CompressMetadata|FullyQualifiedName~ToolTheme"`, or the CI `Build + test` job (which installs FFmpeg first, so C-6 and C-7 run for real).
+
+## QR reader — `tools.qr` (one image)
+
+Read-only tool: it never writes a file, so the chrome's primary button ("Apply") copies the decoded text
+and closes while the view's own **Copy** and **Open** sit above it. Window title "QR Code"; the decoded
+text is selectable; the browser is started from the Open button only. Decoding is ZXing.Net 0.16.11
+in-process (Apache-2.0, see [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md)). Tests live in
+`tests/FileAction.Tests/QrPayloadTests.cs`.
+
+| ID | Check | Expected / assertion | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| Q-1 | Tool identity and localized title | Id `tools.qr`, TitleKey `tool.qr.title`, a declared layout, and the English title differs from the Arabic one | PASS | `QrPayloadTests.The_tool_opens_for_one_image_only` |
+| Q-2 | One image only | `photo.png` and `code.JPG` open; two images, `report.pdf` and an empty list are rejected | PASS | same test |
+| Q-3 | Wheel entry and id-scoped lookup | `WheelController` lists `new UI.Tools.Qr.QrOperation()` beside the other tools; `ToolRegistry.For(id, items)` matches by tool id, so Crop/Edit Photos do not compete for a single image | PASS (inspection) | `WheelController.cs` operation list, `ToolRegistry.For` |
+| Q-4 | Decoder reads a code | `QRCodeWriter` 320 × 320 of a URL → `QrDecoder.Decode` returns the same string | PASS | `QrPayloadTests.Decoder_reads_a_generated_qr_code` |
+| Q-5 | "No code" is not a crash | All-white 160 × 160 → null; a buffer shorter than `w × h × 4` → null; a zero-sized buffer → null | PASS | `Decoder_reports_no_code_for_a_blank_image`, `Decoder_refuses_a_buffer_that_is_too_small` |
+| Q-6 | Link classification | Absolute http/https → kind Link, `CanOpen`, host as the headline, text kept byte-exact; a non-default port stays in the headline (`localhost:8080`) | PASS | `Web_links_are_openable`, `A_non_default_port_stays_in_the_headline` |
+| Q-7 | Only http(s) may ever be opened | `javascript:`, `JavaScript:`, `file:`, `data:`, `vbscript:`, `ms-settings:`, `shell:`, `tel:` and `ftp:` stay plain Text with no URL and no Open button | PASS | `Non_web_schemes_never_become_links` |
+| Q-8 | Disguised or relative values are refused | CRLF, tab, U+202E and U+2066/U+2069 overrides, `//host/path`, a bare host, `http://`, empty and null are all rejected | PASS | `Disguised_or_relative_values_are_not_links` |
+| Q-9 | Scheme and host normalisation | `HTTP://EXAMPLE.COM/Path` → `http://example.com/Path` | PASS | `The_scheme_and_host_are_normalised` |
+| Q-10 | Plain text and empty payloads | Ordinary text stays Text with no title/rows; null, empty and whitespace-only input produce an empty Text payload without throwing | PASS | `Plain_text_stays_text`, `Missing_text_is_an_empty_payload` |
+| Q-11 | E-mail payloads | `mailto:` → address headline plus the decoded subject, no Open; the DoCoMo `MATMSG:` shape parses the same way | PASS | `Mailto_is_an_email_with_its_subject`, `Matmsg_is_an_email_too` |
+| Q-12 | Wi-Fi payloads | `WIFI:` → network / security / password rows, `\;` and `\\` escapes honoured, empty SSID still shows the details | PASS | `Wifi_shows_network_security_and_password`, `Wifi_keeps_escaped_backslashes`, `A_wifi_code_without_a_network_name_still_shows_its_details` |
+| Q-13 | vCard payloads | FN as the headline; ORG/TEL/EMAIL/URL as rows; folded lines unfold; an https URL on the card may be opened, a card without one may not | PASS | `Vcard_shows_the_contact_details`, `Vcard_folded_lines_are_unfolded`, `A_contact_without_a_web_address_is_not_openable` |
+| Q-14 | Every shown label exists in both tables | All five kind keys and every field label are `tool.qr.*` and exist in en and ar; 26 `tool.qr.*` keys per table after the merge; `LocaleUsageTests` covers the literals the view passes to `Loc.T` | PASS | `Every_kind_and_field_label_exists_in_both_languages`, `LocalizationTests`, `LocaleUsageTests` |
+| Q-15 | No network access and no telemetry | Inspection: the only shell call is `Process.Start(…, UseShellExecute: true)` inside `QrView.Open()`, reachable from the Open button; `QrDecoder` is a pure in-process ZXing call on a pixel buffer; no `HttpClient`/`WebRequest`/upload path in `UI/Tools/Qr` or `Core/Qr*` | PASS (inspection) | `QrView.Open`, `QrDecoder.Decode` |
+| Q-16 | Never blocks the UI | Inspection: the constructor starts `Task.Run` (Magick rasterise → ZXing decode → frozen `BitmapSource`); `ActivateAsync` only paints the result and then reports the source `MediaSize` to `ToolWindowSizer` | PASS (inspection) | `QrView.Load`, `QrView.ActivateAsync` |
+| Q-17 | Copy / Open / Reset | Copy writes `QrPayload.Text` verbatim and reports success or failure; Open re-checks `QrSafety.HttpUrl` and refuses with “Only http and https links can be opened.”; Reset clears the last message and the selection | PASS (inspection) | `QrView.Copy`, `QrView.Open`, `QrView.Reset` |
+| Q-18 | Theme and RTL | Only `Theme.*` brushes (glass, borders and the X/title/Reset/primary bar come from the shared `ToolWindow`); the view inherits `FlowDirection` and technical values pass through `Bidi.Value` | PASS (inspection) | `QrView` brushes, `ToolWindow` chrome |
+| Q-19 | Adaptive window | Own `ToolSpecLayout` (chrome 36 × 320; preview 300–720 wide, 220–520 high); the source pixel size feeds `ToolWindowSizer`, which fits any aspect and clamps to 95 % × 90 % of the work area | PASS (inspection) | `QrTool.Layout`, `ToolWindowSizer` |
+
+**How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~QrPayloadTests"` (42 cases), or the CI `Build + test` job. The run used for this matrix is [39336656593](https://github.com/Faisaldhd/dropwheel/actions/runs/39336656593) on `f78170c`: `Build + test` green with no failures, including every `QrPayloadTests` case; the same suite re-runs on every push to this branch.
+
+The `--self-test` window sweep still renders only the crop tool (`SelfTest.cs` is a shared file this tool did not edit), so Q-16…Q-19 are code inspection rather than a rendered screenshot; the `Screenshots` job needs a desktop session and is skipped on pull requests.
+
+## Merge to PDF - `tools.pdfmerge` (2+ PDFs/images)
+
+Window title "Merge to PDF", primary button "Merge PDFs", output `Merged.pdf` next to the first source (or the
+drop folder), never overwriting. A single image stays with Crop. Real-file tests live in
+`tests/FileAction.Tests/PdfToolFunctionTests.cs`; the model and key tests in `PdfOrganizeTests.cs`; the
+theme scan/repaint test in `PdfToolThemeTests.cs`.
+
+| ID | Check | Expected / assertion | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| M-1 | Tool identity and localized labels | Id `tools.pdfmerge`; TitleKey `tool.pdfmerge.title`; PrimaryLabelKey `tool.pdfmerge.merge` -> "Merge PDFs"; all 14 `tool.pdfmerge.*` keys exist in en and ar with identical placeholders and differ between the languages | PASS | `Every_pdf_tool_key_exists_in_english_and_arabic_with_the_same_placeholders`, `The_pdf_tool_key_groups_contain_exactly_the_expected_keys` |
+| M-2 | Accepts 2+ PDFs/images | `Applies` is true for 2+ PDFs, 2+ images and a mix; false for a single file or a non-PDF/image | PASS | `CanMerge_accepts_pdfs_and_images_only` |
+| M-3 | Document order is the plan order | 3 PDFs (alpha 1 page, beta 2 pages, gamma 1 page) -> a real output of 4 pages in that order; PdfPig extracts `AlphaText`, `BetaOne`, `BetaTwo`, `GammaText` page by page | PASS | `Merge_writes_the_three_pdfs_in_document_order_with_their_text` |
+| M-4 | Rotation preserved | source pages with /Rotate 0, 90, 180 -> output pages keep 0, 90, 180 | PASS | `Merge_keeps_the_rotation_of_each_source_page` |
+| M-5 | One image = one page | 320x200 PNG after a 1-page PDF -> 2 pages; the image page is 240x150 pt (96 DPI -> points) and its pixels render | PASS | `Merge_adds_an_image_as_exactly_one_page` |
+| M-6 | Up/down arrow rules | first row: up disabled, down enabled; last row: up enabled, down disabled; single file: both disabled; each press moves exactly one position | PASS | `Merge_arrows_are_disabled_at_the_first_and_last_row`, `Merge_a_single_file_has_both_arrows_disabled`, `Merge_up_and_down_move_one_position` |
+| M-7 | Remove / reset / move | remove keeps the other rows in order, reset restores the incoming order, move places the file at the target index (and rejects no-ops/out-of-range) | PASS | `Merge_remove_keeps_the_other_files_in_order`, `Merge_reset_restores_the_selection_order`, `Merge_move_forward_places_the_file_at_the_target_index`, `Merge_move_rejects_out_of_range_or_no_op_indexes` |
+| M-8 | Initial order and the alphabetical caveat | the plan copies the items in the order the app received them; paths collected without a selection can arrive alphabetically, which the arrows/drag correct (documented in `PdfMergeTool` and `PdfMergePlan`) | PASS (inspection) | `PdfMergeTool` XML doc; `Merge_keeps_the_selection_order_and_mixes_pdfs_with_images` |
+| M-9 | Failure paths leave no partial output | corrupt PDF and password-protected PDF -> localized `ConversionException` naming the file and no `Merged*` file in the output folder; read-only folder -> access error and an empty folder | PASS | `Merge_fails_on_a_corrupt_pdf_without_writing_a_partial_file`, `Merge_fails_on_an_encrypted_pdf_without_writing_a_partial_file`, `Merge_fails_on_a_read_only_folder_without_writing_a_partial_file` |
+| M-10 | Theme and RTL | no hard-coded colours in `UI/Tools/Pdf`; both views rebuild after a light/dark switch; RTL comes from the shared `ToolWindow` | PASS | `Pdf_tool_views_have_no_hard_coded_colours`, `Pdf_tool_views_repaint_when_the_theme_changes` (RTL chrome: inspection) |
+
+## Organize Pages - `tools.pdforganize` (one PDF)
+
+Header "N pages" and "Reset Order"; a page grid with numbered badges, rotate/duplicate/remove and
+drag-reorder; footer "Make all pages the same width" with the note "Pages are scaled proportionally to match
+the narrowest page; their heights may still differ."; primary button "Save Organized PDF"; output
+`<name> Organized.pdf`, source untouched.
+
+| ID | Check | Expected / assertion | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| O-1 | Tool identity and localized labels | Id `tools.pdforganize`; PrimaryLabelKey `tool.pdforganize.save` -> "Save Organized PDF"; all 16 `tool.pdforganize.*` keys exist in en and ar with identical placeholders and differ between the languages | PASS | `Every_pdf_tool_key_exists_in_english_and_arabic_with_the_same_placeholders`, `The_pdf_tool_key_groups_contain_exactly_the_expected_keys` |
+| O-2 | Accepts one PDF only | applies to `report.pdf`; false for an image, text file, folder or two PDFs | PASS | `CanOrganize_accepts_a_single_pdf_only` |
+| O-3 | Seeds one page per source page | 3 pages -> indexes 0,1,2 with rotation 0; the header shows "{0} pages" | PASS | `Organize_seeds_one_page_per_source_page_in_order` |
+| O-4 | Rotate | +90/-90/180 add to the page's own rotation and wrap at 360 | PASS | `Organize_rotate_adds_degrees_and_wraps`, `Page_ref_rotated_by_normalizes_to_a_quarter_turn` |
+| O-5 | Duplicate / delete | duplicate inserts a copy right after the page with its rotation; delete removes one page and never the last page | PASS | `Organize_duplicate_inserts_a_copy_right_after_the_page`, `Organize_delete_removes_a_page_but_keeps_at_least_one` |
+| O-6 | Move / drag and Reset Order | move reorders pages including duplicates; reset restores the source page list | PASS | `Organize_move_reorders_pages_and_keeps_duplicates`, `Organize_reset_restores_the_original_page_list` |
+| O-7 | Exact real-file result | rotate(0,90)+rotate(1,180)+duplicate(1)+delete(3)+move(2,0) -> 3 pages, texts Two/One/Two, /Rotate 180/90/180 | PASS | `Organize_applies_rotate_duplicate_delete_and_move_exactly` |
+| O-8 | Same-width option | 300x400 + 600x300, option on -> both output pages 300 pt wide, heights 400 and 150, and the text of both pages still extracts | PASS | `Organize_same_width_scales_every_page_to_the_narrowest_width` |
+| O-9 | Validation | empty page list, page index outside the source and a non-quarter-turn rotation are rejected | PASS | `Organize_validate_flags_an_empty_page_list`, `Organize_validate_flags_a_page_index_outside_the_source`, `Organize_validate_flags_a_rotation_that_is_not_a_quarter_turn` |
+| O-10 | Failure path | corrupt input -> localized `ConversionException` naming the file and no `Organized*` output | PASS | `Organize_fails_on_a_corrupt_pdf_without_writing_a_partial_file` |
+| O-11 | Theme and RTL | theme scan and theme-change rebuild as for Merge; the grid and footer inherit RTL from the shared window | PASS | `Pdf_tool_views_have_no_hard_coded_colours`, `Pdf_tool_views_repaint_when_the_theme_changes` (RTL chrome: inspection) |
+
+**How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~PdfToolFunctionTests|FullyQualifiedName~PdfToolThemeTests|FullyQualifiedName~PdfOrganizeTests"` (62 cases: 32 model/key methods, 9 real-file function tests, 3 theme cases). The 12 function/theme cases passed in run [39341981013](https://github.com/Faisaldhd/dropwheel/actions/runs/39341981013) (308 passed, 0 failed); the merged head reruns them in the `Build + test` job.
+## Lock — `tools.lock` (Beta)
+
+One real file or folder is transformed **in place** into one self-contained `.dwenc` / `.dwdir`: a
+three-slot password/recovery envelope, authenticated header, chunked AES-256-GCM frames, verified
+atomic replacement, a folder `desktop.ini` badge, auto-relock and crash recovery. Tests live in
+`tests/FileAction.Tests/LockContainerTests.cs` and `LockSafetyTests.cs`.
+
+| ID | What is checked | Expected result | Status | Evidence |
+|---|---|---|---|---|
+| L-1 | Single real file, one item | After lock there is exactly one `.dwenc` and no plaintext/temp; unlock restores the original name and bytes | PASS | `Service_roundtrip_creates_and_removes_exactly_one_file` |
+| L-2 | 0 B, 1 B, chunk−1, chunk, chunk+1, multi-chunk | Each size round-trips to the same SHA-256; no partial files remain | PASS | same theory (6 sizes) |
+| L-3 | Small folder | Nested file and `desktop.ini` round-trip; unlock restores the folder and byte-exact previous `desktop.ini` | PASS | `Folder_roundtrip_restores_content_and_desktop_ini_byte_for_byte` |
+| L-4 | Folder failure rollback | A locked file inside the folder aborts the lock, restores the folder appearance and writes no container | PASS | `Folder_protect_rolls_back_when_a_file_is_locked` |
+| L-5 | Tamper and truncation | Wrong tag/ciphertext/header/MAC and truncation are refused; nothing is restored | PASS | `Tampered_*`, `Truncated_file_is_refused` |
+| L-6 | Corrupt input | A damaged container gives a clear error and leaves no restored/staging/temp output | PASS | `Corrupt_input_leaves_no_output_files` |
+| L-7 | Read-only source | A read-only folder/file round-trips without partial output | PASS | `Read_only_folder_still_roundtrips_without_partial_output` |
+| L-8 | Cancel mid-run | Source and bytes stay intact; no `.dwenc` and no `.tmp` remain | PASS | `Cancel_mid_run_leaves_the_source_and_no_output` |
+| L-9 | Header-only rewrite atomicity | Failure injected at every file operation leaves the old secrets working; a verified replace is required | PASS | `Header_rewrite_is_atomic_under_a_failure_at_every_file_operation` |
+| L-10 | Crash recovery | The journal re-encrypts edited plaintext into the same container; plaintext is kept until the replace verifies | PASS | `Crash_recovery_reencrypts_the_edited_plaintext_into_the_same_container` |
+| L-11 | Auto-lock rules | Waits for the program, a tabbed Explorer view, a held file and the grace period; honors the idle fallback | PASS | `Auto_lock_waits_for_the_program_the_explorer_and_the_grace` |
+| L-12 | No stored secrets or Recycle copies | No password/key under `%LOCALAPPDATA%\DropWheel`; `RecycleContainerAfterUnlock` defaults OFF and protect never recycles | PASS | `No_secret_is_written_under_the_app_data_folder`, `Recycle_bin_is_off_by_default_and_protection_never_recycles` |
+| L-13 | Purple badge, original type, folder icon, refresh, HKCU only | `Theme.LockBadge` #8224D4 / `LockBadgeHighlight` #B48AE0; two-tone padlock bottom-left; 7 icons × 16/24/32/48/64/256 frames, 73,342 bytes; original file icon composed in the Lock window; folder `desktop.ini` badge; host notification after lock/unlock; HKCU-only registry | PASS (Explorer `.dwenc` DefaultIcon is the document variant; one icon per extension, no shell handler) | `Lock_icons_are_shipped_multi_size_png_frames_and_use_the_purple_tokens`, `Host_is_notified_after_lock_and_unlock_so_explorer_refreshes`, `Associations_are_per_user_and_removable`, `Desktop_ini_is_restored_byte_for_byte_or_removed` |
+
+**How to reproduce the automated rows:** `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj -c Release --filter "FullyQualifiedName~LockContainerTests|FullyQualifiedName~LockSafetyTests"`; the CI `Build + test` job runs them on every push.
