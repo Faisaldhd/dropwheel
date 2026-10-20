@@ -239,7 +239,7 @@ verified the gate's mechanism from its **red** run, which is the harder half of 
 | artifact name | **`ui-coverage`** — present on run `39377633125`, 5,858,055 B, not expired |
 | artifact really contains the renders | **yes** — 98 files: **90 PNGs**, plus `ui-coverage.txt`, `ui-coverage.md` and 5 sample inputs (`photo.jpg`, `clip.mp4`, `doc.pdf`, `bundle.zip`, `tone.wav`) |
 | per-window / per-culture counts (report header) | `surfaces: 114 rows, pass 113, skip 0, fail 1`<br>`keys: 1094 English / 1094 Arabic` |
-| does every tool window appear in both cultures? | **yes** — the report has one row per `tool:tools.<id>` per culture, for all 26 tools, alongside `settings`, `shelf`, `jobs`, `editor`, `wheel:*` and 10+ dialogs |
+| does every tool window appear in both cultures? | **yes** — **52 tool rows = 26 tools × 2 cultures**, plus 26 `fit` (layout) rows, 22 dialog rows, 6 `wheel:*` rows and 2 each for `settings`, `jobs`, `editor`, `shelf` (8 surface kinds, 114 rows) |
 | does the job **fail** on a non-zero self-test exit? | **yes, proven by a real red run**: run `39377633125` failed at step *Self-contained UI self-test (shipped publish)* with `self-contained --self-test failed with 1`, after the log printed `FAILED: … UI coverage (en+ar) failed for 1 surface(s)` |
 
 **The gate is currently RED, and it is red for a real defect:** run `39377633125` failed on
