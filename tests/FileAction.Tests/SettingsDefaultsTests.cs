@@ -42,8 +42,7 @@ public class SettingsDefaultsTests
 
     [Fact]
     public void Json_round_trip_keeps_the_defaults()
-    {
-        var json = JsonSerializer.Serialize(new AppSettings(), SettingsJson.Default.AppSettings);
+    {        var json = JsonSerializer.Serialize(new AppSettings(), SettingsJson.Default.AppSettings);
         var restored = JsonSerializer.Deserialize(json, SettingsJson.Default.AppSettings);
 
         Assert.NotNull(restored);
@@ -86,5 +85,17 @@ public class SettingsDefaultsTests
         const string source = "{\"CheckForUpdates\":true}";
 
         Assert.Equal(source, AppSettings.MigrateLanguage(source));
+    }
+
+    [Fact]
+    public void Animations_are_on_by_default_and_survive_a_round_trip()
+    {
+        Assert.True(new AppSettings().Animations, "2.4.0 motion must be on by default");
+
+        var json = JsonSerializer.Serialize(new AppSettings { Animations = false }, SettingsJson.Default.AppSettings);
+        var restored = JsonSerializer.Deserialize(json, SettingsJson.Default.AppSettings);
+
+        Assert.NotNull(restored);
+        Assert.False(restored!.Animations);
     }
 }
