@@ -1915,3 +1915,33 @@ html[lang="ar"] h3 { letter-spacing: 0; }
 html[lang="ar"] .eyebrow,
 html[lang="ar"] .tool-kicker,
 html[lang="ar"] .hero-hash__label { letter-spacing: 0.02em; }
+
+/* Make the motion control legible: the 30 px icon-only circle read as an empty dark square
+ * in the 1440 capture. A pill with the play glyph and a visible "Motion"/"حركة" label is
+ * both clearer and a real 26 px target. */
+.tool-play {
+  inset-block-start: auto;
+  inset-block-end: 10px;
+  inset-inline-end: 10px;
+  width: auto;
+  height: 26px;
+  min-width: 0;
+  padding: 0 10px;
+  gap: 6px;
+  border-radius: 999px;
+  background: rgba(16, 11, 24, 0.84);
+  color: #f7f3fd;
+  font-size: 0.7rem;
+  letter-spacing: 0.01em;
+}
+html[data-theme="light"] .tool-play { background: rgba(255, 255, 255, 0.9); color: #1b1329; }
+.tool-play .icon { fill: none; stroke: currentColor; flex: none; }
+.tool-play[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.tool-play__text {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+  white-space: nowrap;
+}
