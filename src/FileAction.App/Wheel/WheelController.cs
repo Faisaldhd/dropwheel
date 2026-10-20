@@ -92,6 +92,7 @@ internal sealed class WheelController
         new UI.Tools.Image.CropOperation(),
         new UI.Tools.Image.Frame.AddBackgroundOperation(),
         new UI.Tools.Image.EditPhotosOperation(),
+        new UI.Tools.Collage.CollageOperation(),
     ];
 
     /// <summary>
