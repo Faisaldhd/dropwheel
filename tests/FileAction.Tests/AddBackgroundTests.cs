@@ -1,4 +1,7 @@
+using FileAction.App.UI.Tools.Image.Frame;
 using FileAction.Core;
+using ImageMagick;
+using ImageMagick.Drawing;
 using Xunit;
 
 namespace FileAction.Tests;
@@ -31,7 +34,7 @@ public class AddBackgroundTests
     [Fact]
     public void Ratio_crops_the_padded_composition_around_the_photo()
     {
-        // 1200 × 1200 with 160 of padding is 1520 × 1520; 16:9 keeps its width and trims the height.
+        // 1200 Ã— 1200 with 160 of padding is 1520 Ã— 1520; 16:9 keeps its width and trims the height.
         var composition = AddBackground.Compose(1200, 1200, 160, 64, 40, BackgroundRatio.Wide);
 
         Assert.Equal(1520, composition.CanvasWidth);
@@ -48,7 +51,7 @@ public class AddBackgroundTests
     [Fact]
     public void Portrait_ratio_crops_a_landscape_photo_sideways()
     {
-        // 1600 × 900 with 100 of padding is 1800 × 1100; 4:5 keeps the height and trims the width.
+        // 1600 Ã— 900 with 100 of padding is 1800 Ã— 1100; 4:5 keeps the height and trims the width.
         var composition = AddBackground.Compose(1600, 900, 100, 40, 20, BackgroundRatio.Portrait);
 
         Assert.Equal(880, composition.CanvasWidth);
@@ -110,12 +113,12 @@ public class AddBackgroundTests
         {
             var rect = AddBackground.CoverRect(sourceW, sourceH, 640, 480);
 
-            Assert.True(rect.Width >= 640, $"{sourceW}×{sourceH}: {rect}");
-            Assert.True(rect.Height >= 480, $"{sourceW}×{sourceH}: {rect}");
-            Assert.True(rect.X <= 0, $"{sourceW}×{sourceH}: {rect}");
-            Assert.True(rect.Y <= 0, $"{sourceW}×{sourceH}: {rect}");
-            Assert.True(rect.Right >= 640, $"{sourceW}×{sourceH}: {rect}");
-            Assert.True(rect.Bottom >= 480, $"{sourceW}×{sourceH}: {rect}");
+            Assert.True(rect.Width >= 640, $"{sourceW}Ã—{sourceH}: {rect}");
+            Assert.True(rect.Height >= 480, $"{sourceW}Ã—{sourceH}: {rect}");
+            Assert.True(rect.X <= 0, $"{sourceW}Ã—{sourceH}: {rect}");
+            Assert.True(rect.Y <= 0, $"{sourceW}Ã—{sourceH}: {rect}");
+            Assert.True(rect.Right >= 640, $"{sourceW}Ã—{sourceH}: {rect}");
+            Assert.True(rect.Bottom >= 480, $"{sourceW}Ã—{sourceH}: {rect}");
         }
     }
 
@@ -164,13 +167,13 @@ public class AddBackgroundTests
     [Fact]
     public void A_huge_photo_keeps_its_pixels_but_the_frame_is_capped()
     {
-        // 9000 × 7000 is 63 MP; only the frame can be trimmed to stay inside the 64 MP canvas limit.
+        // 9000 Ã— 7000 is 63 MP; only the frame can be trimmed to stay inside the 64 MP canvas limit.
         var padding = AddBackground.LimitPadding(9000, 7000, 469);
 
         Assert.True(padding is > 0 and < 469, padding.ToString());
         var width = 9000 + 2 * padding;
         var height = 7000 + 2 * padding;
-        Assert.True((long)width * height <= AddBackground.MaxCanvasPixels, $"{width} × {height} is over the cap");
+        Assert.True((long)width * height <= AddBackground.MaxCanvasPixels, $"{width} Ã— {height} is over the cap");
         Assert.True(width <= AddBackground.MaxCanvasSide);
     }
 
@@ -279,5 +282,222 @@ public class AddBackgroundTests
         Assert.True(composition.CanvasHeight >= 1);
         Assert.True(composition.ImageWidth >= 1);
         Assert.True(composition.ImageHeight >= 1);
+    }
+
+    [Fact]
+    public void The_window_and_primary_labels_resolve_in_both_languages()
+    {
+        var spec = AddBackgroundTool.Instance;
+
+        Assert.Equal("tools.addbackground", spec.Id);
+        Assert.Equal("tool.addbackground.title", spec.TitleKey);
+        Assert.Equal("tool.addbackground.apply", spec.PrimaryLabelKey);
+
+        var en = Loc.Table(Language.English);
+        var ar = Loc.Table(Language.Arabic);
+        foreach (var key in new[] { spec.TitleKey, spec.PrimaryLabelKey, "tool.addbackground.suffix" })
+        {
+            Assert.True(en.ContainsKey(key), $"en.json is missing {key}");
+            Assert.True(ar.ContainsKey(key), $"ar.json is missing {key}");
+            Assert.NotEqual(en[key], ar[key]);
+        }
+
+        Assert.Equal("Add BG", en[spec.TitleKey]);
+        Assert.Equal("Save with Background", en[spec.PrimaryLabelKey]);
+    }
+
+    [Fact]
+    public void The_defaults_behind_Reset_are_the_documented_ones()
+    {
+        Assert.Equal(160, AddBackground.DefaultPadding);
+        Assert.Equal(64, AddBackground.DefaultCorners);
+        Assert.Equal(40, AddBackground.DefaultShadow);
+        Assert.Equal(400, AddBackground.MaxPadding);
+        Assert.Equal(400, AddBackground.MaxCorners);
+        Assert.Equal(100, AddBackground.MaxShadow);
+        Assert.Equal(GradientPreset.Violet, Enum.GetValues<GradientPreset>()[0]);
+        Assert.Equal(0, AddBackground.RatioValue(BackgroundRatio.Auto));
+    }
+
+    [Fact]
+    public void The_tool_accepts_one_photo_and_rejects_other_inputs()
+    {
+        var spec = AddBackgroundTool.Instance;
+
+        Assert.True(spec.Applies([new FileItem("photo.jpg")]));
+        Assert.False(spec.Applies([new FileItem("report.pdf")]));
+        Assert.False(spec.Applies([new FileItem("one.png"), new FileItem("two.png")]));
+        Assert.False(spec.Applies([]));
+    }
+}
+
+/// <summary>
+/// Real output of <see cref="AddBackgroundRenderer"/>: every test renders a file and asserts the PNG's
+/// pixel size and the exact colour at coordinates taken from <see cref="AddBackground.Compose"/>, so the
+/// geometry and the pixels are checked together.
+/// </summary>
+public sealed class AddBackgroundRenderTests : IDisposable
+{
+    private static readonly MagickColor White = new(255, 255, 255);
+    private static readonly MagickColor Red = new(255, 0, 0);
+    private static readonly MagickColor Black = new(0, 0, 0);
+    private static readonly BackgroundColor WhiteFill = new(255, 255, 255);
+    private static readonly BackgroundColor BlackFill = new(0, 0, 0);
+
+    private readonly string _directory = Path.Combine(
+        Path.GetTempPath(), "dropwheel-addbg-tests", Guid.NewGuid().ToString("N"));
+
+    public AddBackgroundRenderTests() => Directory.CreateDirectory(_directory);
+
+    public void Dispose() => OutputPaths.TryDelete(_directory);
+
+    [Fact]
+    public void Render_writes_the_composed_size_with_the_backdrop_around_the_photo()
+    {
+        var source = Solid("photo.png", 320, 200, MagickColors.RebeccaPurple);
+        var composition = AddBackground.Compose(320, 200, 20, 0, 0, BackgroundRatio.Auto);
+
+        var target = Render(source, BackgroundFill.OfColor(WhiteFill), 20, 0, 0, BackgroundRatio.Auto);
+
+        using var image = new MagickImage(target);
+        Assert.Equal(composition.CanvasWidth, (int)image.Width);
+        Assert.Equal(composition.CanvasHeight, (int)image.Height);
+        Assert.Equal(360, (int)image.Width);
+        Assert.Equal(240, (int)image.Height);
+        Assert.Equal(MagickFormat.Png, image.Format);
+
+        AssertPixel(target, 0, 0, White);
+        AssertPixel(target, 359, 239, White);
+        AssertPixel(target, 20, 20, MagickColors.RebeccaPurple);
+        AssertPixel(target, 339, 219, MagickColors.RebeccaPurple);
+    }
+
+    [Fact]
+    public void Render_rounds_the_corners_so_the_backdrop_shows_through()
+    {
+        var source = Solid("photo.png", 200, 200, Red);
+
+        var target = Render(source, BackgroundFill.OfColor(WhiteFill), 10, 60, 0, BackgroundRatio.Auto);
+
+        // 10 px of padding and a 60 px radius: the exact corner pixel is outside the rounded photo.
+        AssertPixel(target, 10, 10, White);
+        AssertPixel(target, 70, 70, Red);
+        AssertPixel(target, 110, 40, Red);
+    }
+
+    [Fact]
+    public void Render_crops_the_composition_to_the_ratio()
+    {
+        var source = Solid("photo.png", 200, 100, Red);
+        var composition = AddBackground.Compose(200, 100, 100, 0, 0, BackgroundRatio.Wide);
+
+        var target = Render(source, BackgroundFill.OfColor(BlackFill), 100, 0, 0, BackgroundRatio.Wide);
+
+        using var image = new MagickImage(target);
+        Assert.Equal(400, composition.CanvasWidth);
+        Assert.Equal(225, composition.CanvasHeight);
+        Assert.Equal(composition.CanvasWidth, (int)image.Width);
+        Assert.Equal(composition.CanvasHeight, (int)image.Height);
+
+        AssertPixel(target, 0, 0, Black);
+        AssertPixel(target, 399, 224, Black);
+        AssertPixel(target, 200, 110, Red);
+    }
+
+    [Fact]
+    public void Render_covers_the_canvas_with_a_background_image()
+    {
+        var green = new MagickColor(0, 200, 0);
+        var backdrop = Solid("backdrop.png", 400, 100, green);
+        var source = Solid("photo.png", 200, 200, Red);
+
+        var target = Render(source, BackgroundFill.OfImage(backdrop, blur: false), 10, 0, 0, BackgroundRatio.Auto);
+
+        // A 4:1 backdrop over a square canvas is cropped, not letterboxed: both far corners are green.
+        AssertPixel(target, 0, 0, green);
+        AssertPixel(target, 219, 219, green);
+        AssertPixel(target, 110, 110, Red);
+    }
+
+    [Fact]
+    public void Render_lets_transparent_source_pixels_show_the_backdrop()
+    {
+        var source = Path.Combine(_directory, "transparent.png");
+        using (var image = new MagickImage(MagickColors.Transparent, 100, 100))
+        {
+            image.Draw(new Drawables().FillColor(Red).Rectangle(50, 0, 99, 99));
+            image.Write(source, MagickFormat.Png);
+        }
+
+        var target = Render(source, BackgroundFill.OfColor(WhiteFill), 10, 0, 0, BackgroundRatio.Auto);
+
+        AssertPixel(target, 20, 50, White);
+        AssertPixel(target, 100, 50, Red);
+    }
+
+    [Fact]
+    public void Render_keeps_alpha_when_the_backdrop_is_transparent()
+    {
+        var backdrop = Path.Combine(_directory, "clear.png");
+        using (var clear = new MagickImage(MagickColors.Transparent, 50, 50))
+            clear.Write(backdrop, MagickFormat.Png);
+        var source = Solid("photo.png", 100, 100, Red);
+
+        var target = Render(source, BackgroundFill.OfImage(backdrop, blur: false), 20, 0, 0, BackgroundRatio.Auto);
+
+        using var image = new MagickImage(target);
+        Assert.True(image.HasAlpha, "the saved PNG should keep an alpha channel");
+
+        // Over a yellow canvas the transparent corner shows yellow; the photo itself stays red.
+        using var over = new MagickImage(new MagickColor(255, 255, 0), image.Width, image.Height);
+        over.Composite(image, 0, 0, CompositeOperator.SrcOver);
+        AssertCrop(over, 0, 0, new MagickColor(255, 255, 0));
+        AssertCrop(over, 70, 70, Red);
+    }
+
+    [Fact]
+    public void A_second_save_gets_a_numbered_name_and_never_overwrites()
+    {
+        var first = OutputPaths.Unique(_directory, "photo With Background", "png");
+        Assert.Equal(Path.Combine(_directory, "photo With Background.png"), first);
+        File.WriteAllBytes(first, new byte[] { 0 });
+
+        var second = OutputPaths.Unique(_directory, "photo With Background", "png");
+        Assert.Equal(Path.Combine(_directory, "photo With Background (2).png"), second);
+        File.WriteAllBytes(second, new byte[] { 1 });
+
+        var third = OutputPaths.Unique(_directory, "photo With Background", "png");
+        Assert.Equal(Path.Combine(_directory, "photo With Background (3).png"), third);
+        Assert.False(File.Exists(third));
+    }
+
+    private string Solid(string name, int width, int height, MagickColor color)
+    {
+        var path = Path.Combine(_directory, name);
+        using var image = new MagickImage(color, (uint)width, (uint)height);
+        image.Write(path, MagickFormat.Png);
+        return path;
+    }
+
+    private string Render(string source, BackgroundFill fill, int padding, int corners, int shadow, BackgroundRatio ratio)
+    {
+        var target = Path.Combine(_directory, $"out-{Guid.NewGuid():N}.png");
+        AddBackgroundRenderer.Render(source, fill, padding, corners, shadow, ratio, target);
+        return target;
+    }
+
+    private static void AssertPixel(string file, int x, int y, MagickColor expected)
+    {
+        using var image = new MagickImage(file);
+        AssertCrop(image, x, y, expected);
+    }
+
+    private static void AssertCrop(MagickImage image, int x, int y, MagickColor expected)
+    {
+        using var probe = new MagickImage(image);
+        probe.Crop(new MagickGeometry(x, y, 1, 1));
+        probe.ResetPage();
+        using var want = new MagickImage(expected, 1, 1);
+        Assert.Equal(0.0, probe.Compare(want, ErrorMetric.Absolute), 6);
     }
 }

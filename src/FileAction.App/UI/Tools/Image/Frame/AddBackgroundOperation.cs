@@ -6,11 +6,8 @@ namespace FileAction.App.UI.Tools.Image.Frame;
 
 /// <summary>
 /// "Add BG" on the Tools wheel. It applies to a single photo and opens the Add Background window instead
-/// of running a background job. It opens its own spec by id (not through <c>ToolRegistry.For</c>), so a
-/// second image tool can never hijack another one's slice.
-///
-/// The wheel list is still shared code (<c>WheelController.BuildOperations</c>); registering this
-/// operation there is the one integration step this tool needs.
+/// of running a background job. The window is resolved by operation id, so a second image tool can never
+/// hijack this slice.
 /// </summary>
 internal sealed class AddBackgroundOperation : Operation, IInteractiveTool
 {
@@ -25,6 +22,9 @@ internal sealed class AddBackgroundOperation : Operation, IInteractiveTool
     public override Task<OperationResult> ExecuteAsync(IReadOnlyList<FileItem> items, OperationContext ctx) =>
         Task.FromResult(OperationResult.Of(Array.Empty<string>()));
 
-    public void Open(IReadOnlyList<FileItem> items, DropTargets? targets) =>
-        new ToolWindow(AddBackgroundTool.Instance, items, targets).Show();
+    public void Open(IReadOnlyList<FileItem> items, DropTargets? targets)
+    {
+        var spec = ToolRegistry.For("tools.addbackground", items) ?? AddBackgroundTool.Instance;
+        new ToolWindow(spec, items, targets).Show();
+    }
 }

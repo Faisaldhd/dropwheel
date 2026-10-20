@@ -61,6 +61,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Deterministic assets from tools/lock-icons/generate.ps1; embedded so a stale output folder can
+         never leave the shell association pointing at a missing icon. -->
+    <EmbeddedResource Include="Assets\Lock\*.ico" LogicalName="FileAction.App.Lock.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\FileAction.Core\FileAction.Core.csproj" />
   </ItemGroup>
 

@@ -105,6 +105,8 @@ internal sealed class App : Application
         CrashGuard.Install(this);
 
         _settings = AppSettings.Load();
+        // 2.4.0: one switch for every animation in the app (Settings › General › Animations).
+        Motion.SetSettingsEnabled(_settings.Animations);
         AppLog.Info($"settings loaded from {Path.Combine(AppSettings.Folder, "settings.json")}");
         LanguageManager.Apply(_settings.Language);
         AppLog.Info($"language: {LanguageManager.Current} (preference {LanguageManager.Preference}), rtl={LanguageManager.IsRtl}");
@@ -222,6 +224,8 @@ internal sealed class App : Application
 
     private void OnSettingsChanged()
     {
+        // Motion follows the Settings toggle immediately; no window is rebuilt for it.
+        Motion.SetSettingsEnabled(_settings.Animations);
         if (LanguageManager.Preference != _settings.Language)
         {
             // Live language switch: no restart, no window is closed just because the language changed.

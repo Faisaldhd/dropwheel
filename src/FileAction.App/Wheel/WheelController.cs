@@ -86,7 +86,34 @@ internal sealed class WheelController
 
     /// <summary>The cross-platform catalog plus tools that need Windows itself (OCR) or a window (Crop).</summary>
     public static IReadOnlyList<Operation> BuildOperations() =>
-        [.. Catalog.Build(), new Ocr.OcrOperation(), new UI.Tools.Image.CropOperation(), new UI.Tools.Image.Frame.AddBackgroundOperation(), new UI.Tools.Collage.CollageOperation()];
+    [
+        .. Catalog.Build(),
+        new Ocr.OcrOperation(),
+        new UI.Tools.Image.CropOperation(),
+        new UI.Tools.Image.Frame.AddBackgroundOperation(),
+        new UI.Tools.Image.EditPhotosOperation(),
+        new UI.Tools.Collage.CollageOperation(),
+        new UI.Tools.Video.VideoFramesOperation(),
+        new UI.Tools.Video.VideoRedactOperation(),
+        new UI.Tools.Video.VideoSplitOperation(),
+        new UI.Tools.Video.VideoJoinOperation(),
+        new UI.Tools.Video.VideoTrimOperation(),
+        new UI.Tools.Video.VideoCropOperation(),
+        new UI.Tools.Video.VideoSpeedOperation(),
+        new UI.Tools.Lock.LockOperation(),
+        new UI.Tools.Password.ProtectOperation(),
+        new UI.Tools.Password.UnlockOperation(),
+        new UI.Tools.Compress.CompressOperation(),
+        new UI.Tools.Meta.MetadataOperation(),
+        new UI.Tools.Qr.QrOperation(),
+        new UI.Tools.Pdf.PdfMergeOperation(),
+        new UI.Tools.Pdf.PdfOrganizeOperation(),
+        new UI.Tools.Audio.AudioNormalizeOperation(),
+        new UI.Tools.Audio.AudioTrimOperation(),
+        new UI.Tools.Audio.AudioChannelsOperation(),
+        new UI.Tools.Audio.AudioBleepOperation(),
+        new UI.Tools.Audio.AudioVisualizerOperation(),
+    ];
 
     /// <summary>
     /// What fits these items. Conversions that need FFmpeg or Pandoc stay on the wheel even before those are

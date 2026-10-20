@@ -19,6 +19,9 @@ internal sealed class AddBackgroundTool : IToolWindowSpec
 
     public string TitleKey => "tool.addbackground.title";
 
+    /// <summary>The primary action writes a new file, so the button names that instead of "Apply".</summary>
+    public string PrimaryLabelKey => "tool.addbackground.apply";
+
     /// <summary>
     /// Chrome: the title bar, the two swatch rows, the image row, three sliders, the ratio chips and the
     /// bottom bar, which is about 350 DIP. The preview keeps the composition's aspect inside 380–520 wide.
@@ -41,10 +44,10 @@ internal sealed class AddBackgroundTool : IToolWindowSpec
 }
 
 /// <summary>
-/// Registers the tool from its own file. The file lives in the Frame folder on purpose: module
-/// initializers run in compile order, and this one must come after the crop tool so that
-/// <c>ToolRegistry.For</c> (still a first-match lookup) keeps resolving a plain photo to Crop until the
-/// wheel dispatch names its tool by id.
+/// Registers the tool from its own file, so no shared list has to be edited. Registration order no
+/// longer decides which image tool opens: the wheel names its tool by id
+/// (<see cref="ToolRegistry.For(string, IReadOnlyList{FileItem})"/>) and this tool's operation opens it
+/// directly.
 /// </summary>
 internal static class AddBackgroundRegistration
 {
