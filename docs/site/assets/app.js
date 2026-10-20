@@ -439,3 +439,28 @@
   applyMotionPreference();
   updatePlayLabels();
 })();
+
+/* ---------------------------------------------------------------- scroll reveal
+ * Self-contained on purpose: transform/opacity only, one-shot per element, and it
+ * never hides anything when scripts, IntersectionObserver, or motion are unavailable. */
+(function () {
+  var root = document.documentElement;
+  var nodes = document.querySelectorAll('[data-reveal]');
+  if (!nodes.length) return;
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var i;
+  if (reduce || !('IntersectionObserver' in window)) {
+    for (i = 0; i < nodes.length; i++) nodes[i].classList.add('is-in');
+    return;
+  }
+  root.classList.add('reveal-ready');
+  var io = new IntersectionObserver(function (entries) {
+    for (var k = 0; k < entries.length; k++) {
+      if (entries[k].isIntersecting) {
+        entries[k].target.classList.add('is-in');
+        io.unobserve(entries[k].target);
+      }
+    }
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
+  for (i = 0; i < nodes.length; i++) io.observe(nodes[i]);
+})();

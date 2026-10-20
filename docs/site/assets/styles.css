@@ -1609,3 +1609,90 @@ html.no-js .tool-play,
 html.no-js .copy-button,
 html.no-js .theme-toggle,
 html.no-js .lang-switch { display: none; }
+
+/* ---------------------------------------------------------------- 2.4.0 keys, placeholders, reveal */
+.tool-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 1px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.tool-options li {
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--accent-softer);
+  color: var(--muted);
+  font-size: 0.71rem;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.tool-pending {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  height: 100%;
+  padding: 6px 10px;
+  text-align: center;
+}
+.tool-pending__window {
+  position: relative;
+  width: min(180px, 64%);
+  aspect-ratio: 1.42;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.05), transparent 62%),
+    var(--media-bg);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.28);
+}
+.tool-pending__bar {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: 13px;
+  border-block-end: 1px dashed var(--line-strong);
+  border-start-start-radius: 10px;
+  border-start-end-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+}
+.tool-pending__label {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+}
+.tool-pending__note {
+  max-width: 33ch;
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 0.69rem;
+  line-height: 1.45;
+}
+
+/* Scroll reveal: transform + opacity only, one-shot, disabled for reduced motion and without JS. */
+html.reveal-ready [data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 10px, 0);
+  transition: opacity 380ms cubic-bezier(0.2, 0.7, 0.2, 1), transform 380ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+html.reveal-ready [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+}
+html.reveal-ready .tools-grid .tool-card:nth-child(3n + 2) { transition-delay: 45ms; }
+html.reveal-ready .tools-grid .tool-card:nth-child(3n + 3) { transition-delay: 90ms; }
+@media (prefers-reduced-motion: reduce) {
+  html.reveal-ready [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

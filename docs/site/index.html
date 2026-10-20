@@ -56,11 +56,13 @@
 
   <div class="release-bar">
     <div class="wrap release-bar__inner">
+      <!--release-status:start-->
       <span class="release-bar__tag"><bdi dir="ltr">2.4.0</bdi></span>
       <p class="release-bar__text">
         <span data-lang="en">Final verification. Downloads stay on the last signed release (<bdi dir="ltr">2.3.0</bdi>) until <bdi dir="ltr">2.4.0</bdi> is published.</span>
         <span data-lang="ar" lang="ar">التحقق النهائي. يبقى التنزيل على آخر إصدار موقَّع (<bdi dir="ltr">2.3.0</bdi>) حتى نشر <bdi dir="ltr">2.4.0</bdi>.</span>
       </p>
+      <!--release-status:end-->
       <a class="release-bar__link" href="#whats-new">
         <span data-lang="en">What is new</span><span data-lang="ar" lang="ar">ما الجديد</span>
         <svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-arrow"/></svg>
@@ -136,20 +138,20 @@
             </li>
             <li>
               <svg class="icon" width="17" height="17" aria-hidden="true"><use href="#i-check"/></svg>
-              <span data-lang="en"><bdi dir="ltr">v2.3.0</bdi> verified</span>
-              <span data-lang="ar" lang="ar"><bdi dir="ltr">v2.3.0</bdi> موثَّق</span>
+              <span data-lang="en"><bdi dir="ltr">v<!--release-version:start-->2.3.0<!--release-version:end--></bdi> verified</span>
+              <span data-lang="ar" lang="ar"><bdi dir="ltr">v<!--release-version:start-->2.3.0<!--release-version:end--></bdi> موثَّق</span>
             </li>
             <li>
               <svg class="icon" width="17" height="17" aria-hidden="true"><use href="#i-hash"/></svg>
-              <span data-lang="en">60.05 MB installer</span>
-              <span data-lang="ar" lang="ar">المثبّت 60.05 ميجابايت</span>
+              <span data-lang="en"><!--release-mb:start-->60.05<!--release-mb:end--> MB installer</span>
+              <span data-lang="ar" lang="ar">المثبّت <!--release-mb:start-->60.05<!--release-mb:end--> ميجابايت</span>
             </li>
           </ul>
 
           <p class="hero-hash">
             <span class="hero-hash__label">SHA-256</span>
-            <code dir="ltr">7381cbd5b592…1d7156ce</code>
-            <a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a>
+            <code dir="ltr"><!--release-sha256:start-->7381cbd5b59249f3279b62af31091d89d3d8d994faa57fcdd08ec4331d7156ce<!--release-sha256:end--></code>
+            <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a>
           </p>
 
           <p class="privacy-line">
@@ -158,10 +160,12 @@
             <span data-lang="ar" lang="ar">تُعالَج على جهازك. لا يُرفَع أي شيء.</span>
           </p>
 
+          <!--release-note:start-->
           <p class="release-note">
             <span data-lang="en"><strong><bdi dir="ltr">2.4.0</bdi> is in final verification.</strong> The button above serves the last signed build until it ships. <a href="#whats-new">What is new in 2.4.0</a>.</span>
             <span data-lang="ar" lang="ar"><strong><bdi dir="ltr">2.4.0</bdi> قيد التحقق النهائي.</strong> الزر أعلاه ينزّل آخر إصدار موقَّع حتى صدوره. <a href="#whats-new">ما الجديد في 2.4.0</a>.</span>
           </p>
+          <!--release-note:end-->
         </div>
 
         <div class="hero-art">
@@ -186,7 +190,7 @@
 
     <section class="section" id="wheel" aria-labelledby="wheel-title">
       <div class="wrap">
-        <header class="section-head">
+        <header class="section-head" data-reveal>
           <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-wheel"/></svg><span data-lang="en">The gesture</span><span data-lang="ar" lang="ar">الإيماءة</span></p>
           <h2 id="wheel-title"><span data-lang="en">One drag. Three wheels.</span><span data-lang="ar" lang="ar">سحبة واحدة. ثلاث عجلات.</span></h2>
           <p class="section-lede">
@@ -249,7 +253,7 @@
 
     <section class="section section--tools" id="tools" aria-labelledby="tools-title">
       <div class="wrap">
-        <header class="section-head section-head--split">
+        <header class="section-head section-head--split" data-reveal>
           <div>
             <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-spark"/></svg><span data-lang="en">26 floating tools</span><span data-lang="ar" lang="ar">26 أداة عائمة</span></p>
             <h2 id="tools-title"><span data-lang="en">A whole toolbox, at the cursor.</span><span data-lang="ar" lang="ar">صندوق أدوات كامل عند المؤشر.</span></h2>
@@ -272,7 +276,7 @@
         <p class="filter-status" id="tools-status" aria-live="polite"></p>
 
         <div class="tools-grid" id="tools-grid">
-          <article class="tool-card" data-cat="photos">
+          <article class="tool-card" id="tool-crop" data-tool="crop" data-reveal data-cat="photos">
             <div class="tool-media">
               <img class="tool-shot" src="assets/tools/crop-dark.webp" data-dark="assets/tools/crop-dark.webp" data-light="assets/tools/crop-light.webp" data-kind="poster" width="480" height="508" loading="lazy" decoding="async"
                    alt="Crop tool window: a crop rectangle over a photo, ratio chips and width and height boxes."
@@ -287,11 +291,12 @@
               <div class="tool-kicker"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="tool-num">01</span></div>
               <h3><span data-lang="en">Crop</span><span data-lang="ar" lang="ar">اقتصاص</span></h3>
               <p><span data-lang="en">Drag the rectangle, lock a ratio, and apply at the original pixel size. The source is never rewritten.</span><span data-lang="ar" lang="ar">اسحب المستطيل، وثبّت نسبة الأبعاد، وطبّق بالحجم الأصلي للبكسل. لا يُعاد كتابة المصدر أبدًا.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Lock a ratio</span><span data-lang="ar" lang="ar">تثبيت نسبة</span></li><li><span data-lang="en">Original pixel size</span><span data-lang="ar" lang="ar">بالحجم الأصلي</span></li><li><span data-lang="en">Never overwrites</span><span data-lang="ar" lang="ar">لا يستبدل الأصل</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image</span><span data-lang="ar" lang="ar">صورة واحدة</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="photos">
+          <article class="tool-card" id="tool-editphotos" data-tool="editphotos" data-reveal data-cat="photos">
             <div class="tool-media">
               <img class="tool-shot" src="assets/tools/editphotos-dark.webp" data-dark="assets/tools/editphotos-dark.webp" data-light="assets/tools/editphotos-light.webp" data-kind="poster" width="420" height="648" loading="lazy" decoding="async"
                    alt="Edit tool window: a photo preview above tabs and light, colour and grain sliders."
@@ -306,11 +311,12 @@
               <div class="tool-kicker"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="tool-num">02</span></div>
               <h3><span data-lang="en">Edit</span><span data-lang="ar" lang="ar">تعديل</span></h3>
               <p><span data-lang="en">Sixteen sliders for light, colour and grain, previewed on the real image. A neutral edit is a byte-for-byte copy.</span><span data-lang="ar" lang="ar">ستة عشر شريطًا للضوء واللون والحبيبات، بمعاينة على الصورة الحقيقية. التعديل المحايد نسخة بايتية.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">16 sliders</span><span data-lang="ar" lang="ar">16 شريطًا</span></li><li><span data-lang="en">Live preview</span><span data-lang="ar" lang="ar">معاينة حيّة</span></li><li><span data-lang="en">Neutral edit stays identical</span><span data-lang="ar" lang="ar">التعديل المحايد مطابق</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 still image</span><span data-lang="ar" lang="ar">صورة ثابتة واحدة</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="photos">
+          <article class="tool-card" id="tool-annotate" data-tool="annotate" data-reveal data-cat="photos">
             <div class="tool-media">
               <img class="tool-shot" src="assets/tools/annotate-dark.webp" data-dark="assets/tools/annotate-dark.webp" data-light="assets/tools/annotate-light.webp" data-kind="poster" width="480" height="571" loading="lazy" decoding="async"
                    alt="Annotate tool window: a photo with drawn arrows and shapes, tool pills, colours and stroke sizes."
@@ -325,11 +331,12 @@
               <div class="tool-kicker"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="tool-num">03</span></div>
               <h3><span data-lang="en">Annotate</span><span data-lang="ar" lang="ar">تعليقات</span></h3>
               <p><span data-lang="en">Arrows, shapes, text and stamps with colour and stroke controls. Undo, reorder, and export a flat copy.</span><span data-lang="ar" lang="ar">أسهم وأشكال ونصوص وأختام مع لون وسماكة. تراجع، وأعد الترتيب، وصدّر نسخة مسطّحة.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Arrows and shapes</span><span data-lang="ar" lang="ar">أسهم وأشكال</span></li><li><span data-lang="en">Text and stamps</span><span data-lang="ar" lang="ar">نص وأختام</span></li><li><span data-lang="en">Undo and reorder</span><span data-lang="ar" lang="ar">تراجع وإعادة ترتيب</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image</span><span data-lang="ar" lang="ar">صورة واحدة</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="photos">
+          <article class="tool-card" id="tool-redact" data-tool="redact" data-reveal data-cat="photos">
             <div class="tool-media">
               <img class="tool-shot" src="assets/tools/redact-dark.webp" data-dark="assets/tools/redact-dark.webp" data-light="assets/tools/redact-light.webp" data-kind="poster" width="480" height="534" loading="lazy" decoding="async"
                    alt="Redact tool window: a photo with solid redaction boxes and the solid, blur and pixelate mode chips."
@@ -344,11 +351,12 @@
               <div class="tool-kicker"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="tool-num">04</span></div>
               <h3><span data-lang="en">Redact</span><span data-lang="ar" lang="ar">حجب</span></h3>
               <p><span data-lang="en">Solid, blur or pixelate over the areas you draw — with automatic text detection.</span><span data-lang="ar" lang="ar">حجب صلب أو تمويه أو بكسلة فوق ما ترسمه — مع كشف تلقائي للنص.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Solid, blur or pixelate</span><span data-lang="ar" lang="ar">حجب صلب أو تمويه أو بكسلة</span></li><li><span data-lang="en">Automatic text detection</span><span data-lang="ar" lang="ar">كشف تلقائي للنص</span></li><li><span data-lang="en">Flattened export</span><span data-lang="ar" lang="ar">تصدير مسطّح</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image</span><span data-lang="ar" lang="ar">صورة واحدة</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="photos">
+          <article class="tool-card" id="tool-addbackground" data-tool="addbackground" data-reveal data-cat="photos">
             <div class="tool-media">
               <img class="tool-shot" src="assets/tools/addbackground-dark.webp" data-dark="assets/tools/addbackground-dark.webp" data-light="assets/tools/addbackground-light.webp" data-kind="poster" width="423" height="648" loading="lazy" decoding="async"
                    alt="Add BG tool window: a photo on a gradient background with padding, corners, shadow and ratio controls."
@@ -363,300 +371,280 @@
               <div class="tool-kicker"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="tool-num">05</span></div>
               <h3><span data-lang="en">Background</span><span data-lang="ar" lang="ar">خلفية</span></h3>
               <p><span data-lang="en">Pad, round and colour the frame around a photo: nine gradients, nine solids or your own image.</span><span data-lang="ar" lang="ar">أضف حشوة وزوايا ولونًا حول الصورة: تسعة تدرّجات وتسعة ألوان صلبة أو صورتك.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">9 gradients, 9 solids</span><span data-lang="ar" lang="ar">9 تدرّجات و9 ألوان</span></li><li><span data-lang="en">Padding and corners</span><span data-lang="ar" lang="ar">حشوة وزوايا</span></li><li><span data-lang="en">16:9, 1:1, 4:5</span><span data-lang="ar" lang="ar">16:9 و1:1 و4:5</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image</span><span data-lang="ar" lang="ar">صورة واحدة</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="photos">
+          <article class="tool-card" id="tool-collage" data-tool="collage" data-reveal data-cat="photos">
             <div class="tool-media tool-media--abstract tool-media--photos" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span></span>
-              <span class="abstract-num">06</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Photos</span><span data-lang="ar" lang="ar">الصور</span><span class="tool-num">06</span></div>
               <h3><span data-lang="en">Collage</span><span data-lang="ar" lang="ar">تجميع</span></h3>
               <p><span data-lang="en">Arrange two or more photos into 1080², 1920×1080 or 1080×1920, with spacing, rounded cells and a background.</span><span data-lang="ar" lang="ar">رتّب صورتين أو أكثر في 1080² أو 1920×1080 أو 1080×1920، مع فراغ وزوايا مستديرة وخلفية.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">1080, 1920 and portrait</span><span data-lang="ar" lang="ar">1080 و1920 والطولية</span></li><li><span data-lang="en">Grid with spacing</span><span data-lang="ar" lang="ar">شبكة بتباعد</span></li><li><span data-lang="en">Source files untouched</span><span data-lang="ar" lang="ar">الملفات المصدر دون تغيير</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">2+ images</span><span data-lang="ar" lang="ar">صورتان أو أكثر</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="video">
+          <article class="tool-card" id="tool-videotrim" data-tool="videotrim" data-reveal data-cat="video">
             <div class="tool-media tool-media--abstract tool-media--video" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span></span>
-              <span class="abstract-num">07</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">07</span></div>
               <h3><span data-lang="en">Trim</span><span data-lang="ar" lang="ar">اقتصاص</span></h3>
               <p><span data-lang="en">Scrub the timeline, set in and out, and stream-copy when the codecs allow it — with a re-encode fallback.</span><span data-lang="ar" lang="ar">تنقّل في الخط الزمني، وحدّد البداية والنهاية، وانسخ البثّ متى سمحت الصيغ — مع إعادة ترميز بديلة.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Set start and end</span><span data-lang="ar" lang="ar">تحديد البداية والنهاية</span></li><li><span data-lang="en">Preview first</span><span data-lang="ar" lang="ar">معاينة أولًا</span></li><li><span data-lang="en">Source kept</span><span data-lang="ar" lang="ar">المصدر محفوظ</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 video</span><span data-lang="ar" lang="ar">فيديو واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="video">
+          <article class="tool-card" id="tool-videosplit" data-tool="videosplit" data-reveal data-cat="video">
             <div class="tool-media tool-media--abstract tool-media--video" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span></span>
-              <span class="abstract-num">08</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">08</span></div>
               <h3><span data-lang="en">Split</span><span data-lang="ar" lang="ar">تقسيم</span></h3>
               <p><span data-lang="en">Cut one video into equal parts or exact ranges, each part written to its own file.</span><span data-lang="ar" lang="ar">اقسم فيديو واحدًا إلى أجزاء متساوية أو مقاطع دقيقة، كل جزء في ملفه.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Split at a time point</span><span data-lang="ar" lang="ar">تقسيم عند نقطة زمنية</span></li><li><span data-lang="en">Every part saved</span><span data-lang="ar" lang="ar">حفظ كل الأجزاء</span></li><li><span data-lang="en">Source untouched</span><span data-lang="ar" lang="ar">المصدر دون تغيير</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 video</span><span data-lang="ar" lang="ar">فيديو واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="video">
+          <article class="tool-card" id="tool-videojoin" data-tool="videojoin" data-reveal data-cat="video">
             <div class="tool-media tool-media--abstract tool-media--video" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span></span>
-              <span class="abstract-num">09</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">09</span></div>
               <h3><span data-lang="en">Join</span><span data-lang="ar" lang="ar">دمج</span></h3>
               <p><span data-lang="en">Reorder clips by drag. The first clip sets the size and frame rate; the rest are scaled and padded to fit.</span><span data-lang="ar" lang="ar">رتّب المقاطع بالسحب؛ يحدّد المقطع الأول الحجم ومعدل الإطارات، وتُقاس البقية عليه.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Join in order</span><span data-lang="ar" lang="ar">دمج بالترتيب</span></li><li><span data-lang="en">Mixed sources</span><span data-lang="ar" lang="ar">مصادر مختلفة</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">2+ videos</span><span data-lang="ar" lang="ar">فيديوهان أو أكثر</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="video">
+          <article class="tool-card" id="tool-videospeed" data-tool="videospeed" data-reveal data-cat="video">
             <div class="tool-media tool-media--abstract tool-media--video" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span></span>
-              <span class="abstract-num">10</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">10</span></div>
               <h3><span data-lang="en">Speed</span><span data-lang="ar" lang="ar">السرعة</span></h3>
               <p><span data-lang="en">0.25× to 4× with the audio pitch kept. A silent clip is fine.</span><span data-lang="ar" lang="ar">من 0.25× إلى 4× مع الحفاظ على طبقة الصوت وارتفاعها. المقطع الصامت لا يمثّل مشكلة.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Speed presets</span><span data-lang="ar" lang="ar">سرعات جاهزة</span></li><li><span data-lang="en">Audio stays aligned</span><span data-lang="ar" lang="ar">الصوت يبقى متزامنًا</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 video</span><span data-lang="ar" lang="ar">فيديو واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="video">
+          <article class="tool-card" id="tool-videocrop" data-tool="videocrop" data-reveal data-cat="video">
             <div class="tool-media tool-media--abstract tool-media--video" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span></span>
-              <span class="abstract-num">11</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">11</span></div>
               <h3><span data-lang="en">Crop</span><span data-lang="ar" lang="ar">اقتصاص</span></h3>
               <p><span data-lang="en">Crop the frame with a draggable rectangle and ratio chips; output dimensions stay even.</span><span data-lang="ar" lang="ar">اقتصّ الإطار بمستطيل قابل للسحب وشرائح نسب، بأبعاد زوجية دائمًا.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Crop a region</span><span data-lang="ar" lang="ar">قص منطقة</span></li><li><span data-lang="en">Aspect presets</span><span data-lang="ar" lang="ar">نسب جاهزة</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 video</span><span data-lang="ar" lang="ar">فيديو واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="video">
+          <article class="tool-card" id="tool-videoframes" data-tool="videoframes" data-reveal data-cat="video">
             <div class="tool-media tool-media--abstract tool-media--video" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span></span>
-              <span class="abstract-num">12</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">12</span></div>
               <h3><span data-lang="en">Save frames</span><span data-lang="ar" lang="ar">حفظ الإطارات</span></h3>
               <p><span data-lang="en">Stop on a frame, step one at a time, and save full-resolution PNGs into a new folder.</span><span data-lang="ar" lang="ar">توقّف عند إطار، وتقدّم إطارًا واحدًا، واحفظ صور PNG بالدقة الكاملة في مجلد جديد.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Save frames as images</span><span data-lang="ar" lang="ar">حفظ اللقطات كصور</span></li><li><span data-lang="en">Pick the moment</span><span data-lang="ar" lang="ar">اختيار اللحظة</span></li><li><span data-lang="en">PNG or JPG</span><span data-lang="ar" lang="ar">PNG أو JPG</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 video</span><span data-lang="ar" lang="ar">فيديو واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="video">
+          <article class="tool-card" id="tool-videoredact" data-tool="videoredact" data-reveal data-cat="video">
             <div class="tool-media tool-media--abstract tool-media--video" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span></span>
-              <span class="abstract-num">13</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Video</span><span data-lang="ar" lang="ar">الفيديو</span><span class="tool-num">13</span></div>
               <h3><span data-lang="en">Redact video</span><span data-lang="ar" lang="ar">حجب الفيديو</span></h3>
               <p><span data-lang="en">Draw a rectangle over what must be hidden, give it a time range, and pick a solid colour or blur.</span><span data-lang="ar" lang="ar">ارسم مستطيلًا فوق ما يجب إخفاؤه، وحدّد مدته، واختر لونًا صلبًا أو تمويهًا.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Blur or box</span><span data-lang="ar" lang="ar">تمويه أو صندوق</span></li><li><span data-lang="en">Across the clip</span><span data-lang="ar" lang="ar">عبر المقطع</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 video</span><span data-lang="ar" lang="ar">فيديو واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="audio">
+          <article class="tool-card" id="tool-audiotrim" data-tool="audiotrim" data-reveal data-cat="audio">
             <div class="tool-media tool-media--abstract tool-media--audio" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span></span>
-              <span class="abstract-num">14</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span><span class="tool-num">14</span></div>
               <h3><span data-lang="en">Trim</span><span data-lang="ar" lang="ar">اقتصاص</span></h3>
               <p><span data-lang="en">Waveform handles, exact time boxes, automatic silent-end trimming and playback of the selection.</span><span data-lang="ar" lang="ar">مقابض على الموجة، ومربعات زمنية دقيقة، وقصّ صامت الأطراف تلقائيًا، وتشغيل المقطع.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Set start and end</span><span data-lang="ar" lang="ar">تحديد البداية والنهاية</span></li><li><span data-lang="en">Waveform preview</span><span data-lang="ar" lang="ar">معاينة الموجة</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 audio file</span><span data-lang="ar" lang="ar">ملف صوتي واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="audio">
+          <article class="tool-card" id="tool-audiobleep" data-tool="audiobleep" data-reveal data-cat="audio">
             <div class="tool-media tool-media--abstract tool-media--audio" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span></span>
-              <span class="abstract-num">15</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span><span class="tool-num">15</span></div>
               <h3><span data-lang="en">Bleep</span><span data-lang="ar" lang="ar">صافرة</span></h3>
               <p><span data-lang="en">Drag sections on the bleep layer, resize their edges, and hear the tone before applying.</span><span data-lang="ar" lang="ar">اسحب مقاطع على طبقة الصافرة، وحرّك حوافها، واستمع إلى النغمة قبل التطبيق.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Replace with a tone</span><span data-lang="ar" lang="ar">استبدال بنغمة</span></li><li><span data-lang="en">Place more than one</span><span data-lang="ar" lang="ar">أكثر من تنبيه</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 audio file</span><span data-lang="ar" lang="ar">ملف صوتي واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="audio">
+          <article class="tool-card" id="tool-audiochannels" data-tool="audiochannels" data-reveal data-cat="audio">
             <div class="tool-media tool-media--abstract tool-media--audio" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span></span>
-              <span class="abstract-num">16</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span><span class="tool-num">16</span></div>
               <h3><span data-lang="en">Channels</span><span data-lang="ar" lang="ar">القنوات</span></h3>
               <p><span data-lang="en">Choose mono or stereo, set each side's level, and solo one side on the real waveform.</span><span data-lang="ar" lang="ar">اختر أحاديًا أو ستيريو، واضبط مستوى كل جانب، واعزل جانبًا واحدًا على الموجة الحقيقية.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Mono or stereo</span><span data-lang="ar" lang="ar">أحادي أو ستيريو</span></li><li><span data-lang="en">Channel controls</span><span data-lang="ar" lang="ar">تحكّم بالقنوات</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 audio file</span><span data-lang="ar" lang="ar">ملف صوتي واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="audio">
+          <article class="tool-card" id="tool-audionormalize" data-tool="audionormalize" data-reveal data-cat="audio">
             <div class="tool-media tool-media--abstract tool-media--audio" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span></span>
-              <span class="abstract-num">17</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span><span class="tool-num">17</span></div>
               <h3><span data-lang="en">Normalize</span><span data-lang="ar" lang="ar">تطبيع</span></h3>
               <p><span data-lang="en">Target EBU R128 loudness with an analysis pass that predicts the result, then a two-pass apply.</span><span data-lang="ar" lang="ar">استهدف مستوى صوت EBU R128 مع تحليل يتوقّع النتيجة وتطبيق على مرحلتين.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Even loudness</span><span data-lang="ar" lang="ar">تسوية الجهارة</span></li><li><span data-lang="en">Peak target</span><span data-lang="ar" lang="ar">هدف الذروة</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 audio file</span><span data-lang="ar" lang="ar">ملف صوتي واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="audio">
+          <article class="tool-card" id="tool-audiovisualizer" data-tool="audiovisualizer" data-reveal data-cat="audio">
             <div class="tool-media tool-media--abstract tool-media--audio" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span></span>
-              <span class="abstract-num">18</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Audio</span><span data-lang="ar" lang="ar">الصوت</span><span class="tool-num">18</span></div>
               <h3><span data-lang="en">Visualizer</span><span data-lang="ar" lang="ar">مرئي</span></h3>
               <p><span data-lang="en">Turn audio into an MP4 with a moving waveform or vector scope, on black or a still, in three shapes.</span><span data-lang="ar" lang="ar">حوّل الصوت إلى MP4 بموجة متحركة أو نطاق متجه، على خلفية سوداء أو صورة، بثلاثة اتجاهات.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Waveform image</span><span data-lang="ar" lang="ar">صورة الموجة</span></li><li><span data-lang="en">Colour and size</span><span data-lang="ar" lang="ar">لون وحجم</span></li><li><span data-lang="en">PNG output</span><span data-lang="ar" lang="ar">إخراج PNG</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 audio file</span><span data-lang="ar" lang="ar">ملف صوتي واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="pdf">
+          <article class="tool-card" id="tool-pdfmerge" data-tool="pdfmerge" data-reveal data-cat="pdf">
             <div class="tool-media tool-media--abstract tool-media--pdf" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">PDF</span><span data-lang="ar" lang="ar">PDF</span></span>
-              <span class="abstract-num">19</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">PDF</span><span data-lang="ar" lang="ar">PDF</span><span class="tool-num">19</span></div>
               <h3><span data-lang="en">Merge to PDF</span><span data-lang="ar" lang="ar">الدمج إلى PDF</span></h3>
               <p><span data-lang="en">Merge two or more PDFs or images, reorder them with arrows; page rotation and text are preserved.</span><span data-lang="ar" lang="ar">ادمج ملفّي PDF أو أكثر أو صورًا، ورتّبها بالأسهم؛ يُحفظ تدوير الصفحات ونصها.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">2+ files</span><span data-lang="ar" lang="ar">ملفان أو أكثر</span></li><li><span data-lang="en">Order is the plan order</span><span data-lang="ar" lang="ar">الترتيب كما تخطط</span></li><li><span data-lang="en">Rotation preserved</span><span data-lang="ar" lang="ar">يحفظ الدوران</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">2+ PDFs or images</span><span data-lang="ar" lang="ar">ملفّا PDF أو أكثر أو صور</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="pdf">
+          <article class="tool-card" id="tool-pdforganize" data-tool="pdforganize" data-reveal data-cat="pdf">
             <div class="tool-media tool-media--abstract tool-media--pdf" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">PDF</span><span data-lang="ar" lang="ar">PDF</span></span>
-              <span class="abstract-num">20</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">PDF</span><span data-lang="ar" lang="ar">PDF</span><span class="tool-num">20</span></div>
               <h3><span data-lang="en">Organize Pages</span><span data-lang="ar" lang="ar">تنظيم الصفحات</span></h3>
               <p><span data-lang="en">Rotate, duplicate, delete and drag pages into order, and make every page the same width.</span><span data-lang="ar" lang="ar">دوّر الصفحات وكرّرها واحذفها وأعد ترتيبها بالسحب، ووحّد عرضها.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Rotate pages</span><span data-lang="ar" lang="ar">تدوير الصفحات</span></li><li><span data-lang="en">Duplicate or delete</span><span data-lang="ar" lang="ar">تكرار أو حذف</span></li><li><span data-lang="en">One PDF in</span><span data-lang="ar" lang="ar">ملف PDF واحد</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 PDF</span><span data-lang="ar" lang="ar">ملف PDF واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="protect">
+          <article class="tool-card" id="tool-protect" data-tool="protect" data-reveal data-cat="protect">
             <div class="tool-media tool-media--abstract tool-media--protect" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">الحماية</span></span>
-              <span class="abstract-num">21</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">الحماية</span><span class="tool-num">21</span></div>
               <h3><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">حماية</span></h3>
               <p><span data-lang="en">AES-256 for a password-protected ZIP, or an AES-256 PDF with print and copy permissions.</span><span data-lang="ar" lang="ar">حماية ZIP بترميز AES-256، أو PDF بترميز AES-256 وصلاحيات طباعة ونسخ.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">AES-256 ZIP</span><span data-lang="ar" lang="ar">ZIP بترميز AES-256</span></li><li><span data-lang="en">Password protected</span><span data-lang="ar" lang="ar">محمي بكلمة مرور</span></li><li><span data-lang="en">Round-trips</span><span data-lang="ar" lang="ar">يفتح بكلمة المرور</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-shield"/></svg><span data-lang="en">1 file, folder or several files</span><span data-lang="ar" lang="ar">ملف أو مجلد أو عدة ملفات</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="protect">
+          <article class="tool-card" id="tool-unlock" data-tool="unlock" data-reveal data-cat="protect">
             <div class="tool-media tool-media--abstract tool-media--protect" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">الحماية</span></span>
-              <span class="abstract-num">22</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">الحماية</span><span class="tool-num">22</span></div>
               <h3><span data-lang="en">Unlock</span><span data-lang="ar" lang="ar">فتح</span></h3>
               <p><span data-lang="en">Make an unprotected copy with the right password. Password recovery is not attempted.</span><span data-lang="ar" lang="ar">أنشئ نسخة غير محمية بكلمة المرور الصحيحة. لا تُجرَّب استعادة كلمة المرور.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Remove the password</span><span data-lang="ar" lang="ar">إزالة كلمة المرور</span></li><li><span data-lang="en">Round-trips</span><span data-lang="ar" lang="ar">يفتح بكلمة المرور</span></li><li><span data-lang="en">Never overwrites</span><span data-lang="ar" lang="ar">لا يستبدل الأصل</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-key"/></svg><span data-lang="en">1 ZIP or PDF</span><span data-lang="ar" lang="ar">ملف ZIP أو PDF واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="protect">
+          <article class="tool-card" id="tool-lock" data-tool="lock" data-reveal data-cat="protect">
             <div class="tool-media tool-media--abstract tool-media--protect" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">الحماية</span></span>
-              <span class="abstract-num">23</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Protect</span><span data-lang="ar" lang="ar">الحماية</span><span class="tool-num">23</span></div>
               <h3><span data-lang="en">Lock</span><span data-lang="ar" lang="ar">قفل</span><span class="beta">Beta</span></h3>
               <p><span data-lang="en">Turn one file or folder in place into an encrypted container, with three ways in and auto-relock.</span><span data-lang="ar" lang="ar">حوّل ملفًا أو مجلدًا في مكانه إلى حاوية مشفّرة واحدة، بثلاث طرق للدخول وقفل تلقائي.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">File password (Beta)</span><span data-lang="ar" lang="ar">كلمة مرور للملف (بيتا)</span></li><li><span data-lang="en">24-character recovery key</span><span data-lang="ar" lang="ar">مفتاح استرداد من 24 حرفًا</span></li><li><span data-lang="en">Auto-relock</span><span data-lang="ar" lang="ar">إعادة قفل تلقائية</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-lock"/></svg><span data-lang="en">1 file or folder</span><span data-lang="ar" lang="ar">ملف أو مجلد واحد</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="files">
+          <article class="tool-card" id="tool-compress" data-tool="compress" data-reveal data-cat="files">
             <div class="tool-media tool-media--abstract tool-media--files" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Files</span><span data-lang="ar" lang="ar">الملفات</span></span>
-              <span class="abstract-num">24</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Files</span><span data-lang="ar" lang="ar">الملفات</span><span class="tool-num">24</span></div>
               <h3><span data-lang="en">Compress</span><span data-lang="ar" lang="ar">ضغط</span></h3>
               <p><span data-lang="en">Shrink one image, audio file, video or PDF to a target size or percentage; the source is untouched.</span><span data-lang="ar" lang="ar">اضغط صورة أو ملفًا صوتيًا أو فيديو أو PDF إلى حجم مستهدف أو نسبة، دون المساس بالمصدر.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Target size or percent</span><span data-lang="ar" lang="ar">حجم مستهدف أو نسبة</span></li><li><span data-lang="en">Image, audio, video, PDF</span><span data-lang="ar" lang="ar">صور وصوت وفيديو وPDF</span></li><li><span data-lang="en">Writes a new file</span><span data-lang="ar" lang="ar">يكتب ملفًا جديدًا</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image, audio, video or PDF</span><span data-lang="ar" lang="ar">ملف واحد: صورة أو صوت أو فيديو أو PDF</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="files">
+          <article class="tool-card" id="tool-metadata" data-tool="metadata" data-reveal data-cat="files">
             <div class="tool-media tool-media--abstract tool-media--files" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Files</span><span data-lang="ar" lang="ar">الملفات</span></span>
-              <span class="abstract-num">25</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Files</span><span data-lang="ar" lang="ar">الملفات</span><span class="tool-num">25</span></div>
               <h3><span data-lang="en">Edit metadata</span><span data-lang="ar" lang="ar">تعديل البيانات الوصفية</span></h3>
               <p><span data-lang="en">Edit EXIF, IPTC, XMP, PDF info and chapters — or clear camera and location in one action.</span><span data-lang="ar" lang="ar">حرّر EXIF وIPTC وXMP ومعلومات PDF والفصول — أو أزل الكاميرا والموقع بضغطة.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Camera and location</span><span data-lang="ar" lang="ar">الكاميرا والموقع</span></li><li><span data-lang="en">Remove per field</span><span data-lang="ar" lang="ar">إزالة حقلًا بحقل</span></li><li><span data-lang="en">Remove all</span><span data-lang="ar" lang="ar">إزالة الكل</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image, audio, video or PDF</span><span data-lang="ar" lang="ar">ملف واحد: صورة أو صوت أو فيديو أو PDF</span></p>
             </div>
           </article>
 
-          <article class="tool-card" data-cat="files">
+          <article class="tool-card" id="tool-qr" data-tool="qr" data-reveal data-cat="files">
             <div class="tool-media tool-media--abstract tool-media--files" aria-hidden="true">
-              <span class="abstract-ring"></span><span class="abstract-ring abstract-ring--two"></span>
-              <span class="abstract-label"><span data-lang="en">Files</span><span data-lang="ar" lang="ar">الملفات</span></span>
-              <span class="abstract-num">26</span>
+              <div class="tool-pending"><span class="tool-pending__window" aria-hidden="true"><span class="tool-pending__bar"></span></span><p class="tool-pending__label"><span data-lang="en">Capture pending</span><span data-lang="ar" lang="ar">اللقطة قادمة</span></p><p class="tool-pending__note"><span data-lang="en">This window has no verified capture yet. The app's self-test renders it next; no mock-up is shown in the meantime.</span><span data-lang="ar" lang="ar">لا توجد لقطة موثّقة لهذه النافذة بعد. يلتقطها اختبار التطبيق الذاتي لاحقًا، ولا تُعرض أي صورة وهمية في الأثناء.</span></p></div>
             </div>
             <div class="tool-body">
               <div class="tool-kicker"><span data-lang="en">Files</span><span data-lang="ar" lang="ar">الملفات</span><span class="tool-num">26</span></div>
               <h3><span data-lang="en">Read QR code</span><span data-lang="ar" lang="ar">قراءة رمز QR</span></h3>
               <p><span data-lang="en">Decode a QR code from an image offline. Only http and https links can be opened.</span><span data-lang="ar" lang="ar">فكّ رمز QR من صورة محليًا. تُفتح روابط http وhttps فقط.</span></p>
+              <ul class="tool-options" aria-label="Key options"><li><span data-lang="en">Decode from an image</span><span data-lang="ar" lang="ar">فك الرمز من صورة</span></li><li><span data-lang="en">Copy the result</span><span data-lang="ar" lang="ar">نسخ النتيجة</span></li><li><span data-lang="en">No code is not a crash</span><span data-lang="ar" lang="ar">غياب الرمز ليس عطلًا</span></li></ul>
               <p class="tool-scope"><svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-file"/></svg><span data-lang="en">1 image</span><span data-lang="ar" lang="ar">صورة واحدة</span></p>
             </div>
           </article>
@@ -666,7 +654,7 @@
 
     <section class="section" id="protect" aria-labelledby="protect-title">
       <div class="wrap">
-        <header class="section-head">
+        <header class="section-head" data-reveal>
           <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-shield"/></svg><span data-lang="en">Protect and Lock</span><span data-lang="ar" lang="ar">الحماية والقفل</span></p>
           <h2 id="protect-title"><span data-lang="en">Protect what matters.</span><span data-lang="ar" lang="ar">احمِ ما يهمّك.</span></h2>
           <p class="section-lede">
@@ -735,7 +723,7 @@
 
     <section class="section" id="convert" aria-labelledby="convert-title">
       <div class="wrap">
-        <header class="section-head">
+        <header class="section-head" data-reveal>
           <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-arrow"/></svg><span data-lang="en">Convert</span><span data-lang="ar" lang="ar">التحويل</span></p>
           <h2 id="convert-title"><span data-lang="en">Convert without opening anything.</span><span data-lang="ar" lang="ar">حوّل دون فتح أي شيء.</span></h2>
           <p class="section-lede">
@@ -817,7 +805,7 @@
 
     <section class="section" id="whats-new" aria-labelledby="whats-new-title">
       <div class="wrap">
-        <header class="section-head section-head--split">
+        <header class="section-head section-head--split" data-reveal>
           <div>
             <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-spark"/></svg><span data-lang="en">Version 2.4.0</span><span data-lang="ar" lang="ar">الإصدار 2.4.0</span></p>
             <h2 id="whats-new-title"><span data-lang="en">What is new.</span><span data-lang="ar" lang="ar">ما الجديد.</span></h2>
@@ -902,7 +890,7 @@
 
     <section class="section" id="verify" aria-labelledby="verify-title">
       <div class="wrap">
-        <header class="section-head">
+        <header class="section-head" data-reveal>
           <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-hash"/></svg><span data-lang="en">Verify</span><span data-lang="ar" lang="ar">التحقق</span></p>
           <h2 id="verify-title"><span data-lang="en">Verify before you run.</span><span data-lang="ar" lang="ar">تحقّق قبل التشغيل.</span></h2>
           <p class="section-lede">
@@ -915,11 +903,11 @@
           <article class="verify-card">
             <h3><span class="verify-card__step">1</span><span data-lang="en">SHA-256</span><span data-lang="ar" lang="ar">بصمة SHA-256</span></h3>
             <pre dir="ltr" tabindex="0"><code>Get-FileHash .\DropWheel-Setup.exe -Algorithm SHA256</code></pre>
-            <p><span data-lang="en">Compare the result with the setup line in <a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a>.</span><span data-lang="ar" lang="ar">قارن الناتج بسطر المثبّت في <a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a>.</span></p>
+            <p><span data-lang="en">Compare the result with the setup line in <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a>.</span><span data-lang="ar" lang="ar">قارن الناتج بسطر المثبّت في <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a>.</span></p>
           </article>
           <article class="verify-card">
             <h3><span class="verify-card__step">2</span><span data-lang="en">Signature</span><span data-lang="ar" lang="ar">التوقيع</span></h3>
-            <pre dir="ltr" tabindex="0"><code>pwsh ./scripts/verify-signature.ps1 .\DropWheel-2.3.0-Setup.exe</code></pre>
+            <pre dir="ltr" tabindex="0"><code>pwsh ./scripts/verify-signature.ps1 .\DropWheel-Setup.exe</code></pre>
             <p><span data-lang="en">Exit code 0 means the ECDSA P-256 signature matches the key compiled into DropWheel. Any other code: do not run the file.</span><span data-lang="ar" lang="ar">رمز الخروج 0 يعني أن توقيع ECDSA P-256 يطابق المفتاح المضمَّن في DropWheel. أي رمز آخر: لا تشغّل الملف.</span></p>
           </article>
         </div>
@@ -928,25 +916,25 @@
           <div class="release-card__head">
             <div>
               <p class="release-card__label"><span data-lang="en">Latest verified release</span><span data-lang="ar" lang="ar">آخر إصدار موثَّق</span></p>
-              <p class="release-card__version"><bdi dir="ltr">2.3.0</bdi></p>
+              <p class="release-card__version"><bdi dir="ltr"><!--release-version:start-->2.3.0<!--release-version:end--></bdi></p>
             </div>
             <a class="btn btn--primary" href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/DropWheel-Setup.exe" rel="noopener noreferrer">
               <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#i-download"/></svg>
-              <span data-lang="en">Download installer · 60.05 MB</span><span data-lang="ar" lang="ar">تنزيل المثبّت · 60.05 ميجابايت</span>
+              <span data-lang="en">Download installer · <!--release-mb:start-->60.05<!--release-mb:end--> MB</span><span data-lang="ar" lang="ar">تنزيل المثبّت · <!--release-mb:start-->60.05<!--release-mb:end--> ميجابايت</span>
             </a>
           </div>
           <dl class="release-files">
             <div>
               <dt><span data-lang="en">Installer</span><span data-lang="ar" lang="ar">المثبّت</span></dt>
-              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/DropWheel-2.3.0-Setup.exe" rel="noopener noreferrer"><bdi dir="ltr">DropWheel-2.3.0-Setup.exe</bdi></a><span class="size">62,967,948 B</span></dd>
+              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/DropWheel-2.3.0-Setup.exe" rel="noopener noreferrer"><bdi dir="ltr">DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-Setup.exe</bdi></a></dd>
             </div>
             <div>
               <dt><span data-lang="en">Portable ZIP</span><span data-lang="ar" lang="ar">أرشيف محمول</span></dt>
-              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/DropWheel-2.3.0-portable-win-x64.zip" rel="noopener noreferrer"><bdi dir="ltr">DropWheel-2.3.0-portable-win-x64.zip</bdi></a><span class="size">89,266,161 B</span></dd>
+              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/DropWheel-2.3.0-portable-win-x64.zip" rel="noopener noreferrer"><bdi dir="ltr">DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-portable-win-x64.zip</bdi></a></dd>
             </div>
             <div>
               <dt><span data-lang="en">Checksums</span><span data-lang="ar" lang="ar">البصمات</span></dt>
-              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/SHA256SUMS.txt" rel="noopener noreferrer"><bdi dir="ltr">SHA256SUMS.txt</bdi></a><a class="inline-link" href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/DropWheel-2.3.0-Setup.exe.sig" rel="noopener noreferrer"><bdi dir="ltr">.sig</bdi></a></dd>
+              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer"><bdi dir="ltr">SHA256SUMS.txt</bdi></a><a class="inline-link" href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-Setup.exe.sig" rel="noopener noreferrer"><bdi dir="ltr">.sig</bdi></a></dd>
             </div>
           </dl>
 
@@ -963,7 +951,7 @@
                   <span class="copy-button__text" data-en="Copy" data-ar="نسخ">Copy</span>
                 </button>
               </div>
-              <code class="hash-block__value" id="sha-setup" dir="ltr">7381cbd5b59249f3279b62af31091d89d3d8d994faa57fcdd08ec4331d7156ce</code>
+              <code class="hash-block__value" id="sha-setup" dir="ltr"><!--release-sha256:start-->7381cbd5b59249f3279b62af31091d89d3d8d994faa57fcdd08ec4331d7156ce<!--release-sha256:end--></code>
               <p class="copy-status" id="copy-status" aria-live="polite"></p>
             </div>
           </details>
@@ -979,7 +967,7 @@
 
     <section class="section" id="faq" aria-labelledby="faq-title">
       <div class="wrap">
-        <header class="section-head">
+        <header class="section-head" data-reveal>
           <p class="eyebrow"><svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-info"/></svg><span data-lang="en">FAQ</span><span data-lang="ar" lang="ar">الأسئلة الشائعة</span></p>
           <h2 id="faq-title"><span data-lang="en">Questions, answered plainly.</span><span data-lang="ar" lang="ar">أسئلة بإجابات صريحة.</span></h2>
         </header>
