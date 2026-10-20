@@ -137,10 +137,11 @@ property and none survives its surface:
 
 Every animation in §1 is a WPF storyboard/clock started by a user or lifecycle event; none is stepped
 from a tick handler. **Law 3 holds.** The idle-CPU gate is real but narrow: it samples one second with
-every surface closed (`MotionSelfTest.cs:161-168`), so it can only catch a timer that outlives its
-surface — which is exactly the M-12 defect, and why M-12 mattered.
+every surface closed (`MotionSelfTest.cs:161-168`), so it would catch a timer that outlives its surface
+— M-12's 500 ms poll had that shape, though two bool comparisons per second are far below the 5 %
+budget. The rule violation, not the CPU number, is why M-12 mattered.
 
-`docs/MOTION.md:115-116` claimed there were only two timers. That was wrong (10 application timers, two
+`docs/MOTION.md` (pre-`17a6265`, lines 115-116) claimed there were only two timers. That was wrong (10 application timers, two
 repeating while a surface is open); corrected in `17a6265` to say what is actually true: motion itself
 schedules nothing, and none of the pre-existing timers drives an animation.
 
@@ -278,28 +279,29 @@ complement the runtime gate, not replace it.
 ## 7. Findings
 
 Severity: **High** = accessibility/regression with no test able to see it; **Medium** = false claim,
-coverage or drift; **Low** = hygiene. Owner is the lane that must land the fix; "fixed" = commit on
-`audit/amotion` / PR #40.
+coverage or drift; **Low** = hygiene. Every row names its **owner** and **status**: a FIXED row carries
+its commit SHA on `audit/amotion` (PR #40); an OPEN row carries `owner: <lane>, status: open (PR #n)`,
+and no open item is orphaned.
 
 | id | sev | kind | finding | evidence | owner / PR / status |
 | --- | --- | --- | --- | --- | --- |
 | M-01 | High | law 2 | Job cards animated with baked durations and **ignored reduced motion**: a 220 ms slide+fade gated only by the self-test flag, plus an infinite `RepeatBehavior.Forever` opacity pulse that ran even with animations off. Invisible to the gate (`SelfTest.cs:35` disables job cards; the harness never creates one). | old `JobsWindow.cs:189-198`, `:211-220` | motion lane, PR #40 — **fixed** `4c7bef1` (`Motion.Enabled` gate, `ToastMs`, `BreathMs`, `SoftOut`) |
 | M-02 | Medium | law 2 | Password `SwitchRow` knob hard-coded 120 ms + `new CubicEase()`, bypassing `Motion.ToggleMs`/`SoftOut` and ignoring reduced motion — a silent fork of `Controls.Toggle`. | old `PasswordViewParts.cs:338-346` | motion lane, PR #40 — **fixed** `ebaccc4` |
-| M-03 | Medium | coverage | "Every registered tool window is measured" is false: 11 of 26 tools measured; 15 skipped; `tools.collage` (densest image view) was skipped for needing >1 image and `tools.lock` silently timed out. | `motion/report.md:20` (run 39376236166); old `MotionSelfTest.cs:108`; `CollageTool.cs:55-57`; `docs/PERF.md:55-57` | motion lane, PR #40 — **fixed partly** `da41e20` (collage measured, skips in the report); doc claims still to narrow — perf lane PR #24 owns `docs/PERF.md` |
-| M-04 | Medium | coverage | Motion harness runs English/LTR only, one (runner) theme; no Arabic/RTL or both-theme motion measurement exists. Committed clips are English only and stale (wheel + 5 tools vs 12 measured surfaces). | `SelfTest.cs:68,74`; no `LanguageManager` in `MotionSelfTest`; `MotionClips.cs:53-58`; `docs/screenshots/motion/` | motion lane, PR #40 — **documented** §4(c); release-notes wording — docs lane PR #36 |
+| M-03 | Medium | coverage | "Every registered tool window is measured" is false: 11 of 26 tools measured; 15 skipped; `tools.collage` (densest image view) was skipped for needing >1 image and `tools.lock` silently timed out. | `motion/report.md:20` (run 39376236166); old `MotionSelfTest.cs:108`; `CollageTool.cs:55-57`; `docs/PERF.md:55-57` | **fixed (code)** `da41e20` (collage measured, skips now in the report). **open (claim)** owner: docs lane, status: open (PR #36) for the `docs/PERF.md` wording |
+| M-04 | Medium | coverage | Motion harness runs English/LTR only, one (runner) theme; no Arabic/RTL or both-theme motion measurement exists. Committed clips are English only and stale (wheel + 5 tools vs 12 measured surfaces). | `SelfTest.cs:68,74`; no `LanguageManager` in `MotionSelfTest`; `MotionClips.cs:53-58`; `docs/screenshots/motion/` | **documented** §4(c) in PR #40. **open** owner: docs lane, status: open (PR #36) for the release-notes wording; RTL motion measurement owner: motion lane, status: open (not scheduled, not a tag blocker) |
 | M-05 | Low | hygiene | `Motion.Fade` had **no callers** (dead token API). | old `Motion.cs:403-414`, 0 grep hits | motion lane, PR #40 — **fixed** `517843e` |
-| M-06 | Medium | docs | `docs/MOTION.md:115-116` claimed only two timers exist; there are 10 application timers (two repeating while a surface is open). Law 3 still holds — none drives motion. | §3 table; `WheelController.cs:40,52`, `VideoThemeWatcher.cs:36`, `LockSessions.cs:63` | motion lane, PR #40 — **fixed** `17a6265` |
-| M-07 | Low | hygiene | The wheel's mode-switch storyboard is built inline in `WheelWindow.AnimateCanvas` — the only storyboard construction outside `Motion.cs`. Tokens/guards/properties are correct. | `WheelWindow.cs:352-374` | motion lane, PR #40 — **open** (deferred refactor to `Motion.Switch(...)`) |
+| M-06 | Medium | docs | `docs/MOTION.md` (pre-`17a6265`, lines 115-116) claimed only two timers exist; there are 10 application timers (two repeating while a surface is open). Law 3 still holds — none drives motion. | §3 table; `WheelController.cs:40,52`, `VideoThemeWatcher.cs:27-46`, `LockSessions.cs:63` | motion lane, PR #40 — **fixed** `17a6265` |
+| M-07 | Low | hygiene | The wheel's mode-switch storyboard is built inline in `WheelWindow.AnimateCanvas` — the only storyboard construction outside `Motion.cs`. Tokens/guards/properties are correct. | `WheelWindow.cs:352-374` | **open** owner: motion lane, status: open (no PR; deferred `Motion.Switch(...)` refactor, not required for the tag) |
 | M-08 | Low | docs | The motion report labelled the wheel `424×424`; the element is `442×442` (`2*(196+9+16)`), and `docs/PERF.md:47` said 442. Report now derives the size from the measured root (`442×442` in run 39376236166). | old `MotionSelfTest.cs:100`; `WheelWindow.cs:30-39` | motion lane, PR #40 — **fixed** `17a6265` |
-| M-09 | Low | design | `Motion.Play` does not check `Enabled` itself; the "no storyboard when off" guarantee depends on call sites. (Adding the check is unsafe: close `Completed` callbacks close the window.) | `Motion.cs:591-597` | motion lane, PR #40 — **open**, mitigated by test 4 and the §2 table |
-| M-10 | Low | design | While an indeterminate job runs, the 700 ms forever-breathing opacity animation keeps animating; the idle-CPU gate cannot see it (no job card exists during measurement). Gated by `Motion.Enabled`; not finite on purpose (a stalled-looking bar is worse). | `JobsWindow.cs:212-229`; `SelfTest.cs:35` | motion lane, PR #40 — **open, accepted** (reduced-motion-gated) |
-| M-11 | Low | docs | The documented resize exception said "width/height"; it also animates `Left`/`Top`. Wording fixed. | `Motion.cs:566-593`; `docs/MOTION.md:8-9` | motion lane, PR #40 — **fixed** `17a6265` |
-| M-12 | High | law 3 | `VideoThemeWatcher` started a 500 ms `DispatcherTimer` that was **never stopped**: after the first video tool, the process polled the theme forever, a real idle cost (5 % budget) outside the measurement window. Reported by the creative lane (PR #35). | old `VideoThemeWatcher.cs:22-51`; `VideoCropView.cs:139,142`, `VideoSpeedView.cs:74,77`, `VideoTrimView.cs:94,97` | motion lane, PR #40 — **fixed** `849f420` (ref-counted `Start`/`Stop`; last surface stops the timer and unhooks `SystemEvents`) + guard `96f64ae` |
-| M-13 | Medium | coverage/cost | `tools.lock` is unmeasured and burns ≈ 90 s per CI run (30 s in `MotionSelfTest` + 30 s per theme in `MotionClips`); its `LockView` preparation never completes offscreen. | `motion/report.md:20`; `self-test.txt` (`TimeoutException`, 3×) | lock lane PR #27 (fix the offscreen prep) or selftest lane PR #37 (shorter probe); motion harness could skip it explicitly — **open** |
+| M-09 | Low | design | `Motion.Play` does not check `Enabled` itself; the "no storyboard when off" guarantee depends on call sites. (Adding the check is unsafe: close `Completed` callbacks close the window.) | `Motion.cs:591-597` | **open** owner: motion lane, status: open (PR #40 documents it; no code change planned — adding the check would be unsafe), mitigated by test 4 and the §2 table |
+| M-10 | Low | design | While an indeterminate job runs, the 700 ms forever-breathing opacity animation keeps animating; the idle-CPU gate cannot see it (no job card exists during measurement). Gated by `Motion.Enabled`; not finite on purpose (a stalled-looking bar is worse). | `JobsWindow.cs:212-229`; `SelfTest.cs:35` | **open, accepted** owner: motion lane, status: open (PR #40; reduced-motion-gated, finite cycles rejected) |
+| M-11 | Low | docs | The documented resize exception said "width/height"; it also animates `Left`/`Top`. Wording fixed. | `Motion.cs:559-586`; `docs/MOTION.md:8-9` | motion lane, PR #40 — **fixed** `17a6265` |
+| M-12 | High | law 3 | `VideoThemeWatcher` started a 500 ms `DispatcherTimer` that was **never stopped**: after the first video tool, the process polled the theme for its whole lifetime. Measurable CPU is negligible (two bool comparisons per second, far below the 5 % budget) but it breaks the no-timer-while-idle rule and has exactly the shape the idle gate exists to forbid. Reported by the creative lane (PR #35). | old `VideoThemeWatcher.cs:22-51`; `VideoCropView.cs:139,142`, `VideoSpeedView.cs:74,77`, `VideoTrimView.cs:94,97` | motion lane, PR #40 — **fixed** `849f420` (ref-counted `Start`/`Stop`; last surface stops the timer and unhooks `SystemEvents`) + guard `96f64ae` |
+| M-13 | Medium | coverage/cost | `tools.lock` is unmeasured and burns ≈ 90 s per CI run (30 s in `MotionSelfTest` + 30 s per theme in `MotionClips`); its `LockView` preparation never completes offscreen. | `motion/report.md:20`; `self-test.txt` (`TimeoutException`, 3×) | **open** owner: lock lane + selftest lane, status: open (PR #27, fix `LockView` offscreen prep; PR #37, bounded timeout); an explicit harness skip is a PR #40 follow-up |
 | M-14 | Low | docs | The new "Not measured" report line said the skipped tools "want a media family the harness does not create", which is wrong for the lock timeout. Now neutral and points at the per-id reason. | `MotionSelfTest.cs:189-192` | motion lane, PR #40 — **fixed** `517843e` |
 | M-15 | Low | hygiene | `RasterBudgetMs = 33.0` was unused as a gate while the measured raster proxy is 38.8-73.7 ms — a constant that contradicted the artifact. Removed. | old `MotionSelfTest.cs:33-34`; `motion/report.md` raster column | motion lane, PR #40 — **fixed** `517843e` |
-| M-16 | Medium | docs | `docs/PERF.md` contradicts itself on idle CPU — table text says **0.39 %** (line 54) while line 63 says **0.00 %** — and its measured table is from run 39351795353 (6 surfaces, before six tools landed). It also implies tools are measured automatically, which the 15 skips disprove. | `docs/PERF.md:39-63` | perf lane PR #24 — **open**; motion lane supplies the run-39376236166 table and §4(c) wording |
-| M-17 | Medium | release | The tree still ships **2.3.0**: `FileAction.App.csproj:24` and `installer/DropWheel.iss:16`. A `v2.4.0` tag would publish a setup named/versioned 2.3.0. | `src/FileAction.App/FileAction.App.csproj:24`; `installer/DropWheel.iss:16` | version lane PR #34 — **open**, must merge before the tag |
+| M-16 | Medium | docs | `docs/PERF.md` contradicts itself on idle CPU — table text says **0.39 %** (line 54) while line 63 says **0.00 %** — and its measured table is from run 39351795353 (6 surfaces, before six tools landed). It also implies tools are measured automatically, which the 15 skips disprove. | `docs/PERF.md:39-63` | **open** owner: docs lane (reassigned by the supervisor), status: open (PR #36); motion lane supplied the run-39376236166 table and §4(c) wording |
+| M-17 | Medium | release | The tree still ships **2.3.0**: `FileAction.App.csproj:24` and `installer/DropWheel.iss:16`. A `v2.4.0` tag would publish a setup named/versioned 2.3.0. | `src/FileAction.App/FileAction.App.csproj:24`; `installer/DropWheel.iss:16` | **open** owner: version lane, status: open (PR #34); must merge before the tag |
 
 Law-1 violations: **none**. Law-2 violations: M-01, M-02 (fixed). Law-3 violations: M-12 (fixed).
 Sum of animated surfaces that ignored reduced motion before this PR: 3 of 17 (M-01 counts two
@@ -307,11 +309,11 @@ animations, M-02 one); after it, 0 of 17.
 
 ## 8. Must land before the 11:00 tag
 
-1. **M-01 / M-02 / M-12** — merge PR #40 (motion). These are the only accibility/idle-cost defects this
-   lane found; all three now have regression tests.
-2. **M-03 / M-04 / M-16** — the claim, not the code: `docs/PERF.md` (perf lane, PR #24) and the release
-   notes (docs lane, PR #36) must use the §4(c) wording. Do not publish "every tool window measured",
-   "all 25 tools" or "Arabic motion verified".
+1. **M-01 / M-02 / M-12** — merge PR #40 (motion). These are the only accessibility/idle-cost defects
+   this lane found; all three now have regression tests.
+2. **M-03 / M-04 / M-16** — the claim, not the code: `docs/PERF.md` and the release notes (both docs
+   lane, PR #36) must use the §4(c) wording; perf lane (PR #24) carries the coverage statements. Do not
+   publish "every tool window measured", "all 25 tools" or "Arabic motion verified".
 3. **M-17** — land the 2.4.0 version bump (PR #34) before tagging; otherwise the setup is 2.3.0.
 4. **M-13** — decide whether to keep paying 90 s per run for `tools.lock`; cheapest is an explicit skip
    with a reason in `MotionSelfTest`/`MotionClips`, best is fixing `LockView`'s offscreen prep.

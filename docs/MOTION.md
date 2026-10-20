@@ -122,17 +122,18 @@ measures both, so the reduced-motion path is covered on every CI run.
   measurement timer is the only timer motion creates.
 - **GPU rendering.** Transforms and opacity are compositor-friendly; the app does not force software
   rendering. `Motion.RenderTier` records WPF's tier in the self-test (2 = full hardware acceleration).
-- **DPI and RTL** are untouched: motion uses render transforms only, never layout mirrors, and the
-  wheel's disc keeps `FlowDirection.LeftToRight` while its text follows the app language.
+- **DPI and RTL** are untouched by motion: it uses render transforms only, never layout mirrors, and the
+  wheel's disc keeps `FlowDirection.LeftToRight` while its text follows the app language. RTL motion is
+  **not separately measured** — the gate runs en-LTR (see `docs/audit/MOTION-AUDIT.md` §4b).
 
 ## Verification
 
 `DropWheel.exe --self-test <dir>` now includes a motion gate (see `docs/PERF.md`):
 
-- opens the wheel and the tool windows that accept the harness's sample (11 of the 26 registered tools;
-  the media-family tools and `tools.lock` are skipped and named in `motion/report.md`) in a deterministic
-  pose sequence and records **UI-thread frame p95** with motion ON versus OFF, plus a
-  software-rasterisation proxy for one composed frame;
+- drives the wheel and the image-family tool windows (15 media-family tools are skipped and named in
+  `motion/report.md`) in a deterministic pose sequence, **en-LTR on the runner's theme** — every surface
+  shares the animated chrome code path — and records **UI-thread frame p95** with motion ON versus OFF,
+  plus a software-rasterisation proxy for one composed frame;
 - records **CPU during** the measurement and **idle CPU** for one second after everything is closed;
 - records the **working set retained** after close, budget 12 MB (inside the 15 MB idle-memory rule);
 - fails the self-test when UI frame p95 > 16.7 ms, idle CPU > 5 %, or retention > 12 MB.
@@ -151,7 +152,8 @@ comparison, and §4 for what the gate does and does not cover (English/LTR only,
 poster frames, in dark and light:
 
 - `wheel-{dark,light}.webp` - opening, the travelling highlight and closing, looping;
-- `tool-<id>-{dark,light}.webp` - a registered tool window opening, holding and closing.
+- `tool-<id>-{dark,light}.webp` - an image-family tool window opening, holding and closing (the
+  committed set covers the wheel and five tools; CI regenerates the full measured set).
 
 They are **renders of the real visual tree**, produced by `--self-test` through
 `MotionClips`/`Pose`, using the same easing curves and durations as the live storyboards. They are not
