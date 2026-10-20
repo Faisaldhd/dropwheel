@@ -563,3 +563,19 @@ and `tools.redact` until `4f23c9c` closed it.
 **A new settings page**: a `ScrollViewer` page built from `Controls.SectionHeader` + `Controls.Card`,
 added through `AddTab` in `SettingsWindow` (`SettingsWindow.cs:186-190`), plus a self-test hook if the page
 needs a screenshot.
+
+---
+
+## 13. Findings and owning lanes
+
+Audit trail for RULE 3: a finding without an owning lane is not a finding. Every row was found while
+writing this guide and is reported here with its evidence; the creative lane proposes and specifies, it
+does not fix them. The four fixes are already written as zero-cost ideas (`docs/IDEAS.md`): X5 for the
+status-text token, T5 for the focus ring, X2 for the duration guard.
+
+| # | finding | evidence | owning lane | status |
+| ---: | --- | --- | --- | --- |
+| 1 | `VideoThemeWatcher` starts a 500 ms `DispatcherTimer` that is **never stopped**; after the user opens one video tool once, it ticks for the life of the process (contradicts `docs/MOTION.md:115`) | `src/FileAction.App/UI/Tools/Video/VideoThemeWatcher.cs:30-33`; started at `VideoCropView.cs:139`, `VideoSpeedView.cs:74`, `VideoTrimView.cs:94` | motion lane `audit/amotion` | assigned |
+| 2 | Durations hard-coded outside the motion token set, including an **infinite** 700 ms `AutoReverse` pulse on an indeterminate job card | `src/FileAction.App/Jobs/JobsWindow.cs:197-198` (220 ms), `:220` (700 ms infinite); `src/FileAction.App/UI/Tools/Password/PasswordViewParts.cs:342` (120 ms) | motion lane `audit/amotion` | partially fixed there |
+| 3 | Light-mode status text fails contrast: `Success` **2.28:1**, `Error` **3.33:1** on a white card (dark is fine: 6.92:1 / 4.74:1), because the badge draws its own tint hue as text | `src/FileAction.App/UI/Controls.cs:286-292`; ratios computed from `Theme.cs:71-72` over `Theme.Card` light `#FFFFFF` (WCAG 2.x relative luminance) | UX lane `audit/adesign` PR #31 | assigned |
+| 4 | No visible keyboard focus on any hand-drawn control: buttons, chips, toggles, checkboxes and the close disc are `Border`/`Ellipse` with mouse handlers, so WPF draws no focus visual | `Controls.cs:268` (`Button`), `ToolControls.cs:174` (`Chips`), `:129` (`CheckBox`), `Controls.cs:169` (`Toggle`), `ToolWindow.cs:310` (close disc) | deferred — `docs/BACKLOG.md` (docs lane PR #36) | deferred |
