@@ -43,21 +43,23 @@ variance into a red PR. The same reasoning applies to the idle baseline (77.0 MB
 
 ## Measured on this branch (2.4.0)
 
-CI runs [39346046672](https://github.com/Faisaldhd/dropwheel/actions/runs/39346046672) (PR check, merge
-ref with `tools.annotate` + `tools.crop`) and [39346041017](https://github.com/Faisaldhd/dropwheel/actions/runs/39346041017)
-(push, branch head) at commit `614f1ea`. The PR check builds the merge ref, so the size numbers include
-the `tools.annotate` tool that merged into main after this branch was cut — the shipped 2.4.0 state.
+CI runs [39346865313](https://github.com/Faisaldhd/dropwheel/actions/runs/39346865313) (PR check, merge
+ref with `tools.annotate` + `tools.crop`) and [39346860321](https://github.com/Faisaldhd/dropwheel/actions/runs/39346860321)
+(push, branch head) at commit `050e5d6` — the last commit that changes the binaries; this
+documentation-only update does not change them. The PR check builds the merge ref, so the size numbers
+include the `tools.annotate` tool that merged into main after this branch was cut — the shipped 2.4.0
+state.
 
 | metric | v2.3.0 baseline | current | delta | budget |
 | --- | ---: | ---: | ---: | ---: |
-| installer | 62,967,948 B (60.05 MiB) | 63,001,214 B (60.08 MiB) | +33,266 B (+0.03 MiB) | +6 MiB |
-| portable zip | 89,266,161 B (85.13 MiB) | 89,297,631 B (85.16 MiB) | +31,470 B (+0.03 MiB) | +6 MiB |
-| cold start | 1,500 ms recorded (759–1,290 ms observed) | 946 ms (PR run) | −554 ms | 1,575 ms (−5 % rule) |
-| idle memory | 77.0 MB | 75.3 MB | −1.7 MB | 92.0 MB (−15 MB rule) |
+| installer | 62,967,948 B (60.05 MiB) | 62,981,278 B (60.07 MiB) | +13,330 B (+0.01 MiB) | +6 MiB |
+| portable zip | 89,266,161 B (85.13 MiB) | 89,297,630 B (85.16 MiB) | +31,469 B (+0.03 MiB) | +6 MiB |
+| cold start | 1,500 ms recorded (759–1,290 ms observed) | 817 ms (PR run) | −683 ms | 1,575 ms (−5 % rule) |
+| idle memory | 77.0 MB | 75.2 MB | −1.8 MB | 92.0 MB (−15 MB rule) |
 
-The installer and portable zip grew by ~32 KB (the merged annotate tool); this branch itself adds a few
-kilobytes of harness code and no dependency. The PR check prints the same baseline/current/delta table
-in the job summary.
+The installer and portable zip grew by ~13–31 KB (the merged annotate tool); this branch itself adds a
+few kilobytes of harness code and no dependency. The PR check prints the same baseline/current/delta
+table in the job summary.
 
 ### Per-tool open/close (20 cycles after one warm-up)
 
@@ -66,8 +68,8 @@ main after this branch was cut — exactly the data-driven coverage the loop is 
 
 | tool | opens | baseline MB | final MB | delta | peak MB | result |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `tools.annotate` (merge ref) | 20 | 219.4 | 206.4 | −13.1 | 219.4 | ok |
-| `tools.crop` (merge ref) | 20 | 207.9 | 213.9 | +6.0 | 213.9 | ok |
+| `tools.annotate` (merge ref) | 20 | 211.2 | 207.0 | −4.3 | 215.3 | ok |
+| `tools.crop` (merge ref) | 20 | 208.6 | 213.7 | +5.2 | 213.7 | ok |
 
 On the branch head (one registered tool) the same reading was 211.8 → 209.2 MB, −2.6 MB. The working
 set fluctuates with collection timing; the tolerance is +12 MB.
