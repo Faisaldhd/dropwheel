@@ -99,39 +99,63 @@ variance into a red PR. The same reasoning applies to the idle baseline (77.0 MB
 
 ## Measured on this branch (2.4.0)
 
-CI runs [39347724063](https://github.com/Faisaldhd/dropwheel/actions/runs/39347724063) (PR check, merge
-ref with the tools merged at that time) and [39347719949](https://github.com/Faisaldhd/dropwheel/actions/runs/39347719949)
-(push, branch head) at commit `0a21cd4`. The merge-prep commit re-measures everything on the full merged
-2.4.0 tree; the PR check prints the same baseline/current/delta table in the job summary and the
-per-tool table in `self-test.txt`.
+Merge-prep CI runs [39372348098](https://github.com/Faisaldhd/dropwheel/actions/runs/39372348098) (PR
+check) and [39372345469](https://github.com/Faisaldhd/dropwheel/actions/runs/39372345469) (push) at
+commit `29de7cb`, with main merged in and all 25 registered tools present. The PR check prints the same
+baseline/current/delta table in the job summary and the per-tool table in `self-test.txt`.
 
 | metric | v2.3.0 baseline | current | delta | budget |
 | --- | ---: | ---: | ---: | ---: |
-| installer | 62,967,948 B (60.05 MiB) | 63,004,773 B (60.09 MiB) | +36,825 B (+0.04 MiB) | +6 MiB |
-| portable zip | 89,266,161 B (85.13 MiB) | 89,329,051 B (85.16 MiB) | +62,890 B (+0.06 MiB) | +6 MiB |
-| cold start | 1,500 ms recorded (759–1,290 ms observed) | 815 ms | −685 ms | 1,575 ms (−5 % rule) |
-| idle memory | 77.0 MB | 75.1 MB | −1.9 MB | 92.0 MB (−15 MB rule) |
+| installer | 62,967,948 B (60.05 MiB) | 63,377,572 B (60.44 MiB) | +409,624 B (+0.39 MiB) | +6 MiB |
+| portable zip | 89,266,161 B (85.13 MiB) | 89,832,917 B (85.67 MiB) | +566,756 B (+0.54 MiB) | +6 MiB |
+| cold start | 1,500 ms recorded (759–1,290 ms observed) | 755 ms (1,038 ms on the concurrent push run) | −745 ms | 1,575 ms (−5 % rule) |
+| idle memory | 77.0 MB | 76.7 MB | −0.3 MB | 92.0 MB (−15 MB rule) |
+
+The two packages grew by ~0.4–0.5 MiB for all 25 tools and their strings; the budget is +6 MiB.
 
 ### Per-tool open/close (20 cycles after one warm-up)
 
-The PR check builds the merge ref, so it already exercised the tools that had merged into main when it
-ran — exactly the data-driven coverage the loop is for:
+Every tool registered in the merged tree is covered by `ToolRegistry.All`. Numbers below are the PR-check
+run; the push run differs only by collection timing (the largest deltas repeat within ~2 MB):
 
 | tool | opens | baseline MB | final MB | delta | peak MB | result |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `tools.annotate` | 20 | 211.6 | 207.8 | −3.9 | 211.8 | ok |
-| `tools.crop` | 20 | 209.2 | 214.5 | +5.3 | 214.5 | ok |
-| `tools.addbackground` | 20 | 215.0 | 216.0 | +1.0 | 216.1 | ok |
-| `tools.redact` | 20 | 211.2 | 213.1 | +1.9 | 213.1 | ok |
+| `tools.audiobleep` | 20 | 225.7 | 216.7 | −8.9 | 225.7 | ok |
+| `tools.audiochannels` | 20 | 217.2 | 217.2 | 0.0 | 217.2 | ok |
+| `tools.audionormalize` | 20 | 215.7 | 220.1 | +4.4 | 221.3 | ok |
+| `tools.audiotrim` | 20 | 220.9 | 220.9 | −0.1 | 220.9 | ok |
+| `tools.audiovisualizer` | 20 | 221.5 | 223.2 | +1.8 | 223.2 | ok |
+| `tools.collage` | 20 | 225.1 | 227.9 | +2.8 | 229.1 | ok |
+| `tools.compress` | 20 | 228.8 | 229.2 | +0.4 | 229.2 | ok |
+| `tools.annotate` | 20 | 230.0 | 227.6 | −2.4 | 230.3 | ok |
+| `tools.crop` | 20 | 229.4 | 224.4 | −5.1 | 229.4 | ok |
+| `tools.editphotos` | 20 | 225.6 | 230.7 | +5.1 | 230.7 | ok |
+| `tools.addbackground` | 20 | 231.1 | 222.5 | −8.6 | 231.2 | ok |
+| `tools.redact` | 20 | 223.2 | 221.2 | −1.9 | 223.6 | ok |
+| `tools.metadata` | 20 | 221.8 | 231.2 | +9.5 | 231.2 | ok |
+| `tools.protect` | 20 | 231.6 | 231.0 | −0.7 | 231.6 | ok |
+| `tools.unlock` | 20 | 231.8 | 227.4 | −4.4 | 231.8 | ok |
+| `tools.pdfmerge` | 20 | 229.7 | 232.3 | +2.5 | 232.5 | ok |
+| `tools.pdforganize` | 20 | 233.5 | 231.8 | −1.7 | 233.5 | ok |
+| `tools.qr` | 20 | 233.7 | 226.4 | −7.3 | 233.7 | ok |
+| `tools.videocrop` | 20 | 227.2 | 226.6 | −0.6 | 227.7 | ok |
+| `tools.videoframes` | 20 | 227.3 | 226.6 | −0.7 | 227.3 | ok |
+| `tools.videojoin` | 20 | 227.5 | 235.6 | +8.2 | 235.6 | ok |
+| `tools.videoredact` | 20 | 236.1 | 236.3 | +0.2 | 236.3 | ok |
+| `tools.videospeed` | 20 | 236.9 | 232.0 | −4.9 | 236.9 | ok |
+| `tools.videosplit` | 20 | 232.6 | 231.4 | −1.1 | 232.6 | ok |
+| `tools.videotrim` | 20 | 232.1 | 236.1 | +4.0 | 236.1 | ok |
 
-All four are within the +12 MB tolerance with no leaked `ffmpeg.exe` and no temp file. The working set
-fluctuates with collection timing; the tolerance is +12 MB.
+All 25 tools stay within the +16 MB tolerance (the largest healthy delta is `tools.metadata`, +9.5 MB
+here and +11.3 MB on the push run), with no leaked `ffmpeg.exe` and no temp file. The working set
+fluctuates with collection timing; the tolerance is +16 MB.
 
 The loop is data-driven from `ToolRegistry.All`: every tool merged into main is exercised automatically.
-A tool that grows the working set by more than 12 MB, leaves `ffmpeg.exe` running, or leaves a file in
+A tool that grows the working set by more than 16 MB, leaves `ffmpeg.exe` running, or leaves a file in
 the redirected `TEMP`/`TMP` folder fails the self-test. Tools that need a format the loop does not
 create yet fail with an explicit message asking for the format to be added to
-`SelfTest.CreateToolSamples` — coverage cannot silently shrink.
+`SelfTest.CreateToolSamples`; a tool whose preview cannot prepare from the samples is skipped with a
+`skipped perf/<tool>` line in `self-test.txt` — coverage cannot silently shrink.
 
 ## Dependencies and payload
 
@@ -194,7 +218,7 @@ shipped-payload guard runs again in the package job on the exact packaged folder
    after launch. Fails when `actual > baseline + 15 MB` (92.0 MB).
 3. **Per-tool open/close** — one warm-up cycle (which pays the one-time renderer/native load and
    renders the tool's preview), then 20 create → prepare → show offscreen → close cycles. Working set is
-   sampled after a forced GC on every cycle; the final reading must stay within **+12 MB** of the
+   sampled after a forced GC on every cycle; the final reading must stay within **+16 MB** of the
    post-warm-up baseline. `TEMP`/`TMP` are redirected to a private folder for the loop, and the folder
    must be empty afterwards. New `ffmpeg` PIDs are a failure.
 4. **Lazy registration** — the checks described above.

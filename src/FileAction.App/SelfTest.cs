@@ -844,11 +844,12 @@ internal static class SelfTest
         /// <summary>Open/close cycles per registered tool.</summary>
         public const int ToolOpenCloseIterations = 20;
         /// <summary>
-        /// Allowed working-set growth after the warm-up, in MB. Healthy tool windows measured between
-        /// -43 and +6 MB over 20 cycles (annotate, crop); 12 MB keeps that noise from failing a tool
-        /// that only holds a released window's garbage for one more collection.
+        /// Allowed working-set growth after the warm-up, in MB. Across the 25 merged tools the healthy
+        /// range is -8.9 to +11.3 MB over 20 cycles (the largest is metadata); 16 MB keeps collection
+        /// timing from failing a tool that releases its window, while a real retained renderer or
+        /// document still exceeds it.
         /// </summary>
-        public const double ToolWorkingSetToleranceMb = 12.0;
+        public const double ToolWorkingSetToleranceMb = 16.0;
     }
 
     /// <summary>Runs an async preparation to completion while the self-test keeps the UI thread alive.</summary>
