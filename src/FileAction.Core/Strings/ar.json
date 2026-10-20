@@ -91,6 +91,7 @@
   "tool.editphotos.title": "تعديل الصور",
   "tool.editphotos.label": "تعديل",
   "tool.editphotos.subtitle": "الضوء واللون",
+  "tool.editphotos.apply": "حفظ نسخة معدّلة",
   "tool.editphotos.suffix": "معدّلة",
   "tool.editphotos.compare": "أبقِ الضغط للمقارنة",
   "tool.editphotos.original": "الأصل",

@@ -37,6 +37,9 @@ internal sealed class EditPhotosTool : IToolWindowSpec
 
     public string TitleKey => "tool.editphotos.title";
 
+    /// <summary>The bottom-right button saves a copy; it never overwrites the photo.</summary>
+    public string PrimaryLabelKey => "tool.editphotos.apply";
+
     public ToolSpecLayout Layout => ToolLayout;
 
     public bool Applies(IReadOnlyList<FileItem> items) =>

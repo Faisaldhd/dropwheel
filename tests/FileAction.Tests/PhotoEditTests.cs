@@ -404,6 +404,36 @@ public class PhotoEditTests
         Assert.Equal(24u, image.Width);
     }
 
+    [Fact]
+    public void Final_render_is_a_byte_copy_at_neutral_and_differs_after_an_edit()
+    {
+        var directory = Path.Combine(AppContext.BaseDirectory, "photoedit-final");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var source = Path.Combine(directory, "source.png");
+            using (var image = new MagickImage(MagickColors.Orange, 48, 32))
+                image.Write(source);
+            var item = new FileItem(source);
+
+            // All-zero parameters: nothing to render, so the bytes are copied verbatim.
+            var neutral = EditPhotoRenderer.RenderFinal(item, new PhotoParameters(), "Edited", directory);
+            Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(neutral));
+
+            // A real edit writes a new file (never the neutral one) whose pixels changed.
+            var edited = EditPhotoRenderer.RenderFinal(item, new PhotoParameters { Exposure = 40 }, "Edited", directory);
+            Assert.NotEqual(neutral, edited);
+            Assert.True(File.Exists(neutral));
+            using var before = new MagickImage(source);
+            using var after = new MagickImage(edited);
+            Assert.True(after.Compare(before, ErrorMetric.RootMeanSquared) > 0.01);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     // ---- window --------------------------------------------------------------------------------
 
     [Fact]
@@ -411,6 +441,7 @@ public class PhotoEditTests
     {
         Assert.Equal("tools.editphotos", EditPhotosTool.Instance.Id);
         Assert.Equal("tool.editphotos.title", EditPhotosTool.Instance.TitleKey);
+        Assert.Equal("tool.editphotos.apply", EditPhotosTool.Instance.PrimaryLabelKey);
 
         Assert.True(EditPhotosTool.Instance.Applies([new FileItem(@"C:\photos\a.jpg")]));
         Assert.True(EditPhotosTool.Instance.Applies([new FileItem(@"C:\photos\a.PNG")]));
@@ -486,6 +517,7 @@ public class PhotoEditTests
             "tool.editphotos.title",
             "tool.editphotos.label",
             "tool.editphotos.subtitle",
+            "tool.editphotos.apply",
             "tool.editphotos.suffix",
             "tool.editphotos.compare",
             "tool.editphotos.original",

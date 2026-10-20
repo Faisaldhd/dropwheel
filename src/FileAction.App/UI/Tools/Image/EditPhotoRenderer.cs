@@ -49,15 +49,23 @@ internal static class EditPhotoRenderer
     /// <summary>
     /// Edits the original at full resolution and writes a new file next to the source (or into the chosen
     /// drop folder). The source file is only read; an existing file is never overwritten.
+    ///
+    /// With every slider at its default there is nothing to render, so the source bytes are copied
+    /// verbatim: the result is byte-identical (no recompression, no orientation rewrite) and instant.
     /// </summary>
     public static string RenderFinal(FileItem item, PhotoParameters parameters, string suffix, string outputDirectory)
     {
+        var extension = Path.GetExtension(item.Path).TrimStart('.');
+        var target = OutputPaths.Unique(outputDirectory, $"{item.BaseName} {suffix}", extension);
+        if (PhotoEdit.IsNeutral(parameters))
+        {
+            File.Copy(item.Path, target);
+            return target;
+        }
+
         using var image = new MagickImage(item.Path);
         Prepare(image);
         PhotoEdit.Apply(image, parameters);
-
-        var extension = Path.GetExtension(item.Path).TrimStart('.');
-        var target = OutputPaths.Unique(outputDirectory, $"{item.BaseName} {suffix}", extension);
         // Write by the normalized format, not by the file name: a ".jfif" source is still a JPEG.
         image.Write(target, ImageBackend.ToMagickFormat(item.Format));
         return target;

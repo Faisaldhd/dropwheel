@@ -91,6 +91,7 @@
   "tool.editphotos.title": "Edit Photos",
   "tool.editphotos.label": "Edit",
   "tool.editphotos.subtitle": "Light and color",
+  "tool.editphotos.apply": "Save Edited Copy",
   "tool.editphotos.suffix": "Edited",
   "tool.editphotos.compare": "Hold to compare",
   "tool.editphotos.original": "Original",
