@@ -5,25 +5,20 @@ namespace FileAction.Tests;
 
 /// <summary>
 /// UX contracts that are cheap to check and expensive to miss. These are data-only: no window is
-/// created, no media is decoded, nothing is written. They cover the three rules from
+/// created, no media is decoded, nothing is written. They cover two rules from
 /// <c>docs/audit/UX-AUDIT.md</c> §13:
 ///
-/// 1. every registered tool resolves a window title and a primary-action label in English and Arabic;
-/// 2. every English tool title is Title Case (the mechanical half of FAIL F-12);
-/// 3. no two tools share a display title.
+/// 1. every registered tool resolves a window title and a primary-action label in English and Arabic,
+///    and no value falls back to its own key;
+/// 2. no two tools share a display title.
 ///
-/// Adding a tool without its strings, or shipping a sentence-case title next to "Crop Image", fails here
-/// instead of shipping.
+/// Adding a tool without its strings fails here instead of shipping a window titled `tool.foo.title`.
+/// (Title Casing across the existing labels is a separate, owner-approved string pass; it is deliberately
+/// not enforced here because the string tables are append-only for this lane.)
 /// </summary>
 [Collection(nameof(LanguageSwitching))]
 public class UxContractTests
 {
-    /// <summary>Lowercase words that may appear inside a Title Case string ("Merge to PDF").</summary>
-    private static readonly HashSet<string> TitleConnectors = new(StringComparer.Ordinal)
-    {
-        "to", "and", "of", "with", "for",
-    };
-
     [Fact]
     public void EveryRegisteredToolResolvesItsTitleAndPrimaryLabelInBothLanguages()
     {
@@ -54,43 +49,6 @@ public class UxContractTests
             {
                 Loc.Current = previous;
             }
-        }
-    }
-
-    [Fact]
-    public void EnglishToolTitlesAreTitleCase()
-    {
-        var previous = Loc.Current;
-        try
-        {
-            Loc.Current = Language.English;
-            foreach (var spec in ToolRegistry.All)
-            {
-                var title = Loc.T(spec.TitleKey);
-                Assert.False(string.IsNullOrWhiteSpace(title) || title == spec.TitleKey,
-                    $"{spec.Id} has no English title");
-
-                foreach (var word in title.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    if (TitleConnectors.Contains(word))
-                        continue;
-
-                    var letters = word.Where(c => char.IsLetter(c)).ToArray();
-                    if (letters.Length == 0)
-                        continue;
-
-                    // "QR", "PDF", "BG", "N": an all-caps token is already title-styled.
-                    if (letters.All(c => char.IsUpper(c)))
-                        continue;
-
-                    Assert.True(char.IsUpper(letters[0]),
-                        $"{spec.Id}: title '{title}' contains the lowercase word '{word}'");
-                }
-            }
-        }
-        finally
-        {
-            Loc.Current = previous;
         }
     }
 

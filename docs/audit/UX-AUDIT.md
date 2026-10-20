@@ -366,10 +366,12 @@ ending exactly at the card edge. Fix: D3.
 (`QrView.cs:350–356`), next to an explicit `Copy` button (`:84`). Now labelled `Copy and Close` (§11).
 Fix: D11.
 
-**F-12 — Title casing and primary verbs are inconsistent** · P2 · annex F-12 — **partly fixed here**
+**F-12 — Title casing and primary verbs are inconsistent** · P2 · annex F-12 — **OPEN (not changed here)**
 Three sentence-case titles (`Redact image`, `Redact video`, `Save frames`) and two more
-(`Password protection`, `Remove password`) beside Title Case everywhere else. Five `en` strings fixed in
-§11; the primary-verb pass (`Apply` → named copy) remains open. Fix: D9.
+(`Password protection`, `Remove password`) beside Title Case everywhere else. The string tables are
+append-only for this lane, so the fix is **requested, not made**: it needs an owner-approved `en`-only pass
+(and a matching `ar` review). The primary-verb pass (`Apply` → named copy) is open for the same reason.
+Fix: D9.
 
 **F-20 — Only audio and video windows repaint on a live light/dark switch** · P2 (new)
 `Theme.Refresh()` runs when a window is built (`ToolWindow.cs:88`); live repaint is wired only through
@@ -421,18 +423,19 @@ Screenshot: needs CI screenshot of `pdfmerge` with no rows. Fix: one `tool.*.emp
 
 ## 11. What this lane changed
 
-Small, low-risk, string-and-test only. No layout, behaviour or pixel value was changed blind — anything
-that needs a rendered window to verify is listed in §12 instead of guessed at.
+Additive string, docs and tests only. No layout, behaviour, pixel value or existing string VALUE was
+changed; anything that needs a rendered window to verify is listed in §12 instead of guessed at.
 
 | Commit | Change | Closes |
 | --- | --- | --- |
 | `docs(audit): static design audit…` | committed the annex as delivered | — |
 | `docs(audit): UX audit — wheel + 26 tool windows` | this document | — |
-| `fix(strings): title-case five tool window titles` | `Redact image`→`Redact Image`, `Redact video`→`Redact Video`, `Save frames`→`Save Frames`, `Password protection`→`Password Protection`, `Remove password`→`Remove Password` (en only; `ar` unchanged) | F-12 (casing half) |
-| `fix(qr): label the read-only primary 'Copy and Close'` | new `tool.qr.copyClose` en+ar, `QrTool.PrimaryLabelKey`; behaviour unchanged (already copied + closed) | F-11 |
-| `fix(wheel): restore the Annotate and Redact operations` | superseded: the identical two-line wiring landed upstream in `4f23c9c` while this PR was in review, so this lane ships only the guard | — |
-| `test(ux): registry titles, bilingual labels, title case` | 3 deterministic string-contract facts, §13 | F-12, F-31 regressions |
+| `fix(qr): label the read-only primary 'Copy and Close'` | **new** `tool.qr.copyClose` in `en`+`ar` (additive), `QrTool.PrimaryLabelKey`; behaviour unchanged (already copied + closed) | F-11 |
+| `test(ux): bilingual titles and primary labels for every tool` | 2 deterministic string-contract facts, §13 | string-table regressions |
 | `test(wheel): every registered tool window has a dispatchable operation` | 2 deterministic dispatch facts, §13 | F-27 regressions |
+
+The wheel wiring itself is **not** in this diff: it landed upstream as `4f23c9c` while the PR was in
+review, so this branch ships only the guard that keeps it true.
 
 ## 12. Deliberately NOT fixed here
 
@@ -452,28 +455,28 @@ These are real but cannot be verified without a rendered window, and a blind edi
 
 ## 13. Tests added (cheap, deterministic, no UI)
 
-`tests/FileAction.Tests/UxContractTests.cs` — three facts, all pure data:
+`tests/FileAction.Tests/UxContractTests.cs` — two facts, all pure data:
 
 1. **Every registered tool resolves a title and a primary label in both languages.** Touches
    `ToolRegistry.All` (26 entries), asserts non-empty `Loc.T(spec.TitleKey)` / `Loc.T(spec.PrimaryLabelKey)`
    in `en` and `ar`, that neither returns the key itself, ids are unique and `tools.`-prefixed, and
    `Layout.ChromeHeight > 0`. This catches the classic regression: a new tool that forgets a string and
    ships a window titled `tool.foo.title`.
-2. **Every `en` tool title is Title Case** (allowing all-caps tokens such as `QR`, `PDF`, `BG`, `N` and the
-   connector `to`). This is the mechanical half of F-12 and is why the five strings above had to change.
-3. **No two tools share a display title** — two windows with the same title are indistinguishable in the
+2. **No two tools share a display title** — two windows with the same title are indistinguishable in the
    toast, the job list and the accessibility tree.
 
 `tests/FileAction.Tests/ToolDispatchTests.cs` — two facts, pure data:
 
-4. **Every registered `IToolWindowSpec.Id` is present in `WheelController.BuildOperations()` and its
+3. **Every registered `IToolWindowSpec.Id` is present in `WheelController.BuildOperations()` and its
    operation is an `IInteractiveTool`.** Matched by identity (operation id == tool id), never by
    `ToolRegistry.For(items)`, which is first-match and ambiguous. This is the guard that would have caught
-   F-27 before it shipped.
-5. **Wheel operation ids are unique** — `LastOperationId` and the wheel editor key on the id.
+   F-27 before it shipped, and it is the reason PR #31 must merge.
+4. **Wheel operation ids are unique** — `LastOperationId` and the wheel editor key on the id.
 
-All five are O(26), no file I/O beyond the embedded string tables, no WPF window, no media, no timing.
-They run in the existing suite on every push and are part of the `build-test` job.
+All four are O(26), no file I/O beyond the embedded string tables, no WPF window, no media, no timing.
+They run in the existing suite on every push and are part of the `build-test` job. Title Casing across the
+existing labels is **not** enforced here: the string tables are append-only for this lane, so that rule is
+requested as a separate, owner-approved pass (§11, F-12).
 
 ## 14. Acceptance for the next lane
 
@@ -483,7 +486,7 @@ They run in the existing suite on every push and are part of the `build-test` jo
 3. Land D2 (`Enter`/`Esc` routing + one gutter) together — they touch the same two files.
 4. Retire `docs/screenshots/en/wheel-*.png` or regenerate them from the same self-test that produced
    `docs/screenshots/motion/*` (F-22).
-5. Keep the five contract tests green as tools are added; they are the cheap net under the string
+5. Keep the four contract tests green as tools are added; they are the cheap net under the string
    table, the registry and the wheel dispatch.
 
 *Static audit; no executable was run by this lane. Where a lookup needed a rendered window the row says
