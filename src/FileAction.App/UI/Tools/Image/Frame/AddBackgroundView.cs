@@ -448,23 +448,43 @@ internal sealed class AddBackgroundView
     private void PaintSwatches()
     {
         foreach (var (swatch, preset) in _gradientSwatches)
-            Outline(swatch, _kind == BackgroundKind.Gradient && _gradient == preset);
+        {
+            var stops = AddBackground.Gradient(preset);
+            Outline(swatch, _kind == BackgroundKind.Gradient && _gradient == preset, Average(stops));
+        }
 
         foreach (var (swatch, color) in _solidSwatches)
-            Outline(swatch, _kind == BackgroundKind.Solid && !_solidIsCustom && _solid == color);
+            Outline(swatch, _kind == BackgroundKind.Solid && !_solidIsCustom && _solid == color, color);
 
         if (_customSwatch is not null)
         {
             _customSwatch.Background = new SolidColorBrush(ToColor(_custom));
-            Outline(_customSwatch, _kind == BackgroundKind.Solid && _solidIsCustom);
+            Outline(_customSwatch, _kind == BackgroundKind.Solid && _solidIsCustom, _custom);
+            if (_customSwatch.Child is TextBlock plus)
+                plus.Foreground = new SolidColorBrush(ContrastOn(_custom));
         }
     }
 
-    private static void Outline(Border swatch, bool selected)
+    /// <summary>
+    /// The selection ring is drawn against the swatch's own colour, not the theme's text colour: a white
+    /// custom colour in the light theme (or a black one in the dark theme) would otherwise lose it.
+    /// </summary>
+    private static void Outline(Border swatch, bool selected, BackgroundColor color)
     {
-        swatch.BorderBrush = selected ? Theme.Text : Theme.PanelBorder;
+        swatch.BorderBrush = selected ? new SolidColorBrush(ContrastOn(color)) : Theme.PanelBorder;
         swatch.BorderThickness = new Thickness(selected ? 2 : 1);
     }
+
+    /// <summary>Black or white, whichever stays readable on this backdrop colour in either theme.</summary>
+    private static Color ContrastOn(BackgroundColor color) =>
+        (0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B) > 150
+            ? Color.FromRgb(0x12, 0x12, 0x12)
+            : Colors.White;
+
+    private static BackgroundColor Average(GradientStops stops) => new(
+        (byte)((stops.Start.R + stops.End.R) / 2),
+        (byte)((stops.Start.G + stops.End.G) / 2),
+        (byte)((stops.Start.B + stops.End.B) / 2));
 
     private void PaintImageRow()
     {
@@ -477,7 +497,11 @@ internal sealed class AddBackgroundView
         if (_clearImage is not null)
             _clearImage.Visibility = hasImage ? Visibility.Visible : Visibility.Collapsed;
         if (_blurToggle is not null)
+        {
             _blurToggle.IsEnabled = hasImage;
+            // A disabled Border would otherwise keep its full-strength accent and look usable.
+            _blurToggle.Opacity = hasImage ? 1 : 0.45;
+        }
         if (_blurLabel is not null)
             _blurLabel.Opacity = hasImage ? 1 : 0.45;
     }
