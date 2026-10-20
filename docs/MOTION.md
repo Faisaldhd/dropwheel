@@ -129,18 +129,20 @@ measures both, so the reduced-motion path is covered on every CI run.
 
 `DropWheel.exe --self-test <dir>` now includes a motion gate (see `docs/PERF.md`):
 
-- opens the wheel and every registered tool window in a deterministic pose sequence and records
-  **UI-thread frame p95** with motion ON versus OFF, plus a software-rasterisation proxy for one
-  composed frame;
+- opens the wheel and the tool windows that accept the harness's sample (11 of the 26 registered tools;
+  the media-family tools and `tools.lock` are skipped and named in `motion/report.md`) in a deterministic
+  pose sequence and records **UI-thread frame p95** with motion ON versus OFF, plus a
+  software-rasterisation proxy for one composed frame;
 - records **CPU during** the measurement and **idle CPU** for one second after everything is closed;
 - records the **working set retained** after close, budget 12 MB (inside the 15 MB idle-memory rule);
 - fails the self-test when UI frame p95 > 16.7 ms, idle CPU > 5 %, or retention > 12 MB.
 
 Startup (+5 %) and installer size (+6 MB) are guarded by the package/performance gates described in
 `docs/PERF.md`; motion adds one small class, no dependency and no startup work beyond reading two
-booleans. Measured CI runs (39350370128, then 39351795353 after the edit-photos merge): UI frame p95
-**0.02-0.07 ms** across the wheel and five tool windows, idle CPU **0.00-0.39 %**, retained working set
-**0.0 MB** - see `docs/PERF.md` for the full table and the meaning of the software-rasterisation proxy.
+booleans. Measured in CI run 39376236166 (`motion/report.md`, 12 surfaces): UI frame p95
+**0.02-0.04 ms** with motion on and **0.00 ms** with motion off, idle CPU **0.00 %**, retained working
+set **0.0 MB** - see `docs/audit/MOTION-AUDIT.md` §5 for the per-surface table and the budget
+comparison, and §4 for what the gate does and does not cover (English/LTR only, 11 of 26 tools).
 
 
 ## Website clips
