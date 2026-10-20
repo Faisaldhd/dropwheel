@@ -111,14 +111,6 @@ internal static class ProtectionAssociations
         registry.KeyExists(FileExtension) && registry.KeyExists(FolderExtension);
 
     /// <summary>Copies the generated icons where the registry can point at them for every user session.</summary>
-    public static (string FileIcon, string FolderIcon) EnsureIcons()
-    {
-        var folder = ProtectionPaths.IconsFolder;
-        Directory.CreateDirectory(folder);
-        var file = Path.Combine(folder, "protected-file.ico");
-        var directory = Path.Combine(folder, "protected-folder.ico");
-        LockIcons.WriteFileIcon(file);
-        LockIcons.WriteFolderIcon(directory);
-        return (file, directory);
-    }
+    public static (string FileIcon, string FolderIcon) EnsureIcons() =>
+        LockIconCache.EnsureAssociationIcons();
 }

@@ -40,6 +40,9 @@ public sealed class LockWrongSecretException()
 public sealed class LockDamagedException(string detail)
     : LockException($"This protected file is damaged and cannot be opened ({detail}).");
 
+public sealed class LockChangedException(string detail)
+    : LockException($"The folder changed while it was being locked ({detail}); nothing was deleted.");
+
 public sealed class LockTruncatedException()
     : LockException("This protected file is incomplete: it ends before its last verified block.");
 

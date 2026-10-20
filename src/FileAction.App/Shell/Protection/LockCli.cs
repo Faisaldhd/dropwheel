@@ -128,6 +128,7 @@ internal sealed class LockOpenWindow : Window
         {
             var outcome = LockRuntime.Service.Unprotect(_path, _secret.Text,
                 LockRuntime.Settings.RecycleContainerAfterUnlock);
+            LockIconCache.RemoveItem(outcome.RestoredPath);
             var text = T("tool.lock.removeDone", Bidi.Value(outcome.RestoredPath));
             if (!outcome.ContainerRemoved)
                 text += Environment.NewLine + T("tool.lock.removeLeftover", Bidi.Value(outcome.ContainerError ?? ""));
@@ -239,7 +240,7 @@ internal static class LockSelfTest
             LockRuntime.Icons.FolderIcon).OutputPath;
         if (Directory.Exists(folder))
             throw new InvalidOperationException("self-test: the folder was left behind");
-        var folderResult = service.Unprotect(protectedFolder, credentials.RescuerKey, recycleContainer: false);
+        var folderResult = service.Unprotect(protectedFolder, credentials.RescuerPassword, recycleContainer: false);
         if (!Directory.Exists(folderResult.RestoredPath))
             throw new InvalidOperationException("self-test: the folder was not restored");
         if (File.ReadAllText(Path.Combine(folderResult.RestoredPath, "nested", "two.txt")) != "two")

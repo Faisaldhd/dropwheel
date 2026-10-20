@@ -174,6 +174,7 @@
   "tool.qr.subtitle": "فك الترميز دون اتصال",
   "tool.qr.reading": "جارٍ قراءة الرمز…",
   "tool.qr.copy": "نسخ",
+  "tool.qr.copyClose": "نسخ وإغلاق",
   "tool.qr.open": "فتح",
   "tool.qr.copied": "تم النسخ إلى الحافظة.",
   "tool.qr.copyFailed": "تعذّر النسخ إلى الحافظة.",
@@ -1092,5 +1093,17 @@
   "tool.protect.warn.checkbox": "فهمت، أريد التشفير",
   "tool.protect.warn.leftover": "تم تشفير الملف، لكن تعذّر حذف النسخة غير المشفّرة: {0}",
   "tool.protect.warn.protect": "تشفير",
-  "tool.protect.warn.title": "سيتم تشفير الملف"
+  "tool.protect.warn.title": "سيتم تشفير الملف",
+  "settings.protection.open": "فتح إعدادات الحماية",
+  "settings.protection.section": "الحماية",
+  "settings.protection.detail": "كلمة سر المنقذ، مهلة القفل التلقائي، ارتباطات الملفات وتحديث الملفات المحمية.",
+  "settings.protection.title": "إعدادات القفل",
+  "tool.lock.recovery.tempTitle": "ملفات مؤقتة متبقية",
+  "tool.lock.recovery.incompleteBody": "توقف DropWheel أثناء فتح {0}. يمكن حذف النسخة المؤقتة غير المكتملة؛ الملف المحمي لم يتغير.",
+  "tool.lock.recovery.tempBody": "وجد DropWheel ملفات استعادة مؤقتة متبقية. هل تريد حذفها؟ لا حاجة إليها والملفات المحمية لم تتغير.",
+  "tool.lock.recovery.incompleteTitle": "فتح غير مكتمل",
+  "tool.lock.rescuer.keyOnlyTitle": "استخدم مفتاح المنقذ",
+  "tool.lock.rescuer.keyOnlyBody": "أدخل مفتاح الاسترداد المكوّن من 24 حرفاً لإعادة تعيين كلمة سر المنقذ. لا يُحفظ المفتاح.",
+  "tool.lock.recovery.orphanTitle": "مجلدات فتح يتيمة",
+  "tool.lock.recovery.orphanBody": "وجد DropWheel {0} من مجلدات الجلسات بلا سجل. هل تريد حذفها؟ الملفات المحمية لم تتغير."
 }

@@ -9,6 +9,7 @@ using System.Windows.Media.Imaging;
 using FileAction.App.Diagnostics;
 using FileAction.App.Input;
 using FileAction.App.Shell;
+using FileAction.App.Shell.Protection;
 using FileAction.Core;
 using FileAction.Core.Updates;
 using static FileAction.App.UI.Controls;
@@ -332,6 +333,9 @@ internal sealed class SettingsWindow : Window
                 Save();
             })));
 
+        page.Children.Add(SectionHeader(T("settings.protection.section")));
+        page.Children.Add(Card(T("settings.protection.title"), T("settings.protection.detail"),
+            Button(T("settings.protection.open"), LockWiring.Settings)));
         return TabPage(page);
     }
 
