@@ -16,7 +16,7 @@ Rules in force: no-interference (ownership, append-only shared files, no force-p
 | A-03 | TEAM B supervisor | Force-pushed `audit/adesign` (`1d7d5ac` -> `a11a836`) at 08:44, before the no-force-push rule existed | Push log; remote reflog | Disclosed to the owner; standing order issued to all lanes: rebase only **before** the first push, `git merge origin/main` afterwards; no force-push since, none planned | Disclosed |
 | A-04 | TEAM B localization lane (`audit/selftest`, PR #37) | Carries the same two RTL fix files as its own `audit/al10n` (#30) - same owner, so not a foreign-file breach, but the fix is duplicated across two PRs | #37 diff: `Shell/Protection/RescuerWindows.cs -1`, `UI/Tools/Lock/LockTool.cs` | Merge order fixed in the PR body: **#30 first**, then #37 merges `origin/main` and the overlap becomes a no-op; executor informed | Open (coordination) |
 | A-05 | Pre-existing (not this train) | `SelfTest.cs:449` claims it "builds every registered floating tool offscreen" but `SelfTest.cs:465-467` builds only `CropTool`; `ToolRegistry.All.Count` is merely asserted non-zero | `SelfTest.cs:449` vs `:465-467`; release lane R-04 | Claim frozen: no document may say "every window verified in Arabic" until #37 is green; the honest claim is "1,094 keys per table, parity enforced in CI"; #37 closes the gap | Open -> #37 |
-| A-06 | TEAM B docs lane (`audit/adocs`, PR #36) | Edited `docs/site/README.md` and `docs/site/index.html` (version 2.2.0 -> 2.4.0, release-notes links, meta description, screenshot note). Website paths are now Team C-only | PR #36 diff vs main shows exactly those two paths | Revert `docs/site/**` to `origin/main` on #36; the substance becomes a one-line request to Team C via the supervisor; no further site edits by any Team B lane | Open (revert instructed) |
+| A-06 | TEAM B docs lane (`audit/adocs`, PR #36) | Edited `docs/site/README.md` and `docs/site/index.html` (version 2.2.0 -> 2.4.0, release-notes links, meta description, screenshot note). Website paths are now Team C-only | PR #36 diff vs main shows exactly those two paths | Revert `docs/site/**` to `origin/main` on #36; the substance becomes a one-line request to Team C via the supervisor; no further site edits by any Team B lane | Fixed - revert `e31815f` on `audit/adocs`; `git diff origin/main -- docs/site` empty; #36 carries zero site files |
 
 ## Standing checks performed by the supervisor
 
@@ -28,6 +28,7 @@ Rules in force: no-interference (ownership, append-only shared files, no force-p
 | No forbidden content committed | Branch diffs scanned for `_reference/`, `.mp4`, `.zip`, `.exe`, `.dll`, `.png`, `.webp`, `.pfx`, `SHA256SUMS` | Clean on every lane |
 | Shared-file ownership | Protected-path scan (`CHANGES`, `README`, `en/ar.json`, `MERGE-LOG`, `WheelController`, `ToolRegistry`) per branch | Only A-01 (fixed); all other lanes clean |
 | Claims carry evidence | Every lane report required to cite a run id, commit SHA or test name | Enforced; unverified statements rejected |
+| CI verdict hygiene | Every verdict read as gh run view --json conclusion; a cancelled run is reported as cancelled, never as a failure | Adopted after two docs lanes were reported red purely by concurrency: cancel-in-progress |
 
 ## How an entry is added
 
