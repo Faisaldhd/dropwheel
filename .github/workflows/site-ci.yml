@@ -164,6 +164,9 @@ jobs:
 
           const BASE = 'http://127.0.0.1:8080/';
           const DIAGNOSTICS_PATH = 'site-artifacts/screenshots/shot-diagnostics.json';
+          const STITCH_DIR = 'site-artifacts/stitch';
+          fs.mkdirSync(STITCH_DIR, { recursive: true });
+          const stitch = { states: [] };
           const diagnostics = {
             generatedAt: new Date().toISOString(),
             states: [],
@@ -364,6 +367,52 @@ jobs:
             await card.screenshot({ path: `site-artifacts/screenshots/${file}` });
           }
 
+          async function captureStitched(page, viewport, state) {
+            // Chromium's captureBeyondViewport can discard images below the
+            // viewport. Capture viewport-sized tiles while scrolling instead,
+            // then stitch them with Pillow.
+            const info = await page.evaluate(() => {
+              const header = document.querySelector('.site-header');
+              if (header) header.style.setProperty('position', 'static', 'important');
+              document.documentElement.style.scrollBehavior = 'auto';
+              return {
+                scrollHeight: document.scrollingElement.scrollHeight,
+                viewportHeight: window.innerHeight,
+              };
+            });
+            const maxScroll = Math.max(0, info.scrollHeight - info.viewportHeight);
+            const positions = [];
+            if (maxScroll === 0) {
+              positions.push(0);
+            } else {
+              for (let y = 0; y < maxScroll; y += 800) positions.push(y);
+              positions.push(maxScroll);
+            }
+            const parts = [];
+            const prefix = `${viewport.width}x${viewport.height}-${state.suffix}`;
+            for (let i = 0; i < positions.length; i += 1) {
+              const target = positions[i];
+              const actualY = await page.evaluate((y) => {
+                window.scrollTo(0, y);
+                return Math.round(window.scrollY);
+              }, target);
+              await page.waitForTimeout(140);
+              const file = `${STITCH_DIR}/${prefix}-${String(i).padStart(3, '0')}.png`;
+              await page.screenshot({ path: file, fullPage: false });
+              parts.push({ file, y: actualY });
+            }
+            await page.evaluate(() => window.scrollTo(0, 0));
+            stitch.states.push({
+              viewport: { width: viewport.width, height: viewport.height },
+              state: state.suffix,
+              scrollHeight: info.scrollHeight,
+              viewportHeight: info.viewportHeight,
+              parts,
+              output: `site-artifacts/screenshots/${viewport.prefix}-${state.suffix}.png`,
+            });
+            fs.writeFileSync(`${STITCH_DIR}/manifest.json`, JSON.stringify(stitch, null, 2));
+          }
+
           (async () => {
             const browser = await chromium.launch();
             for (const viewport of VIEWPORTS) {
@@ -389,13 +438,13 @@ jobs:
                 });
                 await page.mouse.move(0, 0);
                 await page.waitForTimeout(150);
-                await page.screenshot({
-                  path: `site-artifacts/screenshots/${viewport.prefix}-${state.suffix}.png`,
-                  fullPage: true,
-                });
+                await captureStitched(page, viewport, state);
                 if (viewport.width === 1440 && state.suffix === 'en-dark') {
+                  await captureCard(page, '#tool-editphotos', 'card-editphotos.png');
                   await captureCard(page, '#tool-annotate', 'card-annotate.png');
                   await captureCard(page, '#tool-addbackground', 'card-addbackground.png');
+                  await captureCard(page, '#tool-crop', 'card-crop.png');
+                  await captureCard(page, '#tool-redact', 'card-redact.png');
                 }
                 await context.close();
               }
@@ -420,6 +469,75 @@ jobs:
             sleep 0.2
           done
           NODE_PATH="$RUNNER_TEMP/pw/node_modules" node "$RUNNER_TEMP/capture.cjs"
+          ls -lh site-artifacts/screenshots
+      - name: Stitch full-page screenshots and check poster pixels
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --disable-pip-version-check pillow
+          cat > "$RUNNER_TEMP/stitch.py" <<'PY'
+          import json
+          import sys
+          from collections import Counter
+          from PIL import Image
+
+          MANIFEST = 'site-artifacts/stitch/manifest.json'
+          DIAGNOSTICS = 'site-artifacts/screenshots/shot-diagnostics.json'
+
+          manifest = json.load(open(MANIFEST, encoding='utf-8'))
+          diagnostics = json.load(open(DIAGNOSTICS, encoding='utf-8'))
+          shots_by_key = {
+              (state['viewport'], state['state']): state['toolShots']
+              for state in diagnostics['states']
+          }
+
+          failures = []
+          poster_checks = 0
+          for state in manifest['states']:
+              width = int(state['viewport']['width'])
+              height = int(state['scrollHeight'])
+              output = state['output']
+              canvas = Image.new('RGB', (width, height), (18, 13, 26))
+              for part in sorted(state['parts'], key=lambda item: item['y']):
+                  image = Image.open(part['file']).convert('RGB')
+                  y = max(0, min(int(part['y']), height - image.height))
+                  canvas.paste(image, (0, y))
+              canvas.save(output)
+              if abs(canvas.height - height) > 2:
+                  failures.append(f'{output}: stitched height {canvas.height} != {height}')
+              key = (f"{width}x{state['viewport']['height']}", state['state'])
+              for shot in shots_by_key.get(key, []):
+                  rect = shot['rect']
+                  x = max(0, min(width, round(rect['x'])))
+                  y = max(0, min(height, round(rect['y'])))
+                  x2 = max(0, min(width, round(rect['x'] + rect['width'])))
+                  y2 = max(0, min(height, round(rect['y'] + rect['height'])))
+                  region = canvas.crop((x, y, x2, y2))
+                  pixels = list(region.getdata())[::2]
+                  if not pixels:
+                      failures.append(f"{output} {shot['cardId']}: empty poster region")
+                      continue
+                  base = Counter((p[0] // 8, p[1] // 8, p[2] // 8) for p in pixels).most_common(1)[0][0]
+                  base = tuple(channel * 8 for channel in base)
+                  changed = sum(
+                      1
+                      for pixel in pixels
+                      if max(abs(pixel[i] - base[i]) for i in range(3)) > 32
+                  )
+                  ratio = changed / len(pixels)
+                  poster_checks += 1
+                  if ratio <= 0.005:
+                      failures.append(
+                          f"{output} {shot['cardId']}: flat poster region ratio={ratio:.4f}"
+                      )
+          print(f"stitched {len(manifest['states'])} pages; checked {poster_checks} poster regions")
+          if poster_checks < 5:
+              failures.append(f'only {poster_checks} poster regions checked, expected at least 5')
+          if failures:
+              for failure in failures:
+                  print(f'FAIL: {failure}')
+              sys.exit(1)
+          PY
+          python3 "$RUNNER_TEMP/stitch.py"
           ls -lh site-artifacts/screenshots
       - name: Upload screenshots
         if: always()
