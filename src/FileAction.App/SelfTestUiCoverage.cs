@@ -1,3 +1,4 @@
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -40,6 +41,14 @@ internal static class SelfTestUiCoverage
     private static readonly Regex KeyShape = new(@"^[a-z][a-z0-9]*(\.[a-z0-9]+){2,}$", RegexOptions.Compiled);
     private static readonly Regex Arabic = new(@"[\u0600-\u06FF]", RegexOptions.Compiled);
 
+    /// <summary>A window that needs longer than this is reported as TIMEOUT, never as PASS.</summary>
+    private static readonly TimeSpan PerWindowBudget = TimeSpan.FromSeconds(30);
+
+    /// <summary>Whole coverage pass budget; keeps the self-test inside its CI step window.</summary>
+    private static readonly TimeSpan TotalBudget = TimeSpan.FromSeconds(150);
+
+    private static Stopwatch _clock = Stopwatch.StartNew();
+
     private sealed class Row
     {
         public required string Window { get; init; }
@@ -54,13 +63,15 @@ internal static class SelfTestUiCoverage
         "Fixed-size dialogs are only size-checked at 1280x800 @100 % (they use design sizes, not the sizer); " +
         "150 %/200 % and portrait fit is asserted for tool windows only. `UpdatedWindow` builds its Window inside " +
         "Show() and native MessageBox surfaces are not rasterised. CI has no FFmpeg before this step, so audio/video " +
-        "tools are screenshotted in their real missing-tool/probe-failed state, not with media loaded.";
+        "tools are screenshotted in their real missing-tool/probe-failed state, not with media loaded. " +
+        "Budget: 150 s total, 30 s per window; an over-budget surface is reported TIMEOUT and is not counted as PASS.";
 
     public static void Run(string outDir, List<string> log)
     {
         Directory.CreateDirectory(outDir);
         var rows = new List<Row>();
         var failures = new List<string>();
+        _clock = Stopwatch.StartNew();
         var settings = new AppSettings();
         var tools = new ToolLocator();
         var core = WheelController.BuildOperations();
@@ -80,6 +91,8 @@ internal static class SelfTestUiCoverage
         {
             foreach (var (language, culture) in new[] { (UiLanguage.English, "en"), (UiLanguage.Arabic, "ar") })
             {
+                if (OutOfTime("culture:" + culture, culture, _clock, rows, failures))
+                    continue;
                 LanguageManager.Apply(language);
                 Theme.Override = true;
                 Theme.Refresh();
@@ -153,6 +166,8 @@ internal static class SelfTestUiCoverage
                         continue;
                     }
 
+                    if (OutOfTime("tool:" + spec.Id, culture, _clock, rows, failures))
+                        continue;
                     ToolWindow? window = null;
                     try
                     {
@@ -167,7 +182,9 @@ internal static class SelfTestUiCoverage
                             // CI has no FFmpeg before this step. A probe that cannot run is not a coverage
                             // failure: the window is still built, asserted and rasterised in its real
                             // placeholder/failure state, and the probe result is recorded in the report.
-                            probe = ex.GetType().Name;
+                            probe = ex is TimeoutException
+                                ? "media probe TIMEOUT; window rendered without media"
+                                : "media probe " + ex.GetType().Name + "; window rendered without media";
                         }
 
                         var row = Capture("tool:" + spec.Id, culture, "tool", window,
@@ -272,6 +289,7 @@ internal static class SelfTestUiCoverage
         Action? render, List<string> failures, bool detach = false, IToolWindowSpec? spec = null)
     {
         var row = new Row { Window = id, Culture = culture, Kind = kind };
+        var windowClock = Stopwatch.StartNew();
         try
         {
             var problems = InspectWindow(window, culture, out var emptyCount);
@@ -301,6 +319,13 @@ internal static class SelfTestUiCoverage
                 row.Detail = string.Join("; ", problems);
                 failures.Add($"{id} ({culture}): {row.Detail}");
             }
+            else if (windowClock.Elapsed > PerWindowBudget)
+            {
+                // A surface that needed longer than the budget is NOT a pass, even if it finished.
+                row.Result = "TIMEOUT";
+                row.Detail = $"window took {windowClock.Elapsed.TotalSeconds:0.0} s (budget {PerWindowBudget.TotalSeconds:0} s)";
+                failures.Add($"{id} ({culture}): {row.Detail}");
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -311,9 +336,22 @@ internal static class SelfTestUiCoverage
         return row;
     }
 
+    /// <summary>True when the whole pass is out of time; the surface is reported as TIMEOUT, not omitted.</summary>
+    private static bool OutOfTime(string id, string culture, Stopwatch clock, List<Row> rows, List<string> failures)
+    {
+        if (clock.Elapsed <= TotalBudget)
+            return false;
+        const string detail = "coverage deadline reached; window NOT rendered";
+        rows.Add(new Row { Window = id, Culture = culture, Kind = "budget", Result = "TIMEOUT", Detail = detail });
+        failures.Add($"{id} ({culture}): {detail}");
+        return true;
+    }
+
     private static void RenderDialog(string id, string culture, string dir, List<string> failures, List<Row> rows,
         Func<Window> build)
     {
+        if (OutOfTime(id, culture, _clock, rows, failures))
+            return;
         Window? window = null;
         try
         {

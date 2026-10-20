@@ -429,6 +429,8 @@ internal sealed class AudioBleepView
             Foreground = Theme.Muted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(18),
+            // The lane grid is LTR for its time axis; this message is Arabic prose.
+            FlowDirection = LanguageManager.FlowDirection,
         };
         _placeholder.Visibility = Visibility.Visible;
         _status.Text = message;
