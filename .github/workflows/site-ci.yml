@@ -180,21 +180,80 @@ jobs:
             }
           }
 
+          async function waitForHero(page, state) {
+            // Theme/language toggles rebuild the <picture> sources and set
+            // img.src; wait for the new animated WebP to decode, then settle.
+            await page.waitForFunction(
+              () => {
+                const image = document.querySelector('.hero-motion img');
+                return Boolean(image && image.complete && image.naturalWidth > 0);
+              },
+              null,
+              { timeout: 3000 },
+            );
+            const hero = await page.evaluate(() => {
+              const image = document.querySelector('.hero-motion img');
+              return image
+                ? { complete: image.complete, naturalWidth: image.naturalWidth, src: image.currentSrc || image.src }
+                : null;
+            });
+            if (!hero || !hero.complete || hero.naturalWidth <= 0) {
+              throw new Error(`blank hero image for ${state.suffix}: ${JSON.stringify(hero)}`);
+            }
+            await page.waitForTimeout(400);
+          }
+
           async function reveal(page) {
-            // IntersectionObserver only reveals sections that enter the viewport.
-            // Walk the document in ~800px steps, return to the top and let the
-            // one-shot transitions settle before the full-page capture.
+            // The page sets html { scroll-behavior: smooth }, which makes rapid
+            // programmatic jumps animate and never reach the bottom. Force auto
+            // while walking, reveal every IntersectionObserver section, load
+            // every image and return to the top.
             await page.evaluate(async () => {
+              const root = document.documentElement;
+              const previousBehavior = root.style.scrollBehavior;
+              root.style.scrollBehavior = 'auto';
               const step = 800;
-              const scrolling = document.scrollingElement || document.documentElement;
+              const scrolling = document.scrollingElement || root;
+              let maxY = 0;
               for (let y = 0; y < scrolling.scrollHeight; y += step) {
                 window.scrollTo(0, y);
                 await new Promise((resolve) => setTimeout(resolve, 60));
+                maxY = Math.max(maxY, window.scrollY);
               }
+              if (maxY + window.innerHeight < scrolling.scrollHeight - 10) {
+                throw new Error(
+                  `scroll did not reach the bottom: ${maxY} + ${window.innerHeight} < ${scrolling.scrollHeight}`,
+                );
+              }
+              await new Promise((resolve) => setTimeout(resolve, 300));
               window.scrollTo(0, 0);
+              root.style.scrollBehavior = previousBehavior;
               await new Promise((resolve) => setTimeout(resolve, 300));
             });
+
+            const remaining = await page.evaluate(
+              () => document.querySelectorAll('[data-reveal]:not(.is-in)').length,
+            );
+            if (remaining > 0) {
+              throw new Error(`${remaining} [data-reveal] node(s) stayed hidden after scrolling`);
+            }
+
             await page.waitForTimeout(300);
+            await page.evaluate(async () => {
+              const pending = Array.from(document.images).filter((image) => !image.complete);
+              await Promise.race([
+                Promise.all(
+                  pending.map(
+                    (image) =>
+                      new Promise((resolve) => {
+                        image.addEventListener('load', resolve, { once: true });
+                        image.addEventListener('error', resolve, { once: true });
+                      }),
+                  ),
+                ),
+                new Promise((resolve) => setTimeout(resolve, 3000)),
+              ]);
+            });
           }
 
           async function assertNoHorizontalOverflow(page, viewport, state) {
@@ -224,6 +283,7 @@ jobs:
                 await page.goto(BASE, { waitUntil: 'load' });
                 await page.waitForTimeout(400);
                 await applyState(page, state);
+                await waitForHero(page, state);
                 await reveal(page);
                 await assertNoHorizontalOverflow(page, viewport, state);
                 await page.screenshot({
