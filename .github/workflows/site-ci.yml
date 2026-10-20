@@ -240,20 +240,30 @@ jobs:
 
             await page.waitForTimeout(300);
             await page.evaluate(async () => {
-              const pending = Array.from(document.images).filter((image) => !image.complete);
+              // Lazy lock/tool images can report complete before the decoder has
+              // produced pixels. Wait for every image to be complete, then
+              // decode them, with a 3 s cap, and settle before the capture.
+              const images = Array.from(document.images);
+              const deadline = Date.now() + 3000;
+              while (Date.now() < deadline && !images.every((image) => image.complete)) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
               await Promise.race([
                 Promise.all(
-                  pending.map(
-                    (image) =>
-                      new Promise((resolve) => {
-                        image.addEventListener('load', resolve, { once: true });
-                        image.addEventListener('error', resolve, { once: true });
-                      }),
+                  images.map((image) =>
+                    image.decode ? image.decode().catch(() => {}) : Promise.resolve(),
                   ),
                 ),
                 new Promise((resolve) => setTimeout(resolve, 3000)),
               ]);
+              await new Promise((resolve) => setTimeout(resolve, 300));
             });
+            const incomplete = await page.evaluate(
+              () => Array.from(document.images).filter((image) => !image.complete).length,
+            );
+            if (incomplete > 0) {
+              throw new Error(`${incomplete} image(s) were not complete at capture time`);
+            }
           }
 
           async function assertNoHorizontalOverflow(page, viewport, state) {

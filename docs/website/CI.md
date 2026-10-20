@@ -172,10 +172,11 @@ Before each capture the script forces `scroll-behavior: auto` (the page sets
 `smooth`, which otherwise makes rapid programmatic jumps animate and never
 reach the bottom), walks the document in ~800 px steps with a 60 ms pause,
 checks that the scroll actually reached the bottom, asserts that zero
-`[data-reveal]` nodes remain hidden, waits for pending images, scrolls back to
-the top, blurs the active element and parks the pointer at (0,0) so the skip
-link is not captured in its focus-visible state, waits 300 ms and only then
-screenshots. At 390 px it hard-fails the step when
+`[data-reveal]` nodes remain hidden, waits up to 3 s for every image to be
+`complete`, decodes them and settles 300 ms, scrolls back to the top, blurs the
+active element and parks the pointer at (0,0) so the skip link is not captured
+in its focus-visible state, waits 300 ms and only then screenshots. At 390 px it
+hard-fails the step when
 `document.scrollingElement.scrollWidth > window.innerWidth + 1`, which catches
 horizontal overflow in either direction or language.
 
