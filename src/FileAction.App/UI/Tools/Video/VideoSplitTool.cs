@@ -381,7 +381,7 @@ internal sealed class VideoSplitView
             {
                 Width = 13,
                 Height = height,
-                Background = Brushes.Transparent,
+                Background = VideoPalette.Transparent,
                 Cursor = Cursors.SizeWE,
                 Tag = index,
                 ToolTip = T("tool.videosplit.pointAt", Bidi.Value(VideoToolCommon.Time(_points[index]))),
