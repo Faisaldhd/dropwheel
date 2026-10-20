@@ -362,7 +362,7 @@ internal static class SelfTestUiCoverage
         var empties = 0;
         var seen = new HashSet<DependencyObject>();
 
-        void Add(string? text, FlowDirection flow = FlowDirection.LeftToRight)
+        void AddText(string? text, FlowDirection flow = FlowDirection.LeftToRight)
         {
             if (text is null)
                 return;
@@ -374,7 +374,7 @@ internal static class SelfTestUiCoverage
             labels.Add((text, flow));
         }
 
-        void Add(TextBlock block)
+        void AddBlock(TextBlock block)
         {
             if (string.IsNullOrEmpty(block.Text))
             {
@@ -395,13 +395,13 @@ internal static class SelfTestUiCoverage
             if (!seen.Add(node))
                 return;
             if (node is Window w)
-                Add(w.Title);
+                AddText(w.Title);
             if (node is TextBlock block)
-                Add(block);
+                AddBlock(block);
             if (node is ContentControl content && content.Content is string contentText)
-                Add(contentText, content.FlowDirection);
+                AddText(contentText, content.FlowDirection);
             if (node is HeaderedContentControl headered && headered.Header is string headerText)
-                Add(headerText, headered.FlowDirection);
+                AddText(headerText, headered.FlowDirection);
             foreach (var child in LogicalTreeHelper.GetChildren(node))
                 if (child is DependencyObject dependency)
                     Walk(dependency);
