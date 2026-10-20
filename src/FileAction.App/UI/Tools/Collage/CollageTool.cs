@@ -37,6 +37,8 @@ internal sealed class CollageTool : IToolWindowSpec
 
     public string TitleKey => "tool.collage.title";
 
+    public string PrimaryLabelKey => "tool.collage.create";
+
     public ToolSpecLayout Layout => DefaultLayout;
 
     public bool Applies(IReadOnlyList<FileItem> items) =>

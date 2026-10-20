@@ -27,7 +27,8 @@ internal sealed class CollageOperation : Operation, IInteractiveTool
 
     public void Open(IReadOnlyList<FileItem> items, DropTargets? targets)
     {
-        var spec = ToolRegistry.For(items) ?? CollageTool.Instance;
-        new ToolWindow(spec, items, targets).Show();
+        // Open this tool by identity: ToolRegistry.For(items) is first-match and several tools accept a
+        // single image, so a generic lookup could open another tool's window from the Collage slice.
+        new ToolWindow(CollageTool.Instance, items, targets).Show();
     }
 }
