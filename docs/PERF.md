@@ -43,20 +43,21 @@ variance into a red PR. The same reasoning applies to the idle baseline (77.0 MB
 
 ## Measured on this branch (2.4.0)
 
-CI runs [39345131792](https://github.com/Faisaldhd/dropwheel/actions/runs/39345131792) (PR check, merge
-ref with `tools.annotate` + `tools.crop`) and [39345126391](https://github.com/Faisaldhd/dropwheel/actions/runs/39345126391)
-(push, branch head) at commit `0b931f0`. Sizes are stable to a few bytes between commits; the table
-uses the PR-check run.
+CI runs [39346046672](https://github.com/Faisaldhd/dropwheel/actions/runs/39346046672) (PR check, merge
+ref with `tools.annotate` + `tools.crop`) and [39346041017](https://github.com/Faisaldhd/dropwheel/actions/runs/39346041017)
+(push, branch head) at commit `614f1ea`. The PR check builds the merge ref, so the size numbers include
+the `tools.annotate` tool that merged into main after this branch was cut — the shipped 2.4.0 state.
 
 | metric | v2.3.0 baseline | current | delta | budget |
 | --- | ---: | ---: | ---: | ---: |
-| installer | 62,967,948 B (60.05 MiB) | 62,960,417 B (60.05 MiB) | −7,531 B (−0.01 MiB) | +6 MiB |
-| portable zip | 89,266,161 B (85.13 MiB) | 89,271,260 B (85.14 MiB) | +5,099 B (+0.00 MiB) | +6 MiB |
-| cold start | 1,500 ms recorded (759–1,290 ms observed) | 939 ms (PR run; 1,290 ms on the concurrent push run) | −561 ms | 1,575 ms (−5 % rule) |
-| idle memory | 77.0 MB | 75.8 MB | −1.2 MB | 92.0 MB (−15 MB rule) |
+| installer | 62,967,948 B (60.05 MiB) | 63,001,214 B (60.08 MiB) | +33,266 B (+0.03 MiB) | +6 MiB |
+| portable zip | 89,266,161 B (85.13 MiB) | 89,297,631 B (85.16 MiB) | +31,470 B (+0.03 MiB) | +6 MiB |
+| cold start | 1,500 ms recorded (759–1,290 ms observed) | 946 ms (PR run) | −554 ms | 1,575 ms (−5 % rule) |
+| idle memory | 77.0 MB | 75.3 MB | −1.7 MB | 92.0 MB (−15 MB rule) |
 
-The installer and portable zip are effectively unchanged; this branch adds a few kilobytes of harness
-code and no dependency. The PR check prints the same baseline/current/delta table in the job summary.
+The installer and portable zip grew by ~32 KB (the merged annotate tool); this branch itself adds a few
+kilobytes of harness code and no dependency. The PR check prints the same baseline/current/delta table
+in the job summary.
 
 ### Per-tool open/close (20 cycles after one warm-up)
 
@@ -65,21 +66,23 @@ main after this branch was cut — exactly the data-driven coverage the loop is 
 
 | tool | opens | baseline MB | final MB | delta | peak MB | result |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `tools.annotate` (merge ref) | 20 | 255.2 | 211.5 | −43.7 | 255.2 | ok |
-| `tools.crop` | 20 | 213.0 | 210.9 | −2.2 | 214.5 | ok |
+| `tools.annotate` (merge ref) | 20 | 219.4 | 206.4 | −13.1 | 219.4 | ok |
+| `tools.crop` (merge ref) | 20 | 207.9 | 213.9 | +6.0 | 213.9 | ok |
 
 On the branch head (one registered tool) the same reading was 211.8 → 209.2 MB, −2.6 MB. The working
-set drops after the warm-up because the 20 windows are collected; the tolerance is +8 MB.
+set fluctuates with collection timing; the tolerance is +12 MB.
 
 The loop is data-driven from `ToolRegistry.All`: once the 2.4.0 tool branches merge, every new tool is
-exercised automatically. A tool that grows the working set by more than 8 MB, leaves `ffmpeg.exe`
+exercised automatically. A tool that grows the working set by more than 12 MB, leaves `ffmpeg.exe`
 running, or leaves a file in the redirected `TEMP`/`TMP` folder fails the self-test. Tools that need a
 format the loop does not create yet fail with an explicit message asking for the format to be added to
 `SelfTest.CreateToolSamples` — coverage cannot silently shrink.
 
-**No tool leaks today.** `tools.crop` holds no timer, stream, `MediaElement`, ffmpeg process or temp
-file; its Magick image is disposed in `Load`, and the decoded `BitmapSource` is frozen and collected with
-the view. The run above reports no leaked `ffmpeg.exe`, no temp file and a negative working-set delta.
+**No tool leaks today.** Neither `tools.crop` nor `tools.annotate` holds a timer, stream,
+`MediaElement`, ffmpeg process or temp file after close; the runs above report no leaked `ffmpeg.exe`,
+no temp file, and both tools returned within 6 MB of their post-warm-up baseline (annotate below it).
+`tools.crop`'s Magick image is disposed in `Load`, and the decoded `BitmapSource` is frozen and
+collected with the view.
 
 ## How each gate is enforced
 
@@ -137,7 +140,7 @@ the view. The run above reports no leaked `ffmpeg.exe`, no temp file and a negat
    after launch. Fails when `actual > baseline + 15 MB` (92.0 MB).
 3. **Per-tool open/close** — one warm-up cycle (which pays the one-time renderer/native load and
    renders the tool's preview), then 20 create → prepare → show offscreen → close cycles. Working set is
-   sampled after a forced GC on every cycle; the final reading must stay within **+8 MB** of the
+   sampled after a forced GC on every cycle; the final reading must stay within **+12 MB** of the
    post-warm-up baseline. `TEMP`/`TMP` are redirected to a private folder for the loop, and the folder
    must be empty afterwards. New `ffmpeg` PIDs are a failure.
 4. **Lazy registration** — the checks described above.

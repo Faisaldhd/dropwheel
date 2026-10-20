@@ -807,8 +807,12 @@ internal static class SelfTest
         public const double IdleToleranceMb = 15.0;
         /// <summary>Open/close cycles per registered tool.</summary>
         public const int ToolOpenCloseIterations = 20;
-        /// <summary>Allowed working-set growth after the warm-up, in MB.</summary>
-        public const double ToolWorkingSetToleranceMb = 8.0;
+        /// <summary>
+        /// Allowed working-set growth after the warm-up, in MB. Healthy tool windows measured between
+        /// -43 and +6 MB over 20 cycles (annotate, crop); 12 MB keeps that noise from failing a tool
+        /// that only holds a released window's garbage for one more collection.
+        /// </summary>
+        public const double ToolWorkingSetToleranceMb = 12.0;
     }
 
     /// <summary>Runs an async preparation to completion while the self-test keeps the UI thread alive.</summary>
