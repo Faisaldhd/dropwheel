@@ -68,6 +68,12 @@ internal static class Motion
     /// <summary>Badge pop (Lock/success/error).</summary>
     public const double PopMs = 260;
 
+    /// <summary>A job/progress card sliding into the notification corner (fade + 40 px slide).</summary>
+    public const double ToastMs = 200;
+
+    /// <summary>Indeterminate progress breathing: one direction of the opacity cycle.</summary>
+    public const double BreathMs = 700;
+
     /// <summary>How far a floating surface rises into place.</summary>
     public const double RisePx = 8;
 
