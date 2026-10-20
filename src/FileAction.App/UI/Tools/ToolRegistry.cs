@@ -18,7 +18,15 @@ internal static class ToolRegistry
             Registered.Add(spec);
     }
 
-    /// <summary>The tool that can open for these files, or null.</summary>
+    /// <summary>
+    /// The registered tool with this exact id, when it accepts these files. Prefer this over
+    /// <see cref="For(IReadOnlyList{FileItem})"/>: several tools accept the same media, so a generic
+    /// first-match lookup can open the wrong window.
+    /// </summary>
+    public static IToolWindowSpec? For(string id, IReadOnlyList<FileItem> items) =>
+        Registered.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.Ordinal) && t.Applies(items));
+
+    /// <summary>First registered tool that accepts these files. Only for callers that have no tool id.</summary>
     public static IToolWindowSpec? For(IReadOnlyList<FileItem> items) =>
         Registered.FirstOrDefault(t => t.Applies(items));
 }
