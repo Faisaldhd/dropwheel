@@ -6,7 +6,7 @@ source file is only ever read (Lock is the one exception — it transforms the i
 [Lock](#25-lock--toolslock)).
 
 Every id, title and label below is the real value from `src/FileAction.Core/Strings/en.json` and
-`ar.json` (1,094 keys per table, key sets and placeholders kept identical by the localization tests in
+`ar.json` (1,107 keys per table, key sets and placeholders kept identical by the localization tests in
 CI). Where the two languages differ, both are shown: English first, Arabic second.
 
 The list is derived from `src/FileAction.App/UI/Tools/ToolRegistry.cs`; each tool registers itself from
@@ -386,7 +386,7 @@ Every gap below names who owns it, so nobody reads a limit as "forgotten".
   but the owner has not signed the feature off. **Owner: owner sign-off, tracked as a release gate.**
 - **Per-window bilingual rendering gate** (every window in English and Arabic at 100/150/200 % DPI):
   **`audit/selftest`, PR #37, in flight.** Until it is green the provable claim is the one used in this
-  document: 1,094 keys per table, with key-set and placeholder parity enforced by `LocalizationTests` in
+  document: 1,107 keys per table, with key-set and placeholder parity enforced by `LocalizationTests` in
   CI. No document claims per-window Arabic rendering before that gate exists.
 - **Light-mode contrast and the video timer:** **`audit/amotion` / `audit/adesign`, in flight** — they do
   not change how a tool is opened or what it writes.

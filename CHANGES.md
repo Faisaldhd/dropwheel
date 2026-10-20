@@ -134,7 +134,7 @@ writes none — and leaves the source alone, except Lock, which transforms the i
   path, which is what the gate covers; it does not measure the media-family tools.
 - Compress caps its video two-pass average with `maxrate`/`bufsize` so a target size is reached honestly,
   and a cancelled video run cleans its temporary files without touching the source.
-- Both string tables carry **1,094 keys each** with identical key sets and placeholders, enforced by
+- Both string tables carry **1,107 keys each** with identical key sets and placeholders, enforced by
   `LocalizationTests` in CI; the self-test renders the app in English and Arabic, light and dark.
 
 #### Not in this release
@@ -151,7 +151,7 @@ writes none — and leaves the source alone, except Lock, which transforms the i
   tables are append-only this close to the tag).
 - The binaries are still Authenticode-unsigned (SmartScreen may ask once); auto-updates are separately
   signed with ECDSA P-256.
-- Both string tables are complete and enforced (1,094 keys each, identical key sets and placeholders,
+- Both string tables are complete and enforced (1,107 keys each, identical key sets and placeholders,
   parity tests in CI) and the self-test renders the shipped build. The per-window bilingual rendering
   gate — every tool window in English and Arabic at 100/150/200 % DPI — is **`audit/selftest`, PR #37,
   in flight**; until it is green, no claim is made that every window has been rendered in both languages.
@@ -284,7 +284,7 @@ writes none — and leaves the source alone, except Lock, which transforms the i
   تغطّيه البوابة؛ أما أدوات عائلة الوسائط فلا تقيسها.
 - يقيّد ضغط الفيديو متوسط مروره المزدوج بـ`maxrate`/`bufsize` ليبلغ الحجم المستهدف بأمانة، والتشغيل الملغى
   ينظّف ملفاته المؤقتة دون المساس بالمصدر.
-- يحمل جدولا النصوص **⁦1,094⁩ مفتاحًا لكل منهما** بمجموعات مفاتيح وعناصر بديلة متطابقة، يفرضها اختبار
+- يحمل جدولا النصوص **⁦1,107⁩ مفتاحًا لكل منهما** بمجموعات مفاتيح وعناصر بديلة متطابقة، يفرضها اختبار
   `LocalizationTests` في CI؛ ويعرض الاختبار الذاتي التطبيق بالإنجليزية والعربية بالوضعين الفاتح والداكن.
 
 #### ليس في هذا الإصدار
@@ -302,7 +302,7 @@ writes none — and leaves the source alone, except Lock, which transforms the i
   (جداول النصوص ملحَقة فقط هذا القرب من الإصدار).
 - الملفات التنفيذية ما زالت غير موقّعة بـAuthenticode (قد يسأل SmartScreen مرة واحدة)؛ أما التحديثات
   التلقائية فموقّعة منفصلًا بـ⁦ECDSA P-256⁩.
-- جدولا النصوص مكتملان ومفروضان (⁦1,094⁩ مفتاحًا لكل منهما، بمجموعات مفاتيح وعناصر بديلة متطابقة،
+- جدولا النصوص مكتملان ومفروضان (⁦1,107⁩ مفتاحًا لكل منهما، بمجموعات مفاتيح وعناصر بديلة متطابقة،
   والتطابق مفروض باختبار `LocalizationTests` في CI)، والاختبار الذاتي يعرض النسخة المُسلَّمة. أما بوابة
   عرض كل نافذة بالعربية والإنجليزية بدقة ⁦100⁩٪ و⁦150⁩٪ و⁦200⁩٪ فهي لدى **`audit/selftest`، طلب الدمج
   ⁦#37⁩، قيد التنفيذ**؛ وإلى أن تصبح خضراء لا يُدَّعى أن كل نافذة عُرضت باللغتين.
