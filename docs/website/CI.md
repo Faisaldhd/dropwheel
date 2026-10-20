@@ -27,9 +27,12 @@ shown separately in the run, so a failure names the gate directly.
 
 ## Gate 1: Lighthouse CI (desktop, every category >= 0.95)
 
-Runner: `treosh/lighthouse-ci-action@v12`, Lighthouse CI against a local static
-server (`staticDistDir: ./docs/site`) with the **desktop preset** and two runs
-per category.
+Runner: `treosh/lighthouse-ci-action@v12`, Lighthouse CI against an explicit
+static server (`python3 -m http.server 8080 --directory docs/site --bind
+127.0.0.1`) with the **desktop preset** and two runs per category. The job
+first proves `/robots.txt` is served as HTTP 200 `text/plain` from the origin
+root; LHCI's built-in `staticDistDir` server did not serve `/robots.txt`, which
+made Lighthouse score SEO 0.92 with `robots-txt` = 0.
 
 Assertions are hard errors, not warnings:
 
@@ -49,15 +52,11 @@ The report is uploaded as the `lighthouse-report` artifact (HTML and JSON under
 `.lighthouseci/`). Open the run, download the artifact, and open the `.html`
 file for the audit list and the `.json` file for machine-readable scores.
 
-Local equivalent (requires Node and a Chromium install):
+Local equivalent (requires Node and a Chromium install; copy the
+`lighthouserc.json` written by the workflow step):
 
 ```bash
-npx @lhci/cli@0.14.0 autorun --collect.staticDistDir=./docs/site \
-  --collect.settings.preset=desktop \
-  --assert.assertions.categories:performance=error \
-  --assert.assertions.categories:accessibility=error \
-  --assert.assertions.categories:best-practices=error \
-  --assert.assertions.categories:seo=error
+npx @lhci/cli@0.15.1 autorun --config=lighthouserc.json
 ```
 
 ## Gate 2: initial-document size budget (<= 500,000 bytes)
@@ -92,10 +91,10 @@ Below-the-fold assets are deliberately excluded:
 - anything outside `docs/site/index.html`'s initial document (for example
   `docs/site/README.md`).
 
-At the time of writing (commit `5ee9c1d`, 2026-10-20) the measured payload is
-**408,228 bytes**: 131,986 HTML + 53,054 CSS + 16,995 app JS + 1,244 boot JS +
+At the time of writing (commit `3665790`, 2026-10-20) the measured payload is
+**407,459 bytes**: 130,937 HTML + 53,161 CSS + 17,168 app JS + 1,244 boot JS +
 1,983 favicon + 52,660 apple-touch-icon + 3,644 brand mark + 146,662 hero
-candidates. That is 81.6% of the 500,000 byte budget, with 91,772 bytes of
+candidates. That is 81.5% of the 500,000 byte budget, with 92,541 bytes of
 headroom. The script prints the per-file table and the total on every run and
 writes the same table to the job summary.
 
@@ -146,14 +145,24 @@ that normalization.
 ## Screenshots
 
 The `screenshots` job starts `python3 -m http.server` over `docs/site`, installs
-Playwright Chromium and captures full-page PNGs at:
+Playwright Chromium and captures full-page PNGs for four states at two widths:
 
-- `1440 x 900` (`home-1440-dark.png`)
-- `390 x 844` (`home-390-dark.png`)
+| Width | States |
+| --- | --- |
+| `1440 x 900` | EN dark, EN light, AR dark, AR light |
+| `390 x 844` | EN dark, EN light, AR dark, AR light |
+
+Files are named `home-1440-en-dark.png`, `home-1440-ar-light.png`, and so on.
+Before each capture the script walks the document in ~800 px steps with a 60 ms
+pause (the page reveals sections with `IntersectionObserver`, so a naive
+full-page shot would be blank below the fold), scrolls back to the top, waits
+300 ms and only then screenshots. At 390 px it hard-fails the step when
+`document.scrollingElement.scrollWidth > window.innerWidth + 1`, which catches
+horizontal overflow in either direction or language.
 
 They are uploaded as the `site-screenshots` artifact for visual review by the
-lead. Screenshots are evidence, not a gate; the Lighthouse job is the visual
-and performance gate.
+lead. Screenshots are evidence, not a score gate; Lighthouse remains the
+performance/accessibility gate.
 
 ## Artifacts
 
@@ -162,7 +171,7 @@ From the Actions run page, download:
 | Artifact | Contents |
 | --- | --- |
 | `lighthouse-report` | `.lighthouseci/*.html` and `*.json` reports, including category scores |
-| `site-screenshots` | `home-1440-dark.png`, `home-390-dark.png` |
+| `site-screenshots` | eight full-page PNGs (`home-{1440,390}-{en,ar}-{dark,light}.png`) |
 
 CLI equivalents:
 
@@ -202,7 +211,7 @@ Before anything is uploaded, the deploy job:
 markers themselves stay). Version, MiB, bytes and SHA-256 may repeat — the
 page uses them in the release bar, hero facts, For IT commands, release card,
 download card and installer filenames — and every occurrence is replaced.
-At commit `5ee9c1d` the page has 8 version, 4 MiB, 2 SHA-256, 1 bytes and 1
+At commit `3665790` the page has 8 version, 4 MiB, 2 SHA-256, 1 bytes and 1
 status pair; the status pair must appear exactly once. There is no note marker
 to stamp: the top status strip is the only status surface.
 
