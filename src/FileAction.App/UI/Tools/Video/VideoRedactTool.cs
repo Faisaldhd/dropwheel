@@ -80,7 +80,7 @@ internal sealed class VideoRedactView
     private readonly DropTargets? _targets;
     private readonly ToolLocator _tools = new();
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly List<RedactionArea> _areas = [];
+    private readonly List<VideoRedactionArea> _areas = [];
 
     private readonly Grid _preview = new() { ClipToBounds = true };
     private readonly Canvas _canvas = new() { Background = VideoPalette.Transparent, ClipToBounds = true };
@@ -107,7 +107,7 @@ internal sealed class VideoRedactView
         IsHitTestVisible = false,
     };
     private readonly List<Rectangle> _areaShapes = [];
-    private PillChoice<RedactionStyle> _styleChoice = null!;
+    private PillChoice<VideoRedactionStyle> _styleChoice = null!;
     private ColorChoice _colorChoice = null!;
     private Border? _previewCard;
     private Border? _previousButton;
@@ -120,7 +120,7 @@ internal sealed class VideoRedactView
     private int _total = 1;
     private int _frame;
     private int _selected = -1;
-    private RedactionStyle _style = RedactionStyle.Solid;
+    private VideoRedactionStyle _style = VideoRedactionStyle.Solid;
     private string _color = "black";
     private double _scale = 1;
     private double _originX;
@@ -320,10 +320,10 @@ internal sealed class VideoRedactView
         nav.Children.Add(previous);
         nav.Children.Add(next);
 
-        _styleChoice = new PillChoice<RedactionStyle>(
+        _styleChoice = new PillChoice<VideoRedactionStyle>(
             [
-                (T("tool.videoredact.solid"), RedactionStyle.Solid),
-                (T("tool.videoredact.blur"), RedactionStyle.Blur),
+                (T("tool.videoredact.solid"), VideoRedactionStyle.Solid),
+                (T("tool.videoredact.blur"), VideoRedactionStyle.Blur),
             ],
             _style);
         _styleChoice.Margin = new Thickness(0, 0, 8, 0);
@@ -491,7 +491,7 @@ internal sealed class VideoRedactView
         height = Math.Clamp(height, 1, _info.Height - y);
 
         var endSeconds = _info.DurationSeconds > 0 ? _info.DurationSeconds : 1;
-        _areas.Add(new RedactionArea(x, y, width, height, 0, endSeconds, _style, _color));
+        _areas.Add(new VideoRedactionArea(x, y, width, height, 0, endSeconds, _style, _color));
         Select(_areas.Count - 1);
     }
 
@@ -517,12 +517,12 @@ internal sealed class VideoRedactView
         {
             var area = _areas[i];
             var selected = i == _selected;
-            var fill = area.Style == RedactionStyle.Blur
+            var fill = area.Style == VideoRedactionStyle.Blur
                 ? Theme.AccentColor
                 : VideoPalette.PreviewFill(area.Color);
             var rectangle = new Rectangle
             {
-                Fill = VideoPalette.Tint(fill, area.Style == RedactionStyle.Blur ? (byte)0x44 : (byte)0x66),
+                Fill = VideoPalette.Tint(fill, area.Style == VideoRedactionStyle.Blur ? (byte)0x44 : (byte)0x66),
                 Stroke = selected ? Theme.Accent : Theme.Muted,
                 StrokeThickness = selected ? 2 : 1,
                 IsHitTestVisible = false,
@@ -551,7 +551,7 @@ internal sealed class VideoRedactView
         _status.Text = string.Empty;
     }
 
-    private void ReplaceSelected(Func<RedactionArea, RedactionArea> change)
+    private void ReplaceSelected(Func<VideoRedactionArea, VideoRedactionArea> change)
     {
         if (_selected < 0 || _selected >= _areas.Count)
             return;
@@ -812,7 +812,7 @@ internal sealed class VideoRedactView
         _seek?.Cancel();
         _areas.Clear();
         _selected = -1;
-        _style = RedactionStyle.Solid;
+        _style = VideoRedactionStyle.Solid;
         _color = "black";
         _frame = 0;
         _status.Text = string.Empty;

@@ -162,7 +162,7 @@ public class VideoFramesTests
     [Fact]
     public void Redaction_area_reports_its_duration()
     {
-        var area = new RedactionArea(0, 0, 10, 10, 1.5, 4, RedactionStyle.Solid);
+        var area = new VideoRedactionArea(0, 0, 10, 10, 1.5, 4, VideoRedactionStyle.Solid);
         Assert.Equal(2.5, area.Duration, 10);
         Assert.Equal("black", area.Color);
     }
@@ -173,7 +173,7 @@ public class VideoFramesTests
     public void One_solid_area_is_one_drawbox()
     {
         var graph = RedactionGraph.Build(
-            [new RedactionArea(10, 20, 100, 50, 1, 2.5, RedactionStyle.Solid, "black")],
+            [new VideoRedactionArea(10, 20, 100, 50, 1, 2.5, VideoRedactionStyle.Solid, "black")],
             1920,
             1080);
 
@@ -186,7 +186,7 @@ public class VideoFramesTests
     public void One_blur_area_crops_blurs_and_overlays_it()
     {
         var graph = RedactionGraph.Build(
-            [new RedactionArea(200, 100, 80, 40, 1, 3, RedactionStyle.Blur)],
+            [new VideoRedactionArea(200, 100, 80, 40, 1, 3, VideoRedactionStyle.Blur)],
             1920,
             1080);
 
@@ -201,8 +201,8 @@ public class VideoFramesTests
     {
         var graph = RedactionGraph.Build(
             [
-                new RedactionArea(10, 20, 100, 50, 1, 2.5, RedactionStyle.Solid, "black"),
-                new RedactionArea(200, 100, 80, 40, 1.5, 3, RedactionStyle.Blur),
+                new VideoRedactionArea(10, 20, 100, 50, 1, 2.5, VideoRedactionStyle.Solid, "black"),
+                new VideoRedactionArea(200, 100, 80, 40, 1.5, 3, VideoRedactionStyle.Blur),
             ],
             1920,
             1080);
@@ -219,8 +219,8 @@ public class VideoFramesTests
     {
         var graph = RedactionGraph.Build(
             [
-                new RedactionArea(0, 0, 20, 20, 1, 3, RedactionStyle.Solid, "black"),
-                new RedactionArea(40, 0, 20, 20, 2, 4, RedactionStyle.Solid, "black"),
+                new VideoRedactionArea(0, 0, 20, 20, 1, 3, VideoRedactionStyle.Solid, "black"),
+                new VideoRedactionArea(40, 0, 20, 20, 2, 4, VideoRedactionStyle.Solid, "black"),
             ],
             640,
             360);
@@ -245,7 +245,7 @@ public class VideoFramesTests
     public void Colours_are_normalised_for_ffmpeg()
     {
         static string ColorOf(string color) => RedactionGraph.Build(
-            [new RedactionArea(0, 0, 10, 10, 0, 1, RedactionStyle.Solid, color)],
+            [new VideoRedactionArea(0, 0, 10, 10, 0, 1, VideoRedactionStyle.Solid, color)],
             100,
             100);
 
@@ -260,7 +260,7 @@ public class VideoFramesTests
     public void Rectangles_are_clamped_inside_the_frame()
     {
         var topLeft = RedactionGraph.Build(
-            [new RedactionArea(-5, -8, 50, 40, 0, 1, RedactionStyle.Solid, "black")],
+            [new VideoRedactionArea(-5, -8, 50, 40, 0, 1, VideoRedactionStyle.Solid, "black")],
             100,
             80);
         Assert.Equal(
@@ -268,7 +268,7 @@ public class VideoFramesTests
             topLeft);
 
         var bottomRight = RedactionGraph.Build(
-            [new RedactionArea(95, 75, 50, 40, 0, 1, RedactionStyle.Solid, "black")],
+            [new VideoRedactionArea(95, 75, 50, 40, 0, 1, VideoRedactionStyle.Solid, "black")],
             100,
             80);
         Assert.Equal(
@@ -281,13 +281,13 @@ public class VideoFramesTests
     {
         Assert.Equal("", RedactionGraph.Build([], 1920, 1080));
         Assert.Equal("", RedactionGraph.Build(null, 1920, 1080));
-        Assert.Equal("", RedactionGraph.Build([new RedactionArea(0, 0, 10, 10, 0, 1, RedactionStyle.Blur)], 0, 1080));
+        Assert.Equal("", RedactionGraph.Build([new VideoRedactionArea(0, 0, 10, 10, 0, 1, VideoRedactionStyle.Blur)], 0, 1080));
 
         var skipped = RedactionGraph.Build(
             [
-                new RedactionArea(0, 0, 0, 10, 0, 1, RedactionStyle.Solid),
-                new RedactionArea(0, 0, 10, 10, 5, 5, RedactionStyle.Solid),
-                new RedactionArea(10, 10, 20, 20, 1, 2, RedactionStyle.Solid, "black"),
+                new VideoRedactionArea(0, 0, 0, 10, 0, 1, VideoRedactionStyle.Solid),
+                new VideoRedactionArea(0, 0, 10, 10, 5, 5, VideoRedactionStyle.Solid),
+                new VideoRedactionArea(10, 10, 20, 20, 1, 2, VideoRedactionStyle.Solid, "black"),
             ],
             100,
             100);
@@ -301,7 +301,7 @@ public class VideoFramesTests
     public void Graph_always_ends_with_the_vout_label()
     {
         var graph = RedactionGraph.Build(
-            [new RedactionArea(0, 0, 10, 10, 0, 1, RedactionStyle.Blur)],
+            [new VideoRedactionArea(0, 0, 10, 10, 0, 1, VideoRedactionStyle.Blur)],
             100,
             100);
         Assert.EndsWith(RedactionGraph.OutputLabel, graph);

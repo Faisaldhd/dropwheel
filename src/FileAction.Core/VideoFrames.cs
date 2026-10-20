@@ -167,7 +167,7 @@ public sealed class CaptureList
 }
 
 /// <summary>How a redaction area hides what is under it.</summary>
-public enum RedactionStyle
+public enum VideoRedactionStyle
 {
     /// <summary>A filled box in the chosen colour.</summary>
     Solid,
@@ -180,14 +180,14 @@ public enum RedactionStyle
 /// One rectangle to hide between two timestamps. Coordinates are in the video's original pixels, so the
 /// filter graph never depends on how large the preview happened to be.
 /// </summary>
-public sealed record RedactionArea(
+public sealed record VideoRedactionArea(
     int X,
     int Y,
     int Width,
     int Height,
     double StartSeconds,
     double EndSeconds,
-    RedactionStyle Style,
+    VideoRedactionStyle Style,
     string Color = "black")
 {
     /// <summary>How long the area stays hidden.</summary>
@@ -218,12 +218,12 @@ public static class RedactionGraph
     /// there is nothing valid to hide. Clamping keeps a rectangle inside the frame; invalid areas
     /// (zero size, reversed or missing time range) are skipped.
     /// </summary>
-    public static string Build(IReadOnlyList<RedactionArea>? areas, int frameWidth, int frameHeight)
+    public static string Build(IReadOnlyList<VideoRedactionArea>? areas, int frameWidth, int frameHeight)
     {
         if (areas is null || areas.Count == 0 || frameWidth <= 0 || frameHeight <= 0)
             return string.Empty;
 
-        var valid = new List<(int X, int Y, int Width, int Height, double Start, double End, RedactionStyle Style, string Color)>();
+        var valid = new List<(int X, int Y, int Width, int Height, double Start, double End, VideoRedactionStyle Style, string Color)>();
         foreach (var area in areas)
         {
             if (area is null || area.Width <= 0 || area.Height <= 0)
@@ -253,7 +253,7 @@ public static class RedactionGraph
             var area = valid[i];
             var output = i == valid.Count - 1 ? OutputLabel : $"[v{i + 1}]";
             graph.Append(input);
-            if (area.Style == RedactionStyle.Blur)
+            if (area.Style == VideoRedactionStyle.Blur)
             {
                 graph.Append($"split[b{i}][s{i}];[s{i}]crop={area.Width}:{area.Height}:{area.X}:{area.Y},{BlurFilter}[k{i}];");
                 graph.Append($"[b{i}][k{i}]overlay={area.X}:{area.Y}:{Enable(area.Start, area.End)}");

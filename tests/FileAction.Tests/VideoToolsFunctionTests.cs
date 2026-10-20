@@ -130,8 +130,8 @@ public class VideoToolsFunctionTests : IClassFixture<VideoToolsFunctionTests.Sam
         {
             var graph = RedactionGraph.Build(
             [
-                new RedactionArea(10, 10, 60, 40, 0.5, 1.5, RedactionStyle.Solid, "black"),
-                new RedactionArea(100, 60, 120, 60, 1.8, 2.6, RedactionStyle.Blur),
+                new VideoRedactionArea(10, 10, 60, 40, 0.5, 1.5, VideoRedactionStyle.Solid, "black"),
+                new VideoRedactionArea(100, 60, 120, 60, 1.8, 2.6, VideoRedactionStyle.Blur),
             ],
             320,
             180);
@@ -322,7 +322,7 @@ public class VideoToolsFunctionTests : IClassFixture<VideoToolsFunctionTests.Sam
         try
         {
             var graph = RedactionGraph.Build(
-                [new RedactionArea(10, 10, 60, 40, 0.5, 1.5, RedactionStyle.Solid, "black")],
+                [new VideoRedactionArea(10, 10, 60, 40, 0.5, 1.5, VideoRedactionStyle.Solid, "black")],
                 320,
                 180);
 
