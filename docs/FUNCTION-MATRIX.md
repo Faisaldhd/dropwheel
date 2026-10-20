@@ -29,6 +29,6 @@ hardware will differ.
   edited output.
 - **EP-6**: `Theme.Override` + `Theme.Refresh()` on an STA thread, then `new EditPhotosView(item,
   null).Build()`; both themes returned a view. The view has no other hard-coded colour.
-- **CI**: `Build + test` runs the full suite (272 tests on the merge before this feature's last
-  changes; the edit-photos set is `PhotoEditTests`, 26 facts, including the byte-copy and
-  window-sizing checks).
+- **CI**: `Build + test` runs the full suite; the edit-photos set is `PhotoEditTests` (26 facts),
+  including the byte-copy, monotonic-mapping and window-sizing checks. The totals grow as other tools
+  merge, so the run URL is the source of truth, not a count in this file.
