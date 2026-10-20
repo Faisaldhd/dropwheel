@@ -103,7 +103,19 @@ internal static class LockRuntime
     {
         Initialize();
         if (Settings.AssociationsRegistered)
+        {
+            // Refresh the icon files even when the associations already exist: an app update may ship
+            // new artwork (the purple badge replaced the earlier pink one).
+            try
+            {
+                _ = Icons;
+                new ProtectionHost().NotifyShell(string.Empty);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
             return;
+        }
         try
         {
             var icons = Icons;
