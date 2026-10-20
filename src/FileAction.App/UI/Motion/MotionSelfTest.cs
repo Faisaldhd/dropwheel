@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using FileAction.App.Actions;
@@ -55,7 +56,7 @@ internal static class MotionSelfTest
         try
         {
             VerifyStoryboardTargets();
-            log.Add("ok motion/storyboard targets (open/stagger/pulse clocks attached)");
+            log.Add("ok motion/storyboard targets (open/stagger/pulse animations carry targets and property paths)");
 
             var settings = new AppSettings();
             var tools = new ToolLocator();
@@ -197,43 +198,47 @@ internal static class MotionSelfTest
     private readonly record struct Metrics(double UiP95, double UiMean, double RasterP95, double CpuPercent);
 
     /// <summary>
-    /// Catches a broken storyboard target (the failure mode CI otherwise cannot see, because the
-    /// offscreen previews pose the tree directly). Starting a clock is synchronous: if <c>Open</c>
-    /// targeted the wrong object, the element would have no animated property at this point.
+    /// Catches a broken storyboard factory (the failure mode the offscreen previews cannot see, because
+    /// they pose the tree directly): every animation must carry an explicit target and a property path.
+    /// Checking the storyboard object is deterministic and does not depend on a presentation source.
     /// </summary>
     private static void VerifyStoryboardTargets()
     {
-        var previous = Motion.Override;
-        Motion.Override = true;
-        try
-        {
-            var surface = new Border();
-            var handle = Motion.Prepare(surface);
-            Motion.Play(Motion.Open(surface, handle), surface);
-            if (!surface.HasAnimatedProperties || !handle.Scale.HasAnimatedProperties)
-                throw new InvalidOperationException("motion open storyboard did not target the surface/scale");
-            Motion.Release(surface, handle);
+        var surface = new Border();
+        var handle = Motion.Prepare(surface);
+        AssertTargets(Motion.Open(surface, handle), "open", surface, handle.Scale);
+        Motion.Release(surface, handle);
 
-            var slice = new Border();
-            var transforms = new TransformGroup();
-            transforms.Children.Add(new ScaleTransform(0.82, 0.82));
-            transforms.Children.Add(new TranslateTransform());
-            slice.RenderTransform = transforms;
-            Motion.Play(Motion.Stagger(slice, 3), slice);
-            if (!slice.HasAnimatedProperties)
-                throw new InvalidOperationException("motion stagger storyboard did not target the slice");
-            Motion.Release(slice);
+        var slice = new Border();
+        var transforms = new TransformGroup();
+        var sliceScale = new ScaleTransform(0.82, 0.82);
+        transforms.Children.Add(sliceScale);
+        transforms.Children.Add(new TranslateTransform());
+        slice.RenderTransform = transforms;
+        AssertTargets(Motion.Stagger(slice, 3), "stagger", slice, sliceScale);
+        Motion.Release(slice);
 
-            var button = new Border();
-            Motion.Interactive(button);
-            Motion.Play(Motion.Pulse(button), button);
-            if (button.RenderTransform is not ScaleTransform press || !press.HasAnimatedProperties)
-                throw new InvalidOperationException("motion pulse storyboard did not target the button scale");
-            Motion.Release(button);
-        }
-        finally
+        var button = new Border();
+        Motion.Interactive(button);
+        AssertTargets(Motion.Pulse(button), "pulse", button.RenderTransform);
+        Motion.Release(button);
+    }
+
+    private static void AssertTargets(Storyboard storyboard, string name, params DependencyObject?[] expected)
+    {
+        if (storyboard.Children.Count == 0)
+            throw new InvalidOperationException($"motion {name} storyboard is empty");
+        var targets = storyboard.Children
+            .Select(Storyboard.GetTarget)
+            .OfType<DependencyObject>()
+            .ToHashSet();
+        foreach (var target in expected)
+            if (target is not null && !targets.Contains(target))
+                throw new InvalidOperationException($"motion {name} storyboard did not target {target.GetType().Name}");
+        foreach (var child in storyboard.Children)
         {
-            Motion.Override = previous;
+            if (Storyboard.GetTarget(child) is null || Storyboard.GetTargetProperty(child) is null)
+                throw new InvalidOperationException($"motion {name} storyboard has an animation without a target/property");
         }
     }
 
