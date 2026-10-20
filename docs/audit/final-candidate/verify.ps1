@@ -202,6 +202,29 @@ function Find-ArtifactFile {
     return $null
 }
 
+function Get-ArtifactTrx {
+    <# Downloads the test-results artifact and returns the first .trx as XML, or $null. #>
+    param([string] $RunIdForArtifact)
+
+    $dir = Save-Artifact -RunIdForArtifact $RunIdForArtifact -Name 'test-results'
+    if (-not $dir) { return $null }
+    $file = Get-ChildItem -LiteralPath $dir -Recurse -File -Filter '*.trx' -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if (-not $file) { return $null }
+    try { return [xml] (Get-Content -LiteralPath $file.FullName -Raw) }
+    catch { return $null }
+}
+
+function Select-TrxResults {
+    <# Namespace-agnostic projection of a VSTest .trx into testName/outcome pairs. #>
+    param($Xml)
+    if (-not $Xml) { return @() }
+    $nodes = $Xml.SelectNodes('//*[local-name()="UnitTestResult"]')
+    return @($nodes | ForEach-Object {
+            [pscustomobject]@{ testName = [string] $_.testName; outcome = [string] $_.outcome }
+        })
+}
+
 function Get-MissingText {
     <# Returns the expected substrings that the text does not contain. #>
     param([string] $Text, [string[]] $Expected, [switch] $CaseSensitive)
@@ -396,13 +419,34 @@ if (-not $uiText) {
     }
 }
 
-# No dispatch unit-test exists in this tree; say so rather than implying one.
-$dispatchNote = 'no ToolDispatch-style test exists (not claimed)'
-$testsDir = Join-Path $repoRoot 'tests'
-if (Test-Path -LiteralPath $testsDir) {
-    $hits = Get-ChildItem -LiteralPath $testsDir -Recurse -File -Filter '*.cs' -ErrorAction SilentlyContinue |
-        Select-String -Pattern 'ToolDispatch' -SimpleMatch
-    if ($hits) { $dispatchNote = 'ToolDispatch test present' }
+# The tree has a real dispatch test (tests/FileAction.Tests/ToolDispatchTests.cs, #31). Require it to be
+# present AND to have passed in this run's test-results, so a registered-but-unwired tool cannot pass.
+$dispatchTest = 'EveryRegisteredToolWindowIsReachableFromTheWheel'
+$dispatchNote = "no pass record for $dispatchTest"
+
+$dispatchSource = Join-Path $repoRoot 'tests/FileAction.Tests/ToolDispatchTests.cs'
+if (-not (Test-Path -LiteralPath $dispatchSource)) {
+    $toolsProblems += 'tests/FileAction.Tests/ToolDispatchTests.cs is missing'
+}
+
+$trx = Get-ArtifactTrx -RunIdForArtifact $runId
+if (-not $trx) {
+    $toolsProblems += 'no test-results artifact to prove the dispatch test passed'
+} else {
+    $results = Select-TrxResults -Xml $trx
+    $mine = @($results | Where-Object { $_.testName -like "*$dispatchTest*" })
+    if ($mine.Count -eq 0) {
+        $toolsProblems += "$dispatchTest did not run in this build"
+    } else {
+        $bad = @($mine | Where-Object { $_.outcome -ne 'Passed' })
+        if ($bad.Count -gt 0) {
+            $toolsProblems += ("$dispatchTest did not pass ({0})" -f (($bad | ForEach-Object { $_.outcome }) -join ', '))
+        } else {
+            $dispatchNote = "$dispatchTest passed"
+        }
+    }
+    $dup = @($results | Where-Object { $_.testName -like '*WheelOperationIdsAreUnique*' -and $_.outcome -eq 'Passed' })
+    if ($dup.Count -gt 0) { $dispatchNote += '; WheelOperationIdsAreUnique passed' }
 }
 
 if ($toolsProblems.Count -eq 0) {
@@ -425,6 +469,21 @@ if (-not $uiText) {
         $uiProblems += 'report has no key counts'
     } elseif ([int] $keys.Groups[1].Value -lt 1000 -or [int] $keys.Groups[2].Value -lt 1000) {
         $uiProblems += ("key counts below 1000 (en {0}, ar {1})" -f $keys.Groups[1].Value, $keys.Groups[2].Value)
+    }
+
+    if ($surfaces.Success -and [int] $surfaces.Groups[4].Value -ne 0) {
+        $uiProblems += ("report has {0} FAIL row(s); the CI gate requires none" -f $surfaces.Groups[4].Value)
+    }
+
+    # Mirror the CI assertions on the markdown report itself (ci.yml:250-262).
+    $uiMd = Get-ArtifactText -RunIdForArtifact $uiRunId -Name 'ui-coverage' -Leaf 'ui-coverage.md'
+    if (-not $uiMd) {
+        $uiProblems += 'ui-coverage.md is missing'
+    } else {
+        if ($uiMd -match '\| FAIL \|') { $uiProblems += 'ui-coverage.md contains | FAIL | rows' }
+        if ($uiMd -notmatch 'Not covered by this run') { $uiProblems += 'ui-coverage.md has no "Not covered by this run" section' }
+        $toolRows = ([regex]::Matches($uiMd, '\| `tool:tools\.[a-z0-9]+` \|')).Count
+        if ($toolRows -lt 52) { $uiProblems += ("{0} tool/culture rows, expected 52 (26 tools x en/ar)" -f $toolRows) }
     }
 
     # A FAIL row must fail the job: cite a run that went red on exactly this gate.
