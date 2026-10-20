@@ -1,4 +1,4 @@
-﻿# PR queue - TEAM B audit lanes
+# PR queue - TEAM B audit lanes
 
 Each lane owns exactly ONE row below. Edit only your own row (PR number + CI state); never rewrite,
 reorder or delete another lane's row. Branch prefix is `audit/`. TEAM A's supervisor merges; these
@@ -6,7 +6,7 @@ lanes never merge to `main` and never tag.
 
 | PR | Branch | Lane | Deliverable | CI |
 | --- | --- | --- | --- | --- |
-| pending | `audit/adesign` | UX/UI quality | `docs/audit/UX-AUDIT.md` | pending |
+| [#31](https://github.com/Faisaldhd/dropwheel/pull/31) | `audit/adesign` | UX/UI quality | `docs/audit/UX-AUDIT.md` | run 39375842461 — build green, tests running |
 | pending | `audit/al10n` | Localization/RTL | `docs/audit/L10N-AUDIT.md` | pending |
 | pending | `audit/acreative` | Creative direction | `docs/IDEAS.md`, `docs/CREATIVE-GUIDE.md` | pending |
 | pending | `audit/amotion` | Motion | `docs/audit/MOTION-AUDIT.md` | pending |

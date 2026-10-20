@@ -33,7 +33,7 @@ lock feature.
 | Colour tokens, dark/light parity | **PASS with caveat** | 26/26 use `Theme` for chrome; audio/video/canvas add three secondary palettes (F-15) |
 | Iconography | **FAIL** | sizes 9–20 px, literal `\uE` glyphs inline in views, no icon-size token (F-25) |
 | Primary/secondary hierarchy | **PASS with defect** | colour + weight carry it, but no disabled visual (F-08) and no default-action affordance |
-| Empty states | **PARTIAL** | 7 explicit empty strings across 5 tools; 21 tools rely on a disabled primary (F-26) |
+| Empty states | **PARTIAL** | 7 tools author empty copy; 19 rely on a disabled primary (F-26) |
 | Error states | **FAIL** | the generic path shows a raw `ex.Message` toast (F-18) |
 | Busy / progress states | **FAIL** | no in-window progress or cancel (F-19) |
 | RTL readiness | **PASS with defect** | window `FlowDirection`, `Bidi.Value`, full `ar` string parity; slider fill is not mirrored (F-06) |
@@ -154,11 +154,15 @@ design questions.
 
 ### 5.1 Gutter evidence, measured on shipped captures
 
-`tool-crop-light-poster.png` (480×508): the preview rectangle and the `W`/`H` row begin at the **card
-border** while the title, `Reset` and `Apply` sit ~18 px in — the `W` glyph is clipped by the rounded
-corner. `tool-addbackground-light-poster.png` (423×648): the same chrome, the preview inset ~14 px and the
-control rows inset ~14 px. Two windows, two gutters, same chrome. That is F-03, visible without a desktop
-session.
+`tool-crop-light-poster.png` (480×508): the card spans x=10–468; the preview begins at x=15 — **5 px**
+from the card edge — while the primary button ends at x=454 — **14 px** from the card edge. Same chrome,
+same window, same capture: the content sits roughly 3× closer to the edge than the actions that are
+supposed to share its gutter, and the `W` glyph is clipped by the rounded corner. In
+`tool-addbackground-light-poster.png` (423×648) the same chrome insets its preview and control rows by a
+clear margin — two windows, two gutters. That is F-03, measured without a desktop session.
+
+*(Measured read-only with PIL on the committed posters; the numbers are capture pixels, not DIP, so only
+ratios inside one capture are claimed.)*
 
 ## 6. Theme parity (purple dark / light)
 
@@ -194,7 +198,7 @@ Arabic shares the Latin stack: `UiFont = "Segoe UI Variable Text, Segoe UI"` (`T
 Variable's Arabic coverage is a fallback chain, not a designed Arabic face, and no line-height is set for
 the taller `ar` ascenders/descenders. At 11.5–12.5 px this is the most likely place for clipped
 diacritics — **needs CI screenshot** of any `ar` window at 150 % to confirm or clear (F-16 note). The
-`ar` string table itself is complete (1094/1094 keys, identical counts).
+`ar` string table itself is complete (1095/1095 keys, identical counts).
 
 ## 8. Control order, hierarchy, states
 
@@ -207,7 +211,7 @@ verb names the result (`Save with Background`, `Save Redacted Copy`, `Create Col
 is right. Three windows still ship the generic `Apply` where the result is a copy and a named string
 already exists (`annotate`, `audiobleep`, `qr` — annex row 3/17/23, F-11, F-12).
 
-**Empty states.** Only 5 tools have authored empty copy: `videoframes` ("No frames captured yet."),
+**Empty states.** Only 7 tools have authored empty copy: `videoframes` ("No frames captured yet."),
 `videoredact` ("No areas yet."), `annotate` ("Add at least one mark before applying."), `qr` ("No QR code
 was found…" + hint), `audiotrim` ("No silence found at the edges."), plus `unlock`/`protect`
 ("This archive contains no files." / "Nothing to protect was found."). The other tools rely on a disabled
@@ -404,7 +408,7 @@ in `Choose image…`, 12 px in the toggle row). Fix: `Icon` size tokens + one `G
 
 **F-26 — Four list-building tools have no empty-state copy** · P2 (new)
 `videojoin`, `pdfmerge`, `pdforganize`, `collage` open on an empty list with a disabled primary and no
-sentence explaining what to add; only 5 of 26 tools author empty copy (`tool.videoframes.empty`,
+sentence explaining what to add; only 7 of 26 tools author empty copy (`tool.videoframes.empty`,
 `tool.videoredact.empty`, `tool.annotate.empty`, `tool.qr.empty` + hint, `tool.audiotrim.silence.none`).
 Screenshot: needs CI screenshot of `pdfmerge` with no rows. Fix: one `tool.*.empty` + hint per list tool.
 
