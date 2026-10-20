@@ -171,6 +171,15 @@ internal sealed class App : Application
         });
         _tray = CreateTray();
         AppLog.Info("tray icon created");
+
+        // UP-01: an unreadable settings file was kept as settings.bad-<timestamp>.json before the defaults
+        // were used. Say so once, so the reset is visible instead of silent.
+        if (AppSettings.ConsumeRecoveryBackup() is { } recoveryBackup)
+        {
+            AppLog.Error($"settings.json could not be read; defaults used and a copy kept at {recoveryBackup}");
+            Notifications.Show(T("settings.recovered.title"),
+                T("settings.recovered.body", Bidi.Value(Path.GetFileName(recoveryBackup))), error: true);
+        }
         if (hooksFailed)
         {
             _tray.Show("DropWheel", T("app.tray.hooksUnavailable"), true);
