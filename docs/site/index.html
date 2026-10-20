@@ -950,17 +950,23 @@
             </div>
           </dl>
 
-          <div class="hash-block">
-            <div class="hash-block__head">
-              <span class="hash-block__label">SHA-256 · <bdi dir="ltr">DropWheel-Setup.exe</bdi></span>
-              <button type="button" class="copy-button" data-copy-target="sha-setup" data-label-en="Copy" data-label-ar="نسخ">
-                <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-copy"/></svg>
-                <span class="copy-button__text" data-en="Copy" data-ar="نسخ">Copy</span>
-              </button>
+          <details class="for-it">
+            <summary class="for-it__summary">
+              <span class="for-it__title"><span data-lang="en">For IT · full SHA-256</span><span data-lang="ar" lang="ar">للاطّلاع التقني · بصمة SHA-256 الكاملة</span></span>
+              <span class="for-it__hint"><span data-lang="en">Hash and copy</span><span data-lang="ar" lang="ar">البصمة والنسخ</span></span>
+            </summary>
+            <div class="hash-block">
+              <div class="hash-block__head">
+                <span class="hash-block__label">SHA-256 · <bdi dir="ltr">DropWheel-Setup.exe</bdi></span>
+                <button type="button" class="copy-button" data-copy-target="sha-setup" data-label-en="Copy" data-label-ar="نسخ">
+                  <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-copy"/></svg>
+                  <span class="copy-button__text" data-en="Copy" data-ar="نسخ">Copy</span>
+                </button>
+              </div>
+              <code class="hash-block__value" id="sha-setup" dir="ltr">7381cbd5b59249f3279b62af31091d89d3d8d994faa57fcdd08ec4331d7156ce</code>
+              <p class="copy-status" id="copy-status" aria-live="polite"></p>
             </div>
-            <code class="hash-block__value" id="sha-setup" dir="ltr">7381cbd5b59249f3279b62af31091d89d3d8d994faa57fcdd08ec4331d7156ce</code>
-            <p class="copy-status" id="copy-status" aria-live="polite"></p>
-          </div>
+          </details>
 
           <p class="release-card__note">
             <svg class="icon" width="16" height="16" aria-hidden="true"><use href="#i-info"/></svg>
