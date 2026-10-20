@@ -489,6 +489,9 @@ internal sealed class LockWarningDialog : Window
         Loaded += (_, _) => _ack.Focus();
     }
 
+    /// <summary>Builds the dialog offscreen for the self-test's UI coverage pass; never shows it.</summary>
+    internal static LockWarningDialog CreateForPreview(IReadOnlyList<FileItem> items) => new(items);
+
     public static bool Ask(Window? owner, IReadOnlyList<FileItem> items)
     {
         var dialog = new LockWarningDialog(items) { Owner = owner };
