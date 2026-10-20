@@ -19,6 +19,12 @@ env:
   DOTNET_NOLOGO: "1"
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+  # 2.4.0 performance budget. Baselines are the v2.3.0 release assets (the same build main ships):
+  # DropWheel-Setup.exe 62,967,948 bytes and DropWheel-2.3.0-portable-win-x64.zip 89,266,161 bytes.
+  # A package that grows by >= 6 MiB fails the build. Bump these only with a new release baseline.
+  BASELINE_SETUP_BYTES: "62967948"
+  BASELINE_PORTABLE_BYTES: "89266161"
+  SIZE_BUDGET_BYTES: "6291456"
 
 jobs:
   build-test:
@@ -61,6 +67,106 @@ jobs:
           dotnet build tests/FileAction.Tests/FileAction.Tests.csproj -c Release --no-restore
           if ($LASTEXITCODE -ne 0) { throw "build Tests failed" }
 
+      - name: Dependency allowlist (ship set + ZXing.Net only)
+        shell: pwsh
+        run: |
+          # The 2.4.0 ship set is frozen: a new package reference in Core or the app must be a deliberate,
+          # reviewed decision, not a side effect of a tool merge. ZXing.Net (QR) is the only allowed addition.
+          # This runs before the publish so a PR cannot even reach the size budget with a new dependency.
+          $allowed = @(
+            'ClosedXML'
+            'ExcelDataReader'
+            'Magick.NET-Q8-AnyCPU'
+            'PdfPig'
+            'PDFsharp'
+            'PDFtoImage'
+            'SharpCompress'
+            'System.Security.Cryptography.Pkcs'
+            'ZXing.Net'
+          )
+          $projects = @(
+            'src/FileAction.Core/FileAction.Core.csproj'
+            'src/FileAction.App/FileAction.App.csproj'
+          )
+          $rows = @()
+          foreach ($project in $projects) {
+            [xml] $xml = Get-Content -LiteralPath $project -Raw
+            # Enumerating .PackageReference across ItemGroups also yields $null for groups without one.
+            $references = @($xml.Project.ItemGroup.PackageReference |
+              Where-Object { $_ -is [System.Xml.XmlElement] -and $_.Include })
+            if ($references.Count -eq 0) {
+              $rows += "| $project | (none) | |"
+              continue
+            }
+            foreach ($reference in $references) {
+              $name = [string] $reference.Include
+              $version = [string] $reference.Version
+              $rows += "| $project | $name | $version |"
+              if ($allowed -notcontains $name) {
+                throw "new package reference '$name $version' in $project; the 2.4.0 ship set allows only: $($allowed -join ', ')"
+              }
+            }
+          }
+          "### Ship-set package references" >> $env:GITHUB_STEP_SUMMARY
+          '' >> $env:GITHUB_STEP_SUMMARY
+          '| project | package | version |' >> $env:GITHUB_STEP_SUMMARY
+          '| --- | --- | --- |' >> $env:GITHUB_STEP_SUMMARY
+          $rows | ForEach-Object { $_ >> $env:GITHUB_STEP_SUMMARY; Write-Host $_ }
+          Write-Host "package reference guard: $($rows.Count) reference(s), all in the allowlist"
+
+      - name: Lazy tool registration guard
+        shell: pwsh
+        run: |
+          # Every tool registers itself from a [ModuleInitializer]. That initializer may only call
+          # ToolRegistry.Register(<singleton>) so app start builds a lightweight spec; the view (Magick,
+          # PDFsharp, ffmpeg, bitmaps, ToolWindow) must be built by Create() when the tool opens.
+          $failures = New-Object System.Collections.Generic.List[string]
+          $checked = 0
+          foreach ($file in (Get-ChildItem src -Recurse -Filter *.cs)) {
+            $text = Get-Content -LiteralPath $file.FullName -Raw
+            $offset = 0
+            while (($index = $text.IndexOf('[ModuleInitializer]', $offset, [System.StringComparison]::Ordinal)) -ge 0) {
+              $checked++
+              $offset = $index + 1
+              $rest = $text.Substring($index)
+              $signature = [regex]::Match($rest,
+                'internal\s+static\s+void\s+[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)')
+              if (-not $signature.Success) {
+                $failures.Add("$($file.FullName): [ModuleInitializer] is not an internal static parameterless void method")
+                continue
+              }
+              $after = $rest.Substring($signature.Index + $signature.Length)
+              if ($after -match '^\s*=>') {
+                $body = ($after -split ';', 2)[0]
+                $body = ($body -replace '^\s*=>', '').Trim()
+              } elseif ($after -match '^\s*\{') {
+                $depth = 0
+                $end = -1
+                for ($i = 0; $i -lt $after.Length; $i++) {
+                  if ($after[$i] -eq '{') { $depth++ }
+                  elseif ($after[$i] -eq '}') { $depth--; if ($depth -eq 0) { $end = $i; break } }
+                }
+                if ($end -lt 0) {
+                  $failures.Add("$($file.FullName): unterminated [ModuleInitializer] body")
+                  continue
+                }
+                $body = $after.Substring(1, $end - 1).Trim()
+              } else {
+                $failures.Add("$($file.FullName): [ModuleInitializer] has no recognizable body")
+                continue
+              }
+              if ($body -notmatch '^ToolRegistry\.Register\(\s*(new\s+[A-Za-z_][A-Za-z0-9_.]*\s*\(\s*\)|[A-Za-z_][A-Za-z0-9_.]*\.Instance)\s*\)$') {
+                $failures.Add("$($file.FullName): [ModuleInitializer] body must be exactly ToolRegistry.Register(new XTool())/Register(XTool.Instance), got: $body")
+              }
+            }
+          }
+          if ($checked -eq 0) { throw 'no [ModuleInitializer] tool registrations found' }
+          if ($failures.Count -gt 0) {
+            $failures | ForEach-Object { Write-Host $_ }
+            throw "$($failures.Count) tool registration(s) do more than ToolRegistry.Register(...)"
+          }
+          Write-Host "lazy registration guard: $checked module initializer(s) only register a spec"
+
       - name: Guard against reflection-based JSON
         shell: pwsh
         run: |
@@ -86,12 +192,50 @@ jobs:
           $out = "release/self-test"
           $process = Start-Process -FilePath release/selfcontained/DropWheel.exe `
             -ArgumentList '--self-test', $out -PassThru -Wait
-          if (Test-Path "$out/self-test.txt") {
-            Get-Content "$out/self-test.txt" | Select-Object -Last 60
+          $log = Join-Path $out 'self-test.txt'
+          if (Test-Path $log) {
+            Get-Content $log | Select-Object -Last 60
+            # The performance budgets and their measured actuals go to the job summary, so cold-start,
+            # idle-memory and per-tool deltas are visible on the PR check without opening the log.
+            $text = Get-Content $log -Raw
+            $perf = @($text -split "`r?`n" | Where-Object { $_ -match '^(perf|ok tools/lazy|note tools/lazy|ok tools/ffmpeg|ok tools/temp|FAILED tools/)' })
+            if ($perf.Count -gt 0) {
+              '### Self-test performance budgets' >> $env:GITHUB_STEP_SUMMARY
+              '' >> $env:GITHUB_STEP_SUMMARY
+              '```' >> $env:GITHUB_STEP_SUMMARY
+              $perf | ForEach-Object { $_ >> $env:GITHUB_STEP_SUMMARY }
+              '```' >> $env:GITHUB_STEP_SUMMARY
+              $perf | ForEach-Object { Write-Host $_ }
+            }
           } else {
             Write-Warning "self-contained --self-test wrote no self-test.txt"
           }
           if ($process.ExitCode -ne 0) { throw "self-contained --self-test failed with $($process.ExitCode)" }
+
+      - name: No OCR/ML model payload (shipped publish)
+        shell: pwsh
+        run: |
+          # The 2.4.0 payload must stay model-free: OCR uses the Windows recognizer and any optional
+          # download must stay on-demand. The installer and the portable zip are both a copy of this
+          # publish, so scanning it covers both shipped payloads.
+          $payload = 'release/selfcontained'
+          if (-not (Test-Path -LiteralPath $payload)) { throw "publish folder missing: $payload" }
+          $models = @(Get-ChildItem $payload -Recurse -File | Where-Object {
+            $_.Extension -in @('.onnx', '.tflite', '.model', '.pb') -or
+            ($_.Extension -eq '.bin' -and $_.Length -gt 1MB)
+          })
+          $tessdata = @(Get-ChildItem $payload -Recurse -Directory | Where-Object { $_.Name -ieq 'tessdata' })
+          $bundledTools = @(Get-ChildItem $payload -Recurse -File | Where-Object {
+            $_.Name -in @('ffmpeg.exe', 'ffprobe.exe', 'pandoc.exe')
+          })
+          if ($models.Count -gt 0 -or $tessdata.Count -gt 0 -or $bundledTools.Count -gt 0) {
+            $models | ForEach-Object { Write-Host "model file: $($_.FullName) ($($_.Length) bytes)" }
+            $tessdata | ForEach-Object { Write-Host "tessdata: $($_.FullName)" }
+            $bundledTools | ForEach-Object { Write-Host "on-demand tool bundled: $($_.FullName)" }
+            throw "the shipped payload contains an OCR/ML model, tessdata, or an on-demand tool binary"
+          }
+          $files = @(Get-ChildItem $payload -Recurse -File).Count
+          Write-Host "payload guard: $files files, no OCR/ML model, no tessdata, no bundled ffmpeg/pandoc"
 
       - name: Upload self-contained self-test
         if: always()
@@ -101,6 +245,7 @@ jobs:
           path: release/self-test/**
           if-no-files-found: warn
           retention-days: 14
+
 
       - name: Verify UI coverage report (en + ar, every window)
         shell: pwsh
@@ -125,6 +270,68 @@ jobs:
             release/self-test/ui-coverage/**
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Install Inno Setup (PR size budget)
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          # windows-latest usually ships Inno Setup; only install it when ISCC is really missing, so a
+          # flaky Chocolatey feed cannot turn the PR size check into a false failure.
+          $candidates = @(
+            (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+            (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
+          )
+          if ($candidates | Where-Object { Test-Path -LiteralPath $_ }) {
+            Write-Host 'Inno Setup already installed'
+            exit 0
+          }
+          choco install innosetup --no-progress -y
+          if ($LASTEXITCODE -ne 0) { throw 'choco install innosetup failed' }
+
+      - name: Size budget (PR check)
+        if: github.event_name == 'pull_request'
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          # The PR runs the same installer + portable zip build the package job runs, but reuses the
+          # self-contained publish from the self-test step. Baseline is the v2.3.0 release asset.
+          ./scripts/build-installer.ps1 -SkipPublish
+          if ($LASTEXITCODE -ne 0) { throw "build-installer.ps1 failed with exit code $LASTEXITCODE" }
+
+          [xml] $csproj = Get-Content src/FileAction.App/FileAction.App.csproj
+          $version = ($csproj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          $setup = Get-Item "release/DropWheel-$version-Setup.exe"
+
+          New-Item -ItemType Directory -Path portable -Force | Out-Null
+          Copy-Item -Path release/selfcontained -Destination portable/DropWheel -Recurse -Force
+          Set-Content portable/DropWheel/portable.txt "DropWheel portable build: settings and downloaded tools stay in this folder."
+          Compress-Archive -Path portable/DropWheel/* -DestinationPath "release/DropWheel-$version-portable-win-x64.zip" -Force
+          $portable = Get-Item "release/DropWheel-$version-portable-win-x64.zip"
+
+          $baselineSetup = [long] $env:BASELINE_SETUP_BYTES
+          $baselinePortable = [long] $env:BASELINE_PORTABLE_BYTES
+          $budget = [long] $env:SIZE_BUDGET_BYTES
+          $setupDelta = $setup.Length - $baselineSetup
+          $portableDelta = $portable.Length - $baselinePortable
+          $format = { param($bytes) '{0:N0} B ({1:N2} MB)' -f $bytes, ($bytes / 1MB) }
+
+          @"
+          ### Size budget (PR check)
+
+          | package | v2.3.0 baseline | current | delta | +6 MiB limit |
+          | --- | ---: | ---: | ---: | ---: |
+          | installer | $(& $format $baselineSetup) | $(& $format $setup.Length) | $(& $format $setupDelta) | $(& $format $budget) |
+          | portable zip | $(& $format $baselinePortable) | $(& $format $portable.Length) | $(& $format $portableDelta) | $(& $format $budget) |
+          "@ >> $env:GITHUB_STEP_SUMMARY
+          Write-Host "installer: $($setup.Length) bytes (baseline $baselineSetup, delta $setupDelta)"
+          Write-Host "portable:  $($portable.Length) bytes (baseline $baselinePortable, delta $portableDelta)"
+          if ($setupDelta -ge $budget) {
+            throw "installer grew by $setupDelta bytes (>= $budget); the 2.4.0 size budget is +6 MiB over v2.3.0"
+          }
+          if ($portableDelta -ge $budget) {
+            throw "portable zip grew by $portableDelta bytes (>= $budget); the 2.4.0 size budget is +6 MiB over v2.3.0"
+          }
+
 
       - name: Update signing self-test
         shell: pwsh
@@ -209,6 +416,28 @@ jobs:
         shell: pwsh
         run: ./scripts/build-installer.ps1
 
+      - name: Shipped payload guard (no OCR/ML models, no bundled tools)
+        shell: pwsh
+        run: |
+          # The shipped installer and portable zip are both a copy of release/selfcontained. Fail before
+          # packaging if a tool merge slipped a model file, tessdata or an on-demand tool binary in.
+          $payload = 'release/selfcontained'
+          $models = @(Get-ChildItem $payload -Recurse -File | Where-Object {
+            $_.Extension -in @('.onnx', '.tflite', '.model', '.pb') -or
+            ($_.Extension -eq '.bin' -and $_.Length -gt 1MB)
+          })
+          $tessdata = @(Get-ChildItem $payload -Recurse -Directory | Where-Object { $_.Name -ieq 'tessdata' })
+          $bundledTools = @(Get-ChildItem $payload -Recurse -File | Where-Object {
+            $_.Name -in @('ffmpeg.exe', 'ffprobe.exe', 'pandoc.exe')
+          })
+          if ($models.Count -gt 0 -or $tessdata.Count -gt 0 -or $bundledTools.Count -gt 0) {
+            $models | ForEach-Object { Write-Host "model file: $($_.FullName) ($($_.Length) bytes)" }
+            $tessdata | ForEach-Object { Write-Host "tessdata: $($_.FullName)" }
+            $bundledTools | ForEach-Object { Write-Host "on-demand tool bundled: $($_.FullName)" }
+            throw "the shipped payload contains an OCR/ML model, tessdata, or an on-demand tool binary"
+          }
+          Write-Host "shipped payload guard: no OCR/ML model, no tessdata, no bundled ffmpeg/pandoc"
+
       - name: Self-test the exact packaged publish
         shell: pwsh
         timeout-minutes: 10
@@ -272,27 +501,6 @@ jobs:
           & ./scripts/test-installer.ps1
           if ($LASTEXITCODE -ne 0) { throw "test-installer.ps1 failed with exit code $LASTEXITCODE" }
 
-      - name: Size report
-        shell: pwsh
-        run: |
-          $version = "${{ steps.version.outputs.version }}"
-          $publish = Get-ChildItem release/selfcontained -Recurse -File
-          $publishMb = [math]::Round((($publish | Measure-Object Length -Sum).Sum / 1MB), 1)
-          $setup = Get-Item "release/DropWheel-$version-Setup.exe"
-          $setupMb = [math]::Round($setup.Length / 1MB, 2)
-
-          @"
-          ### DropWheel $version package sizes
-
-          | item | size | files |
-          | --- | --- | --- |
-          | publish (self-contained, untrimmed, win-x64) | $publishMb MB | $($publish.Count) |
-          | setup exe | $setupMb MB | 1 |
-          "@ >> $env:GITHUB_STEP_SUMMARY
-
-          Write-Host "publish: $publishMb MB / $($publish.Count) files"
-          Write-Host "setup:   $setupMb MB"
-
       # R-23: a truly portable build — the same self-contained, untrimmed publish the installer uses,
       # so it runs with no .NET install, no installer, no registry, no admin.
       - name: Portable zip (self-contained, no admin)
@@ -306,7 +514,97 @@ jobs:
           Compress-Archive -Path portable/DropWheel/* -DestinationPath "release/DropWheel-$version-portable-win-x64.zip" -Force
           $zip = Get-Item "release/DropWheel-$version-portable-win-x64.zip"
           Write-Host ("portable self-contained zip: {0:N1} MB" -f ($zip.Length / 1MB))
-          "| portable zip (self-contained, no admin) | $([math]::Round($zip.Length / 1MB, 1)) MB | 1 |" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Size report
+        shell: pwsh
+        run: |
+          # 2.4.0 size budget: the packaged installer and the portable zip may not grow by >= 6 MiB over
+          # the v2.3.0 release assets (DropWheel-Setup.exe 62,967,948 bytes and the portable zip
+          # 89,266,161 bytes, both hard-coded in the workflow env above). This step prints both baseline
+          # and current numbers to the log and the job summary, and fails the package job on a regression.
+          $version = "${{ steps.version.outputs.version }}"
+          $publish = Get-ChildItem release/selfcontained -Recurse -File
+          $publishBytes = ($publish | Measure-Object Length -Sum).Sum
+          $setup = Get-Item "release/DropWheel-$version-Setup.exe"
+          $portable = Get-Item "release/DropWheel-$version-portable-win-x64.zip"
+          $baselineSetup = [long] $env:BASELINE_SETUP_BYTES
+          $baselinePortable = [long] $env:BASELINE_PORTABLE_BYTES
+          $budget = [long] $env:SIZE_BUDGET_BYTES
+          $setupDelta = $setup.Length - $baselineSetup
+          $portableDelta = $portable.Length - $baselinePortable
+
+          @"
+          ### DropWheel $version package sizes (v2.3.0 baseline)
+
+          | item | v2.3.0 baseline | current | delta | +6 MiB limit |
+          | --- | ---: | ---: | ---: | ---: |
+          | installer | $([math]::Round($baselineSetup / 1MB, 2)) MB | $([math]::Round($setup.Length / 1MB, 2)) MB | $([math]::Round($setupDelta / 1MB, 2)) MB | $([math]::Round($budget / 1MB, 2)) MB |
+          | portable zip | $([math]::Round($baselinePortable / 1MB, 2)) MB | $([math]::Round($portable.Length / 1MB, 2)) MB | $([math]::Round($portableDelta / 1MB, 2)) MB | $([math]::Round($budget / 1MB, 2)) MB |
+          | publish (self-contained, untrimmed, win-x64) | - | $([math]::Round($publishBytes / 1MB, 1)) MB | - | - |
+          | publish files | - | $($publish.Count) | - | - |
+          "@ >> $env:GITHUB_STEP_SUMMARY
+
+          Write-Host ("installer: {0:N0} bytes (baseline {1:N0}, delta {2:N0})" -f $setup.Length, $baselineSetup, $setupDelta)
+          Write-Host ("portable:  {0:N0} bytes (baseline {1:N0}, delta {2:N0})" -f $portable.Length, $baselinePortable, $portableDelta)
+          Write-Host ("publish:   {0:N1} MB / {1} files" -f ($publishBytes / 1MB), $publish.Count)
+          if ($setupDelta -ge $budget) {
+            throw "installer grew by $setupDelta bytes (>= $budget); the 2.4.0 size budget is +6 MiB over the v2.3.0 setup asset"
+          }
+          if ($portableDelta -ge $budget) {
+            throw "portable zip grew by $portableDelta bytes (>= $budget); the 2.4.0 size budget is +6 MiB over the v2.3.0 portable asset"
+          }
+
+      # docs/PERF.md makes "the installer and the portable zip may not grow by 6 MiB or more over
+      # v2.3.0" a hard budget, but until now the two sizes were only PRINTED, so a regression could
+      # ship with a green job. This asserts the documented rule on the exact files that are uploaded.
+      # Baseline = the published v2.3.0 release assets (bytes), i.e.
+      # https://github.com/Faisaldhd/dropwheel/releases/tag/v2.3.0 -> DropWheel-2.3.0-Setup.exe
+      # 62,967,948 B and DropWheel-2.3.0-portable-win-x64.zip 89,266,161 B.
+      - name: Package size budget (v2.3.0 baseline, +6 MiB fails)
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $baselines = [ordered]@{
+            'setup'        = 62967948
+            'portable zip' = 89266161
+          }
+          # "6 MiB or more" is the fail rule, so a delta >= 6 MiB fails and exactly +6 MiB is red.
+          $limitBytes = 6MB
+          $assets = [ordered]@{
+            'setup'        = "release/DropWheel-$version-Setup.exe"
+            'portable zip' = "release/DropWheel-$version-portable-win-x64.zip"
+          }
+
+          $rows = @()
+          $breached = @()
+          foreach ($name in $baselines.Keys) {
+            $path = $assets[$name]
+            if (-not (Test-Path -LiteralPath $path)) { throw "size budget: $path does not exist" }
+            $bytes = (Get-Item -LiteralPath $path).Length
+            $base = $baselines[$name]
+            $delta = $bytes - $base
+            $deltaMb = [math]::Round($delta / 1MB, 2)
+            $deltaPct = [math]::Round(($delta / $base) * 100, 2)
+            $verdict = if ($delta -ge $limitBytes) { 'FAIL' } else { 'PASS' }
+            Write-Host ("{0}: {1:N0} B vs v2.3.0 {2:N0} B -> {3} MiB ({4} %) {5}" -f `
+              $name, $bytes, $base, $deltaMb, $deltaPct, $verdict)
+            $rows += "| $name | $bytes | $base | $deltaMb MiB | $deltaPct % | $verdict |"
+            if ($verdict -eq 'FAIL') { $breached += $name }
+          }
+
+          $summary = @(
+            '### Package size budget (v2.3.0 baseline)',
+            '',
+            'Fail rule: a delta of **+6 MiB or more** over v2.3.0 (`docs/PERF.md`).',
+            '',
+            '| asset | bytes | v2.3.0 bytes | delta | delta % | verdict |',
+            '| --- | ---: | ---: | ---: | ---: | --- |'
+          ) + $rows
+          $summary | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+
+          if ($breached.Count -gt 0) {
+            throw ("package size budget breached for {0}: grew by 6 MiB or more over v2.3.0" -f ($breached -join ', '))
+          }
 
       - name: SHA256SUMS
         if: always()
