@@ -30,9 +30,6 @@ internal static class MotionSelfTest
     /// <summary>Budget for the UI-thread part of one 60 fps frame.</summary>
     public const double FrameBudgetMs = 16.7;
 
-    /// <summary>Software-rasterisation probe ceiling; a composed frame should also fit 60 fps.</summary>
-    public const double RasterBudgetMs = 33.0;
-
     /// <summary>Idle CPU after everything has closed. A polling timer would show up here.</summary>
     public const double IdleCpuBudgetPercent = 5.0;
 
@@ -97,7 +94,7 @@ internal static class MotionSelfTest
 
                 if (!warm)
                 {
-                    rows.Add(ToRow("wheel (424×424)", wheelOn, wheelOff));
+                    rows.Add(ToRow($"wheel ({wheelRoot.Width:F0}×{wheelRoot.Height:F0})", wheelOn, wheelOff));
                     Check(wheelOn.UiP95, "wheel", failures);
                     worstP95 = Math.Max(worstP95, wheelOn.UiP95);
                 }
@@ -105,7 +102,8 @@ internal static class MotionSelfTest
                 // Every registered tool window, data-driven from the registry so a new tool is covered at merge.
                 foreach (var spec in ToolRegistry.All)
                 {
-                    if (!spec.Applies([item]))
+                    var sampleItems = SampleItems(spec, item);
+                    if (sampleItems is null)
                     {
                         skips.Add(spec.Id);
                         continue;
@@ -113,7 +111,7 @@ internal static class MotionSelfTest
                     ToolWindow? window = null;
                     try
                     {
-                        window = new ToolWindow(spec, [item], null);
+                        window = new ToolWindow(spec, sampleItems, null);
                         SelfTest.Pump(() => window.PrepareAsync(animate: false));
                         var root = window.DetachForCapture();
                         Motion.Override = true;
@@ -188,6 +186,10 @@ internal static class MotionSelfTest
                 "| --- | ---: | ---: | ---: | ---: | --- |",
                 .. rows,
                 "",
+                skips.Count == 0
+                    ? "Every registered tool window was driven by the harness."
+                    : $"Not measured ({skips.Count} registered tool(s); the reason is logged next to each id): " +
+                      $"{string.Join(", ", skips.Order(StringComparer.Ordinal))}.",
                 $"Idle CPU after close: **{idleCpu:F2} %** (budget {IdleCpuBudgetPercent:F0} %).",
                 $"Working set retained by the motion suite: **{retainedMb:F1} MB** (budget {MemoryRetentionBudgetMb:F0} MB).",
             ];
@@ -204,6 +206,16 @@ internal static class MotionSelfTest
     }
 
     private readonly record struct Metrics(double UiP95, double UiMean, double RasterP95, double CpuPercent);
+
+    /// <summary>
+    /// The smallest sample set a tool accepts: one file, or two copies of the same file for a tool that
+    /// needs a second input (collage). Null means the tool wants a media family this harness does not
+    /// create (video, audio, PDF); it is then reported as skipped instead of silently unmeasured.
+    /// </summary>
+    internal static IReadOnlyList<FileItem>? SampleItems(IToolWindowSpec spec, FileItem item) =>
+        spec.Applies([item]) ? [item]
+        : spec.Applies([item, item]) ? [item, item]
+        : null;
 
     /// <summary>
     /// Catches a broken storyboard factory (the failure mode the offscreen previews cannot see, because

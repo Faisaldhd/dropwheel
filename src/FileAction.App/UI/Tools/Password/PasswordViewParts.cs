@@ -335,17 +335,19 @@ internal sealed class SwitchRow : DockPanel
         _track.BorderBrush = _on ? Brushes.Transparent : Theme.Muted;
         _knob.Fill = _on ? Brushes.White : Theme.Muted;
         var x = _on ? 23.0 : 3.0;
-        if (animate)
+        if (animate && Motion.Enabled)
         {
+            // Same token and curve as Controls.Toggle: the knob slide is part of the motion vocabulary.
             _translate.BeginAnimation(
                 TranslateTransform.XProperty,
-                new System.Windows.Media.Animation.DoubleAnimation(x, TimeSpan.FromMilliseconds(120))
+                new System.Windows.Media.Animation.DoubleAnimation(x, TimeSpan.FromMilliseconds(Motion.ToggleMs))
                 {
-                    EasingFunction = new System.Windows.Media.Animation.CubicEase(),
+                    EasingFunction = Motion.SoftOut,
                 });
         }
         else
         {
+            _translate.BeginAnimation(TranslateTransform.XProperty, null);
             _translate.X = x;
         }
     }

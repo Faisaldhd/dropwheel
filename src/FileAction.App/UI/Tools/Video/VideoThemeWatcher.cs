@@ -15,14 +15,20 @@ internal static class VideoThemeWatcher
     private static readonly object Gate = new();
     private static DispatcherTimer? _timer;
     private static bool _lastDark;
+    private static int _users;
 
     /// <summary>Raised on the UI thread after <see cref="Theme.Refresh"/>; subscribers retint their tree.</summary>
     public static event Action? Changed;
 
+    /// <summary>
+    /// Starts the theme watch for one open video surface. The poll exists only while at least one
+    /// surface holds it; <see cref="Stop"/> is the matching release (see the three video views).
+    /// </summary>
     public static void Start()
     {
         lock (Gate)
         {
+            _users++;
             if (_timer is not null)
                 return;
 
@@ -46,6 +52,31 @@ internal static class VideoThemeWatcher
             catch (InvalidOperationException)
             {
                 // No interactive window station: the polling tick still covers app-level theme changes.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Releases one surface's hold on the watch. The last one to leave stops the timer and unhooks the
+    /// system event, so a closed video tool leaves no 500 ms poll behind (the idle-CPU rule).
+    /// </summary>
+    public static void Stop()
+    {
+        lock (Gate)
+        {
+            if (_users > 0)
+                _users--;
+            if (_users > 0 || _timer is null)
+                return;
+
+            _timer.Stop();
+            _timer = null;
+            try
+            {
+                SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            }
+            catch (InvalidOperationException)
+            {
             }
         }
     }
