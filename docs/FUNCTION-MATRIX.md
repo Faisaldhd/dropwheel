@@ -4,8 +4,8 @@ Per-tool evidence for the 2.4.0 tools. A row is **PASS** only when the stated ou
 committed test (or by the CI run named below), not by reading the code. To add a tool, append its own
 section and leave the existing rows untouched.
 
-**CI evidence:** run [`39347401785`](https://github.com/Faisaldhd/dropwheel/actions/runs/39347401785),
-commit `5256998`, `Build + test` PASS; `dotnet test` reported `Passed: 317, Failed: 0, Skipped: 0`.
+**CI evidence:** run [`39347847517`](https://github.com/Faisaldhd/dropwheel/actions/runs/39347847517),
+commit `03f42a9`, `Build + test` PASS; `dotnet test` reported `Passed: 318, Failed: 0, Skipped: 0`.
 
 ## Add Background — `tools.addbackground` (one photo)
 
