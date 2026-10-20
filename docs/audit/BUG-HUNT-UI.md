@@ -4,10 +4,12 @@ Lane: TEAM B motion/UI, time-boxed hunt (code reading + CI artifacts only — no
 `--self-test` locally). Evidence is `file:line` on `origin/main` `8b28758` plus the CI logs named per row.
 One row per bug; severity P0/P1/P2.
 
-**P0: none found.** Three P1s, all UI-thread blocking on the open/hot path: an uncached shell icon lookup
-on the wheel, a startup wait with no timeout, and (lower confidence) per-open job-card icon work while the
-app is busy. The motion numbers are *not* a jank source: `MotionSelfTest` measures UI-frame p95
-**0.02-0.04 ms** against the 16.7 ms budget and idle CPU **0.00 %** (run 39376236166, `motion/report.md`).
+**P0: none found.** Two P1s, both UI-thread blocking on the open/hot path: an uncached shell icon lookup
+on the wheel (every open and every mode switch) and the input-hook startup wait with no timeout. Five P2s
+cover per-open job-card icon/theme work, the per-open operation-list rebuild, the per-open theme refresh,
+clipboard/OCR sync-over-async, and open/close working-set churn. The motion numbers are *not* a jank
+source: `MotionSelfTest` measures UI-frame p95 **0.02-0.04 ms** against the 16.7 ms budget and idle CPU
+**0.00 %** (run 39376236166, `motion/report.md`).
 
 | ID | Sev | What happens | Repro / CI evidence | file:line | Suggested fix | Owner team |
 | --- | --- | --- | --- | --- | --- | --- |
