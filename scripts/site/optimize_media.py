@@ -18,6 +18,10 @@ Usage:
   python scripts/site/optimize_media.py --markdown # markdown byte table
 
 Requires Pillow (bundled with the harness Python); no other dependencies.
+
+NOTE: the repository .gitignore has a bare ``tools/`` rule, so new files written under
+``docs/site/assets/tools/`` are ignored by a plain ``git add`` and must be staged with
+``git add -f`` (the existing variants are already tracked).
 """
 
 from __future__ import annotations
