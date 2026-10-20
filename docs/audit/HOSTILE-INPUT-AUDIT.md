@@ -86,6 +86,8 @@ wrong or unusable message/behaviour reachable from a hostile input; **Low** = ha
 
 ### H-01 — Extraction path guard depended on the caller (zip-slip class) — **FIXED**
 
+*owner: TEAM B lane 8 · status: **fixed** in `7fd3d7a` (evidence: run in §5)*
+
 * `src/FileAction.Core/Backends/ArchiveBackend.cs:115` (before the fix: `SafeTarget`, lines 115–121).
 * `SafeTarget` resolved `Path.Combine(fullDestination, entryKey)` and compared it with
   `path.StartsWith(fullDestination)`. Without a trailing separator `…\dest-evil\pwn.txt` starts with
@@ -103,6 +105,8 @@ wrong or unusable message/behaviour reachable from a hostile input; **Low** = ha
 
 ### H-02 — Hostile path showed `ArgumentException: …` on the job card — **FIXED**
 
+*owner: TEAM B lane 8 · status: **fixed** in `e3ee779` (evidence: run in §5)*
+
 * `src/FileAction.App/Jobs/JobRunner.cs:221` (the `Friendly` switch, before the fix line 219).
 * `ArgumentException` and `NotSupportedException` — exactly what an illegal character, an empty path or an
   unsupported path form produces — fell through to `_ => $"{ex.GetType().Name}: {ex.Message}"`, so the user
@@ -115,6 +119,8 @@ wrong or unusable message/behaviour reachable from a hostile input; **Low** = ha
   `The_job_funnel_maps_every_hostile_failure_to_a_localized_message`.
 
 ### H-03 — Output names are never clamped to the 255-character component limit — **OPEN (Medium)**
+
+*owner: TEAM A (Core) · status: open → `docs/BACKLOG.md`*
 
 * `src/FileAction.Core/OutputPaths.cs:8` (`Unique`), `:24` (`ProduceAsync`).
 * `Unique` builds `baseName + " (2)" + "." + ext` with no length check. A 251-character stem plus the
@@ -131,6 +137,8 @@ wrong or unusable message/behaviour reachable from a hostile input; **Low** = ha
 
 ### H-04 — Batch failures bypass the error funnel — **OPEN (Low)**
 
+*owner: TEAM A (Core) · status: open → `docs/BACKLOG.md`*
+
 * `src/FileAction.Core/Operations/PerFileOperation.cs:82` — `errors.Add($"{work[i].Name}: {ex.Message}")`.
 * When the user drops several hostile files, the per-file message is the raw exception text (a Magick.NET
   message for a corrupt image, an OS message for a locked file). It is never passed through
@@ -141,6 +149,8 @@ wrong or unusable message/behaviour reachable from a hostile input; **Low** = ha
 
 ### H-05 — PDFium failures are not wrapped although the key exists — **OPEN (Low)**
 
+*owner: TEAM A (Core) · status: open → `docs/BACKLOG.md`*
+
 * `src/FileAction.Core/Backends/PdfBackend.cs:13` (`PageCount`) and `:22` (`RenderAsync`) call
   `PDFtoImage.Conversion.GetPageCount` directly; the PDFsharp path (`Open`, line 256) wraps its failures as
   `ConversionException(T("error.pdf.cannotOpen", …))`.
@@ -150,6 +160,8 @@ wrong or unusable message/behaviour reachable from a hostile input; **Low** = ha
   `ConversionException(T("error.pdf.cannotOpen", name, message))`.
 
 ### H-06 — `PackAsync` leaks a partial archive when a source fails — **OPEN (Low, hardening)**
+
+*owner: TEAM A (Core) · status: open → `docs/BACKLOG.md`*
 
 * `src/FileAction.Core/Backends/ArchiveBackend.cs:138`, output created at `:160`.
 * `PackAsync` creates the archive before reading any source and never deletes it on failure, so a locked
@@ -169,8 +181,8 @@ UI. Commit `4f23c9c` on `main` wires both; this branch merged it (`96eaa72`). `R
 
 | Run | Commit | State | Result |
 | --- | --- | --- | --- |
-| [39375973532](https://github.com/Faisaldhd/dropwheel/actions/runs/39375973532) | `b26d3e4` | **RED** | `Failed: 2, Passed: 1055, Total: 1057` in 28 s. Both failures were bugs in the **new suite**, not product defects: `Hostile_names_never_throw_in_the_name_helpers("dot only", ".")` asserted that `"."` is not a directory, and `Names_that_differ_only_by_case_produce_two_outputs` assumed NTFS can hold two names that differ only by case (it cannot — they are one file). Every other hostile case passed, including the 5 GiB length refusal, the 64 MiB sparse stream, the escaping zip entry, the corrupt image/PDF/ZIP cases, cancellation and the job-funnel tests. Both cases were fixed in the next commit. |
-| next run on the merged head | see the PR checks | recorded on the PR | this row is filled from the run that contains the two fixed cases plus `4f23c9c` (`git merge origin/main`, `96eaa72`) |
+| [39375973532](https://github.com/Faisaldhd/dropwheel/actions/runs/39375973532) | `b26d3e4` | **RED** | `Failed: 2, Passed: 1055, Total: 1057` in 28 s. Both failures were bugs in the **new suite**, not product defects: `Hostile_names_never_throw_in_the_name_helpers("dot only", ".")` asserted that `"."` is not a directory, and `Names_that_differ_only_by_case_produce_two_outputs` assumed NTFS can hold two names that differ only by case (it cannot — they are one file). Every other hostile case passed, including the 5 GiB length refusal, the 64 MiB sparse stream, the escaping zip entry, the corrupt image/PDF/ZIP cases, cancellation and the job-funnel tests. |
+| [39377045318](https://github.com/Faisaldhd/dropwheel/actions/runs/39377045318) | `a29ec73` (merged head, includes `4f23c9c`) | **GREEN** | `Failed: 0, Passed: 1058, Skipped: 0, Total: 1058` in 28 s — the whole repository suite, including all 72 hostile-input cases. This is the PASS evidence for every row in §3. |
 
 The suite is part of `dotnet test tests/FileAction.Tests/FileAction.Tests.csproj` (CI step “Test”), so a
 green `Build + test` job is the PASS evidence for every row in §3 that names a test.
@@ -213,7 +225,8 @@ CI (no leftover files, no read-only directory blocking the delete)?
 
 Post-conditions asserted **after** `Dispose`: the per-test root no longer exists, the long-path directory no
 longer exists, and the scratch parent holds no `hostile-*` directory. A silent leak therefore fails the
-test instead of passing quietly. On CI the result is in §5.
+test instead of passing quietly. All three post-conditions held on CI in run
+[39377045318](https://github.com/Faisaldhd/dropwheel/actions/runs/39377045318) (`Failed: 0, Total: 1058`).
 
 ---
 
