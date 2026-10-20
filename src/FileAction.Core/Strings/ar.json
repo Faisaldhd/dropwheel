@@ -86,6 +86,7 @@
   "tool.addbackground.label": "خلفية",
   "tool.addbackground.subtitle": "إطار للصورة",
   "tool.addbackground.suffix": "مع خلفية",
+  "tool.addbackground.apply": "حفظ مع خلفية",
   "tool.addbackground.loading": "جارٍ تحميل الصورة…",
   "tool.addbackground.gradients": "تدرّجات لونية",
   "tool.addbackground.colors": "ألوان صلبة",
