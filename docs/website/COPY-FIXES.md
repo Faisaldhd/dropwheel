@@ -92,7 +92,7 @@ grep -n "the update check you control\|Keep the key down\|No timers and no idle 
 `تُفتح العجلة عند المؤشر أثناء السحب. أبقِ المفتاح مضغوطًا واضغط آخر لتبديل العجلة، وأفلت على قطاع لتنفيذه.`
 
 **AR new**
-`تُفتح العجلة عند المؤشر أثناء السحب، وتبقى مفتوحة حتى الإفلات، فيمكنك إفلات المفتاح والضغط على مفتاح آخر لتبديل العجلة، ثم الإفلات على قطاع لتنفيذه. الإيماءة معطّلة في التثبيت الجديد — شغّلها مرة واحدة من الإعدادات.`
+`تُفتح العجلة عند المؤشر أثناء السحب، وتبقى مفتوحة حتى الإفلات، فيمكنك رفع إصبعك عن المفتاح والضغط على مفتاح آخر لتبديل العجلة، ثم الإفلات على قطاع لتنفيذه. الإيماءة معطّلة في التثبيت الجديد — شغّلها مرة واحدة من الإعدادات.`
 
 > Why: `README.md:26` says the wheel “stays open until you drop, so you can **release the key** and tap
 > another one to switch wheels”. The added sentence discloses the fresh-install default
@@ -304,7 +304,7 @@ grep -n "the update check you control\|Keep the key down\|No timers and no idle 
 **Key:** `هل يحتاج صلاحيات المسؤول؟` (line 998)
 
 **AR old** `لا للتثبيت الافتراضي. يضع`
-**AR new** `لا، في التثبيت الافتراضي. يضع`
+**AR new** `لا، ليس في التثبيت الافتراضي. يضع`
 
 ---
 
@@ -343,7 +343,7 @@ grep -n "the update check you control\|Keep the key down\|No timers and no idle 
 **Key:** `class="tool-num">09` card (line 421)
 
 **AR old** `رتّب المقاطع بالسحب؛ يحدّد المقطع الأول الحجم ومعدل الإطارات، وتُقاس البقية عليه.`
-**AR new** `رتّب المقاطع بالسحب؛ يحدّد المقطع الأول الحجم ومعدل الإطارات، وتُقاس بقية المقاطع على حجمه وتُضاف إليها حواف سوداء.`
+**AR new** `رتّب المقاطع بالسحب؛ يحدّد المقطع الأول الحجم ومعدل الإطارات، وتُحجَّم بقية المقاطع لتلائمه وتُضاف إليها حواف سوداء.`
 
 > Why: `VideoSplitJoin.cs:278-279` — “the first clip's size and frame rate are the output's, every other clip
 > is scaled … inside that frame and padded with black”.
@@ -466,7 +466,7 @@ The page currently calls both Crop cards “اقتصاص”.
 **Key:** what's-new item 03 body (line 847)
 
 **AR old** `اقتصاص وتقسيم ودمج وسرعة وقصّ إطار وحفظ إطارات وحجب فيديو — نسخ البثّ متى أمكن وإعادة الترميز عند الحاجة.`
-**AR new** `اقتصاص وتقسيم ودمج والسرعة وقصّ الفيديو وحفظ الإطارات وحجب الفيديو — نسخ البثّ متى أمكن وإعادة الترميز عند الحاجة.`
+**AR new** `اقتصاص وتقسيم ودمج وتغيير السرعة وقصّ الفيديو وحفظ الإطارات وحجب الفيديو — نسخ البثّ متى أمكن وإعادة الترميز عند الحاجة.`
 
 > Why: the tool is “السرعة” (`glossary-ar.md:59`), the Crop tool is “قصّ الفيديو” (`ar.json:919`), and the
 > other nouns take the article to read as a list of tools rather than a sentence fragment.

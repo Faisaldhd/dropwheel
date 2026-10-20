@@ -241,7 +241,7 @@ digits and `«»`/`،`/`؛` as the glossary requires, and does **not** translate
 | Gender | L1010 | “و«حماية» … **هو** المسار الناضج” | F12 → “هي المسار الناضج” |
 | Meaning | L1010 | “الصيغة **مُصدَّرة**” for “the format is versioned” (مُصدَّرة = exported/issued) | F11 → “تحمل رقم إصدار” |
 | Meaning | L547 | “بثلاثة **اتجاهات**” for three frame shapes | F20 → “بثلاثة أُطُر: أفقي ورأسي ومربّع” |
-| Meaning | L421 | “وتُقاس البقية عليه” drops “and padded” | F18 → “وتُقاس بقية المقاطع على حجمه وتُضاف إليها حواف سوداء” |
+| Meaning | L421 | “وتُقاس البقية عليه” drops “and padded” | F18 → “وتُحجَّم بقية المقاطع لتلائمه وتُضاف إليها حواف سوداء” |
 | Redundant/wrong | L435 | “مع الحفاظ على طبقة الصوت **وارتفاعها**” (pitch is طبقة الصوت) | F19 → drop “وارتفاعها” |
 | Inconsistent term | L288, L448 | Crop titled “اقتصاص”, but the app says “قصّ الصورة” / “قصّ الفيديو” (`ar.json:99,919`); Trim is “اقتصاص” (`ar.json:76,900`) | F26 → “قصّ” for the two Crop cards |
 | Calque | L1038 | “ملفات ارتباط” vs the page's own “ملفات تعريف الارتباط” (L807) | F9 |
@@ -251,7 +251,7 @@ digits and `«»`/`،`/`؛` as the glossary requires, and does **not** translate
 | Bidi (LRM/RLM class) | L1022, L1071 | “غير مرتبط **بـTangerine**” — the Arabic preposition is glued to a Latin word with no isolate, so the renderer reorders it; the glossary (`glossary-ar.md:80-81`) requires U+2066…U+2069 (or `<bdi>`) around Latin values inside Arabic | F10 → “لا صلة له بمشروع Tangerine” (no glued preposition left to reorder) |
 | Bidi | L245 | “والأسهم **وEnter**” — the waw is glued to Latin | F30 → “ومفتاح Enter” |
 | Wrong UI quote | L989 | “يقول ويندوز «حماية Windows»” — this is not the Arabic SmartScreen string | F13 → «قام Windows بحماية جهازك» |
-| Terse/awkward | L998 | “لا للتثبيت الافتراضي.” | F14 → “لا، في التثبيت الافتراضي.” |
+| Terse/awkward | L998 | “لا للتثبيت الافتراضي.” | F14 → “لا، ليس في التثبيت الافتراضي.” |
 | Wording | L181 | “بلا تصميمات وهمية” for “No mock-ups” | F29 → “بلا نماذج وهمية” |
 
 No LRM/RLM characters (U+200E/U+200F) were found in the file, which is correct: the page uses `<bdi
