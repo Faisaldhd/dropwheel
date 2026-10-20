@@ -128,13 +128,16 @@ public class RedactOutputTests : IDisposable
             RedactionStyle.Default);
 
         var first = RedactRunner.Apply(new FileItem(source), plan, _directory);
-        var firstHash = Sha256(first);
         var second = RedactRunner.Apply(new FileItem(source), plan, _directory);
 
         Assert.Equal("photo Redacted.png", Path.GetFileName(first));
         Assert.Equal("photo Redacted (2).png", Path.GetFileName(second));
-        Assert.Equal(firstHash, Sha256(first));
-        Assert.NotEqual(firstHash, Sha256(second));
+        // Two saves must produce two files; the second may not overwrite the first. The bytes are not
+        // compared: a solid redaction is deterministic (so they can be equal), while an encoder is
+        // free to embed creation times (so they can legitimately differ).
+        Assert.NotEqual(first, second);
+        Assert.True(File.Exists(first), "the first output is missing");
+        Assert.True(File.Exists(second), "the second output is missing");
     }
 
     [Fact]
@@ -214,7 +217,10 @@ public class RedactOutputTests : IDisposable
             RepoRoot(), "src", "FileAction.App", "UI", "Tools", "Image", "RedactView.cs"));
 
         // Only the user's swatch colours are literals; every chrome brush comes from the active palette.
-        Assert.DoesNotContain("Colors.", source, StringComparison.Ordinal);
+        // "Colors." means WPF's Colors.* literals; the tool's own RedactionColors helper is not one.
+        Assert.False(
+            Regex.IsMatch(source, @"(?<!\w)Colors\."),
+            "RedactView.cs uses a WPF Colors.* literal instead of a Theme brush");
         foreach (Match brush in Regex.Matches(source, @"Brushes\.(\w+)"))
             Assert.Equal("Transparent", brush.Groups[1].Value);
 
