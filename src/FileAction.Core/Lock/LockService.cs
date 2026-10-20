@@ -94,13 +94,15 @@ public sealed class LockService(
     LockEnvironment? environment = null,
     ILockHost? host = null,
     int minimumIterations = LockFormat.MinimumIterations,
-    int newSlotIterations = LockFormat.DefaultIterations)
+    int newSlotIterations = LockFormat.DefaultIterations,
+    Func<string, bool>? deletePath = null)
 {
     private readonly LockEnvironment _environment = environment ?? LockEnvironment.Default();
     private readonly ILockHost _host = host ?? NullLockHost.Instance;
     private readonly int _minimumIterations = Math.Max(1, minimumIterations);
     private readonly int _newSlotIterations = Math.Max(1, newSlotIterations);
     private readonly string _restoreTemp = (environment ?? LockEnvironment.Default()).RestoreTempPath;
+    private readonly Func<string, bool>? _deletePath = deletePath;
 
     public LockEnvironment Environment => _environment;
 
@@ -253,7 +255,9 @@ public sealed class LockService(
         string plaintextPath,
         string? folderIconPath = null,
         IProgress<LockProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? expectedFileHash = null,
+        string? expectedTreeHash = null)
     {
         ArgumentNullException.ThrowIfNull(header);
         ArgumentNullException.ThrowIfNull(dataKey);
@@ -271,6 +275,18 @@ public sealed class LockService(
         }
 
         var isDirectory = Directory.Exists(plaintextPath);
+        if (!isDirectory && expectedFileHash is not null)
+        {
+            var currentHash = LockArchive.FileHash(plaintextPath);
+            if (!string.Equals(currentHash, expectedFileHash, StringComparison.Ordinal))
+                throw new LockChangedException("the unlocked file changed since the last save; retry would encrypt different bytes. The good container was kept.");
+        }
+        if (isDirectory && expectedTreeHash is not null)
+        {
+            var currentTree = LockArchive.TreeHash(plaintextPath);
+            if (!string.Equals(currentTree, expectedTreeHash, StringComparison.Ordinal))
+                throw new LockChangedException("the unlocked folder changed since the last save; retry would encrypt different entries. The good container was kept.");
+        }
         var meta = isDirectory
             ? BuildFolderMeta(plaintextPath, folderIconPath)
             : LockMeta.ForFile(plaintextPath);
@@ -650,6 +666,15 @@ public sealed class LockService(
             journal.Delete(record.Id);
             return;
         }
+        if (record.State == LockSessionState.Error)
+        {
+            if (!record.IsDirectory && record.FileHash is not null &&
+                !string.Equals(LockArchive.FileHash(plaintext), record.FileHash, StringComparison.Ordinal))
+                throw new LockChangedException("the recovered file changed after the failed relock; salvage it instead of encrypting different bytes.");
+            if (record.IsDirectory && record.TreeHash is not null &&
+                !string.Equals(LockArchive.TreeHash(plaintext), record.TreeHash, StringComparison.Ordinal))
+                throw new LockChangedException("the recovered folder changed after the failed relock; salvage it instead of encrypting different entries.");
+        }
 
 
         var stagingTarget = container + ".recover";
@@ -842,11 +867,20 @@ public sealed class LockService(
     /// the item is then deleted for good — never left as a second, recoverable copy. Failure is reported,
     /// not hidden, and never makes the caller delete the new container.
     /// </summary>
-    private static bool TryRemovePlaintext(string path, out string? leftover)
+    private bool TryRemovePlaintext(string path, out string? leftover)
     {
         leftover = null;
         try
         {
+            if (_deletePath is not null)
+            {
+                if (!_deletePath(path))
+                {
+                    leftover = path;
+                    return false;
+                }
+                return true;
+            }
             if (Directory.Exists(path))
             {
                 // Not overwritten first: a partially deleted tree would be worse than a locked one. The
@@ -860,7 +894,9 @@ public sealed class LockService(
             }
             else
             {
-                OverwriteAndClear(path);
+                // Delete first. Zeroing a file before a failed delete leaves zeros in the session and a
+                // retry would encrypt those zeros over the good container.
+                ClearReadOnly(path);
                 File.Delete(path);
             }
             return true;
@@ -869,30 +905,6 @@ public sealed class LockService(
         {
             leftover = path;
             return false;
-        }
-    }
-
-    private static void OverwriteAndClear(string file)
-    {
-        try
-        {
-            ClearReadOnly(file);
-            using var stream = new FileStream(file, FileMode.Open, FileAccess.Write, FileShare.None, 256 * 1024,
-                FileOptions.SequentialScan);
-            var length = stream.Length;
-            var buffer = new byte[256 * 1024];
-            long written = 0;
-            while (written < length)
-            {
-                var count = (int)Math.Min(buffer.Length, length - written);
-                stream.Write(buffer, 0, count);
-                written += count;
-            }
-            stream.Flush(flushToDisk: true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // The file may be read-only on another volume or locked; deletion below is still attempted.
         }
     }
 
@@ -933,14 +945,11 @@ public sealed class LockService(
             File.Delete(source);
         }
     }
-    /// <summary>Stages on the destination volume so the final rename is atomic; falls back to app temp only cross-volume.</summary>
+    /// <summary>One app-temp staging root so the startup sweep always covers leftovers, on every volume.</summary>
     private string StagingRoot(string destinationDirectory)
     {
-        var tempRoot = Path.GetPathRoot(_restoreTemp);
-        var destinationRoot = Path.GetPathRoot(destinationDirectory);
-        return string.Equals(tempRoot, destinationRoot, StringComparison.OrdinalIgnoreCase)
-            ? _restoreTemp
-            : Path.Combine(destinationDirectory, ".dwlock-restore");
+        _ = destinationDirectory;
+        return _restoreTemp;
     }
     /// <summary>Moves a restore folder to its destination, falling back to copy+delete across volumes.</summary>
     private static void MoveDirectory(string source, string destination)
