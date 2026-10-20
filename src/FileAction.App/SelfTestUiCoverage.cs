@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -48,6 +48,7 @@ internal static class SelfTestUiCoverage
     private static readonly TimeSpan TotalBudget = TimeSpan.FromSeconds(150);
 
     private static Stopwatch _clock = Stopwatch.StartNew();
+    private static Timer? _watchdog;
 
     private sealed class Row
     {
@@ -72,6 +73,28 @@ internal static class SelfTestUiCoverage
         var rows = new List<Row>();
         var failures = new List<string>();
         _clock = Stopwatch.StartNew();
+        var previousCulture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+
+        // A stuck UI thread cannot be pre-empted in-process, but a watchdog keeps the tag gate bounded:
+        // after the total budget plus a margin it writes a timeout report and exits non-zero.
+        _watchdog = new Timer(_ =>
+        {
+            try
+            {
+                Directory.CreateDirectory(outDir);
+                File.WriteAllText(Path.Combine(outDir, "ui-coverage-timeout.txt"),
+                    $"TIMEOUT: coverage exceeded {TotalBudget.TotalSeconds + 30:0} s; a surface blocked the UI thread.\n");
+                File.AppendAllText(Path.Combine(outDir, "ui-coverage.md"),
+                    "\n\n## TIMEOUT\nCoverage watchdog fired: a surface blocked the UI thread for more than " +
+                    (TotalBudget.TotalSeconds + 30) + " s.\n");
+            }
+            catch
+            {
+                // The exit code below is the signal that matters.
+            }
+            Environment.Exit(2);
+        }, null, (int)(TotalBudget + TimeSpan.FromSeconds(30)).TotalMilliseconds, Timeout.Infinite);
         var settings = new AppSettings();
         var tools = new ToolLocator();
         var core = WheelController.BuildOperations();
@@ -235,6 +258,7 @@ internal static class SelfTestUiCoverage
             LanguageManager.Apply(UiLanguage.English);
             Theme.Override = null;
             Theme.Refresh();
+            CultureInfo.CurrentCulture = previousCulture;
         }
 
         // ---- pure fit matrix: every tool, both orientations, 100 % and 150 % -------------------
@@ -276,6 +300,8 @@ internal static class SelfTestUiCoverage
 
         // ---- reports ---------------------------------------------------------------------------
         WriteReports(outDir, rows, failures, englishKeys);
+        _watchdog?.Dispose();
+        _watchdog = null;
         log.Add($"ok ui-coverage: {rows.Count(row => row.Result == "PASS")} pass, " +
                 $"{rows.Count(row => row.Result == "SKIP")} skip, {failures.Count} fail ({englishKeys} keys en+ar)");
         if (failures.Count > 0)
@@ -296,21 +322,28 @@ internal static class SelfTestUiCoverage
             if (spec is not null)
                 problems.AddRange(CheckToolFit(window, spec));
 
-            if (render is not null)
+            // Rasterising one window normally takes well under a second. Running it through the same
+            // bounded pump as the media probes turns a stuck surface into a recorded TIMEOUT instead of
+            // an unbounded CI hang.
+            SelfTest.Pump(() =>
             {
-                render();
-            }
-            else if (detach)
-            {
-                if (window is not ToolWindow toolWindow)
-                    throw new InvalidOperationException("detach capture is only wired for ToolWindow");
-                var root = toolWindow.DetachForCapture();
-                SelfTest.SaveElement(root, file);
-            }
-            else
-            {
-                SelfTest.SaveWindow(window, file, window.Width > 0 ? window.Width : 520);
-            }
+                if (render is not null)
+                {
+                    render();
+                }
+                else if (detach)
+                {
+                    if (window is not ToolWindow toolWindow)
+                        throw new InvalidOperationException("detach capture is only wired for ToolWindow");
+                    var root = toolWindow.DetachForCapture();
+                    SelfTest.SaveElement(root, file);
+                }
+                else
+                {
+                    SelfTest.SaveWindow(window, file, window.Width > 0 ? window.Width : 520);
+                }
+                return Task.CompletedTask;
+            }, timeoutSeconds: 10);
 
             row.Detail = emptyCount == 0 ? "no empty labels" : $"{emptyCount} dynamic empty slot(s)";
             if (problems.Count > 0)
@@ -326,6 +359,12 @@ internal static class SelfTestUiCoverage
                 row.Detail = $"window took {windowClock.Elapsed.TotalSeconds:0.0} s (budget {PerWindowBudget.TotalSeconds:0} s)";
                 failures.Add($"{id} ({culture}): {row.Detail}");
             }
+        }
+        catch (TimeoutException ex)
+        {
+            row.Result = "TIMEOUT";
+            row.Detail = "render did not finish within 10 s: " + ex.Message;
+            failures.Add($"{id} ({culture}): {row.Detail}");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -361,7 +400,9 @@ internal static class SelfTestUiCoverage
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            rows.Add(new Row { Window = id, Culture = culture, Kind = "dialog", Result = "SKIP", Detail = ex.GetType().Name + ": " + ex.Message });
+            // A dialog that cannot be constructed is NOT a deliberate skip: it fails the gate.
+            rows.Add(new Row { Window = id, Culture = culture, Kind = "dialog", Result = "FAIL", Detail = ex.GetType().Name + ": " + ex.Message });
+            failures.Add($"{id} ({culture}): dialog build failed: {ex.GetType().Name}: {ex.Message}");
         }
         finally
         {
@@ -371,12 +412,9 @@ internal static class SelfTestUiCoverage
 
     private static List<string> CheckToolFit(Window window, IToolWindowSpec spec)
     {
+        // The runner's real work area is environment-dependent (headless CI can report 0x0 or 1024x768),
+        // so it is never a pass/fail input. The simulated 1280x800 default is the release contract.
         var problems = new List<string>();
-        var work = SystemParameters.WorkArea;
-        if (window.Width > work.Width + 0.5 || window.Height > work.Height + 0.5)
-            problems.Add($"window {window.Width:0.#}x{window.Height:0.#} exceeds the work area {work.Width:0.#}x{work.Height:0.#}");
-
-        // The declared design size at 1280x800 @100 % must already fit; the sizer matrix covers 150 %.
         var size = ToolWindowSizer.Compute(spec.Layout, null, null, 1280, 800, 1.0);
         if (size.Width > 1280 || size.Height > 800)
             problems.Add($"default {size.Width:0.#}x{size.Height:0.#} exceeds 1280x800");

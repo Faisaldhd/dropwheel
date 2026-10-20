@@ -107,7 +107,7 @@ jobs:
         run: |
           # The self-test itself exits non-zero on any coverage failure; this step makes "the report was
           # written" and "all 26 tools appear in both cultures" part of the job result as well.
-          $report = "release/self-test/ui-coverage.md"
+          $report = "release/self-test/ui-coverage/ui-coverage.md"
           if (-not (Test-Path $report)) { throw "ui-coverage.md was not written; the coverage pass did not run" }
           $text = Get-Content $report -Raw
           if ($text -match '\| FAIL \|') { throw "ui-coverage.md contains FAIL rows" }
@@ -123,8 +123,6 @@ jobs:
           name: ui-coverage
           path: |
             release/self-test/ui-coverage/**
-            release/self-test/ui-coverage.md
-            release/self-test/ui-coverage.txt
           if-no-files-found: warn
           retention-days: 14
 
