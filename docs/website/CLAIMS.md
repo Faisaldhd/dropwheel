@@ -20,7 +20,7 @@ is recorded at the end and the code wins.
 honest way to count the windows:
 
 ```
-$ grep -rn "ToolRegistry.Register" src --include=*.cs | wc -l
+$ (Get-ChildItem src -Recurse -Include *.cs -File | Select-String "ToolRegistry.Register").Count
 26
 ```
 
@@ -107,7 +107,7 @@ SHA256SUMS.txt                           484
 | 22 | “a ZIP keeps file names visible; the PDF path is the one with permissions” L690 | **PROVEN** | `docs/FUNCTION-MATRIX.md:93` (“ZIP names are not encrypted (the note is shown) … PDF owner permissions are supported”) | none |
 | 23 | “Password strength, confirmation and a reveal toggle; nothing is logged.” L687 | **PROVEN** | `docs/FUNCTION-MATRIX.md:91-92` (strength meter, match gate, eye reset); `:95` (“No `AppLog`/`Notifications` call receives a password”, P-15) | none |
 | 24 | “Unlock makes a new unprotected copy; the protected file is never overwritten.” L688, L603 | **PROVEN** | `docs/FUNCTION-MATRIX.md:88` (P-8 unlock writes a new ZIP, no partial file); `:85` (P-5 never overwrites); `:89` (plain ZIP not rewritten) | none |
-| 25 | “Password recovery is not attempted.” L603 · “لا تُجرَّب استعادة كلمة المرور” | **PROVEN** | No recovery/brute-force path in `src/FileAction.App/UI/Tools/Password/**` or `src/FileAction.Core/Password*.cs` (`grep -rn "recover\|brute" …` → 0 hits); `FUNCTION-MATRIX.md:91` (unlock only validates a supplied password) | none |
+| 25 | “Password recovery is not attempted.” L603 · “لا تُجرَّب استعادة كلمة المرور” | **PROVEN** | The code says it outright: `src/FileAction.App/UI/Tools/Password/UnlockTool.cs:14` (“It makes one attempt and never tries to crack or recover a password”) and `src/FileAction.Core/PasswordZip.cs:475` (“one attempt with the typed password and never tries to recover or guess one”); `FUNCTION-MATRIX.md:88,91` (wrong password leaves no output; unlock only validates a supplied password). The only “recovery” in the tree is Lock's crash journal (`LockSessions.cs:264-314`), not password recovery. | none |
 | 26 | Lock marked **Beta** (L616, L696, L874) | **PROVEN** | `src/FileAction.App/UI/Tools/Lock/LockTool.cs:19` (“labelled Beta until the owner signs it off”), `:166` (`T("tool.lock.beta")` pill); `src/FileAction.Core/Strings/en.json:944` `"tool.lock.beta": "Beta"`, `ar.json:944` “تجريبي”; `FUNCTION-MATRIX.md:219` “Lock — `tools.lock` (Beta)” | none |
 | 27 | “Recovery key … 24 characters, shown once, never stored.” L702, L875 · “24 حرفًا…” | **PROVEN** | `src/FileAction.Core/Lock/RescuerKey.cs:6-17` (“24 characters in six groups of four … 120 bits … shown to the user exactly once”; `CharacterCount = 24`); “never stored”: `FUNCTION-MATRIX.md:239` (`No_secret_is_written_under_the_app_data_folder`) and `LockRuntime.cs:14` (secrets live only in memory) | none |
 | 28 | “Rescuer password — one password for every protected file” + “three ways in” L700-703, L617 | **PROVEN** | `FUNCTION-MATRIX.md:222` (“a three-slot password/recovery envelope”); `src/FileAction.App/Shell/Protection/LockRuntime.cs:71-96` (`RequireRescuer`, `RescuerSecrets(key, password)`), `LockSettingsWindow.cs:14-15` | none |
