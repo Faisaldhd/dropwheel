@@ -213,7 +213,6 @@ internal sealed class RescuerSetupWindow : Window
             },
             IsChecked = false,
             Margin = new Thickness(0, 2, 0, 14),
-            FlowDirection = FlowDirection.LeftToRight,
         };
         _keyPage.Children.Add(_saved);
 
@@ -394,14 +393,16 @@ internal sealed class RescuerSetupWindow : Window
         string key;
         if (_mode == RescuerSetupMode.ResetPassword)
         {
+            // The key may come from a just-opened container (_knownKey) when the vault has no password
+            // yet, so a successful unlock can reset the Rescuer password without a second prompt.
             var stored = LockRuntime.Vault.Load();
-            if (stored is null)
+            key = LockSecrets.ChooseResetKey(_knownKey, stored) ?? string.Empty;
+            if (string.IsNullOrEmpty(key))
             {
                 Dialogs.Show(this, T("tool.lock.rescuer.missing"), Title, MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return;
             }
-            key = stored.Key;
         }
         else
         {
