@@ -628,6 +628,7 @@
   "suffix.pages": "pages",
   "error.pdf.noText": "The PDF contains no text (probably a scan). Try converting it to JPG/PNG.",
   "error.pdf.noTables": "No tables found in this PDF.",
+  "error.pdf.noPages": "The PDF has no pages.",
   "error.pdf.cannotOpen": "Cannot open PDF {0}: {1}",
   "error.sheet.needsLibreOffice": "{0} spreadsheets need LibreOffice.",
   "sheet.defaultName": "Sheet1",

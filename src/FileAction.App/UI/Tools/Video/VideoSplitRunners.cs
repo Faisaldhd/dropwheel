@@ -14,9 +14,14 @@ namespace FileAction.App.UI.Tools.Video;
 internal static class VideoSplitRunner
 {
     public static async Task<string> RunAsync(
-        string ffmpeg, SplitPlan plan, IProgress<double> progress, CancellationToken ct, Settings? settings = null)
+        string ffmpeg,
+        SplitPlan plan,
+        IProgress<double> progress,
+        CancellationToken ct,
+        Settings? settings = null,
+        string? outputDirectory = null)
     {
-        var directory = OutputTarget.SourceFolder(plan.SourcePath) ?? Environment.CurrentDirectory;
+        var directory = outputDirectory ?? OutputTarget.SourceFolder(plan.SourcePath) ?? Environment.CurrentDirectory;
         var folder = OutputPaths.UniqueDirectory(directory, plan.FolderName);
         var quality = settings ?? new Settings();
 
@@ -111,12 +116,13 @@ internal static class VideoJoinRunner
         IReadOnlyList<ClipInfo> clips,
         IProgress<double> progress,
         CancellationToken ct,
-        Settings? settings = null)
+        Settings? settings = null,
+        string? outputDirectory = null)
     {
         if (clips.Count < 2)
             throw new ConversionException(T("tool.videojoin.noClips"));
 
-        var directory = OutputTarget.SourceFolder(clips[0].Path) ?? Environment.CurrentDirectory;
+        var directory = outputDirectory ?? OutputTarget.SourceFolder(clips[0].Path) ?? Environment.CurrentDirectory;
         if (!OutputTarget.CanWrite(directory))
             throw new ConversionException(T("error.output.notWritable"));
         var total = clips.Sum(clip => clip.Duration);

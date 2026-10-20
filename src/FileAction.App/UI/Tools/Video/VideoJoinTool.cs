@@ -45,7 +45,7 @@ internal sealed class VideoJoinTool : IToolWindowSpec
         items.Count >= 2 && items.All(item => !item.IsDirectory && Formats.Video.Contains(item.Format));
 
     public ToolContent Create(IReadOnlyList<FileItem> items, DropTargets? targets) =>
-        new VideoJoinView(items).Build();
+        new VideoJoinView(items, targets).Build();
 }
 
 /// <summary>Registers the tool from its own file, so no shared list has to be edited.</summary>
@@ -61,6 +61,7 @@ internal sealed class VideoJoinView
     private const int ThumbWidth = 240;
 
     private readonly ToolLocator _tools = new();
+    private readonly DropTargets? _targets;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, BitmapSource?> _thumbs = new(StringComparer.OrdinalIgnoreCase);
@@ -83,8 +84,9 @@ internal sealed class VideoJoinView
     private bool _loading;
     private bool _statusIsError;
 
-    public VideoJoinView(IReadOnlyList<FileItem> items)
+    public VideoJoinView(IReadOnlyList<FileItem> items, DropTargets? targets)
     {
+        _targets = targets;
         // The placeholder clips keep the strip visible while the probes are running.
         _clips = [.. items.Select(item => new ClipInfo(item.Path, 0, 0, 0, 0, false))];
 
@@ -107,6 +109,10 @@ internal sealed class VideoJoinView
 
         ShowHint();
     }
+
+    /// <summary>Output folder for this drop: detected folder/remembered folder, else next to the first clip.</summary>
+    internal static string OutputDirectoryFor(string firstPath, DropTargets? targets) =>
+        ToolOutputFolder.For(new FileItem(firstPath), targets);
 
     public ToolContent Build()
     {
@@ -529,7 +535,9 @@ internal sealed class VideoJoinView
         {
             var progress = new Progress<double>(ShowProgress);
             // Returning the path lets the shared window show its toast and close, like every other tool.
-            return await VideoJoinRunner.RunAsync(_ffmpeg, _clips, progress, cts.Token);
+            return await VideoJoinRunner.RunAsync(
+                _ffmpeg, _clips, progress, cts.Token,
+                outputDirectory: OutputDirectoryFor(_clips[0].Path, _targets));
         }
         catch (OperationCanceledException)
         {

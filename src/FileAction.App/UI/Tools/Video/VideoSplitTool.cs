@@ -45,7 +45,7 @@ internal sealed class VideoSplitTool : IToolWindowSpec
         items.Count == 1 && !items[0].IsDirectory && Formats.Video.Contains(items[0].Format);
 
     public ToolContent Create(IReadOnlyList<FileItem> items, DropTargets? targets) =>
-        new VideoSplitView(items[0]).Build();
+        new VideoSplitView(items[0], targets).Build();
 }
 
 /// <summary>Registers the tool from its own file, so no shared list has to be edited.</summary>
@@ -61,6 +61,7 @@ internal sealed class VideoSplitView
     private const int PreviewWidth = 960;
 
     private readonly FileItem _item;
+    private readonly DropTargets? _targets;
     private readonly ToolLocator _tools = new();
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _lifetime = new();
@@ -93,9 +94,10 @@ internal sealed class VideoSplitView
     private bool _busy;
     private bool _statusIsError;
 
-    public VideoSplitView(FileItem item)
+    public VideoSplitView(FileItem item, DropTargets? targets)
     {
         _item = item;
+        _targets = targets;
         _preview.Children.Add(_image);
         _preview.Children.Add(_placeholder);
         _canvas.SizeChanged += (_, _) => Paint();
@@ -130,6 +132,10 @@ internal sealed class VideoSplitView
 
         ShowHint();
     }
+
+    /// <summary>Output folder for this drop: detected folder/remembered folder, else next to the source.</summary>
+    internal static string OutputDirectoryFor(string sourcePath, DropTargets? targets) =>
+        ToolOutputFolder.For(new FileItem(sourcePath), targets);
 
     public ToolContent Build()
     {
@@ -748,7 +754,9 @@ internal sealed class VideoSplitView
         try
         {
             var progress = new Progress<double>(ShowProgress);
-            var folder = await VideoSplitRunner.RunAsync(_ffmpeg, plan, progress, cts.Token);
+            var folder = await VideoSplitRunner.RunAsync(
+                _ffmpeg, plan, progress, cts.Token,
+                outputDirectory: OutputDirectoryFor(_item.Path, _targets));
             Notifications.Show(
                 T("tool.videosplit.done.title"),
                 T("tool.videosplit.done", Bidi.Value(Path.GetFileName(folder))));

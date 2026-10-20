@@ -628,6 +628,7 @@
   "suffix.pages": "صفحات",
   "error.pdf.noText": "لا يحتوي ملف PDF على نص (ربما يكون صورة ممسوحة ضوئيًا). جرّب تحويله إلى JPG/PNG.",
   "error.pdf.noTables": "لم تُعثر على جداول في ملف PDF هذا.",
+  "error.pdf.noPages": "لا يحتوي ملف PDF على صفحات.",
   "error.pdf.cannotOpen": "تعذّر فتح ملف PDF ⁦{0}⁩: {1}",
   "error.sheet.needsLibreOffice": "تحتاج جداول ⁦{0}⁩ إلى LibreOffice.",
   "sheet.defaultName": "ورقة1",
