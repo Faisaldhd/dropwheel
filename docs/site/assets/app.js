@@ -464,3 +464,18 @@
   }, { rootMargin: '0px 0px -8% 0px', threshold: 0.05 });
   for (i = 0; i < nodes.length; i++) io.observe(nodes[i]);
 })();
+
+/* ------------------------------------------------------- language status message
+ * WCAG 4.1.3: the switch rewrites lang/dir/title/alt but focus stays on the button,
+ * so a screen-reader user gets no confirmation. Announce the new language once. */
+(function () {
+  var status = document.getElementById('lang-status');
+  if (!status) return;
+  var buttons = document.querySelectorAll('[data-lang-button]');
+  for (var i = 0; i < buttons.length; i++) {
+    buttons[i].addEventListener('click', function () {
+      var next = this.getAttribute('data-lang-button');
+      status.textContent = next === 'ar' ? 'تم التبديل إلى العربية.' : 'Switched to English.';
+    });
+  }
+})();
