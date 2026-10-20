@@ -119,6 +119,39 @@ public static class LockArchive
     }
 
     /// <summary>
+    /// A stable SHA-256 of the folder tree (sorted relative paths + lengths + last-write ticks). Stored when
+    /// a session opens so a retry can see that the user edited the tree; the current tree is always encoded.
+    /// </summary>
+    public static string TreeHash(string root)
+    {
+        var entries = new List<string>();
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            foreach (var entry in Directory.GetFileSystemEntries(directory))
+            {
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    continue;
+                var relative = LockPaths.ToArchivePath(root, entry);
+                if (relative.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var info = (attributes & FileAttributes.Directory) != 0
+                    ? (FileSystemInfo)new DirectoryInfo(entry)
+                    : new FileInfo(entry);
+                entries.Add(relative + "|" + (info is FileInfo file ? file.Length : 0) + "|" +
+                            info.LastWriteTimeUtc.Ticks);
+                if ((attributes & FileAttributes.Directory) != 0)
+                    pending.Push(entry);
+            }
+        }
+        entries.Sort(StringComparer.Ordinal);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(string.Join("\n", entries));
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+    }
+    /// <summary>
     /// Restores the archive under <paramref name="destinationRoot"/>, which must not already contain the
     /// entries. Every path is validated before use, so an archive cannot write outside the destination.
     /// </summary>

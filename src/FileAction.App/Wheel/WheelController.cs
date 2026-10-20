@@ -90,6 +90,8 @@ internal sealed class WheelController
         .. Catalog.Build(),
         new Ocr.OcrOperation(),
         new UI.Tools.Image.CropOperation(),
+        new UI.Tools.Image.AnnotateOperation(),
+        new UI.Tools.Image.RedactOperation(),
         new UI.Tools.Image.Frame.AddBackgroundOperation(),
         new UI.Tools.Image.EditPhotosOperation(),
         new UI.Tools.Collage.CollageOperation(),
