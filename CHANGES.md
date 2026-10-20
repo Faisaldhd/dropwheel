@@ -1,4 +1,292 @@
-# DropWheel 2.3.0 — CHANGES
+# DropWheel 2.4.0 — CHANGES
+
+## 2.4.0
+
+### English
+
+**26 tool windows, one gesture.** Choosing a tool on the Tools wheel (Ctrl) no longer starts a
+background job when the work needs eyes on it: it opens a floating card over the file. 25 of the 26
+windows are new in this release (Crop arrived in 2.3.0); each one writes a new file — the QR reader
+writes none — and leaves the source alone, except Lock, which transforms the item in place.
+
+#### Images
+
+- **Annotate Image — `tools.annotate`.** Draw arrows, lines, shapes, text, numbered callouts, a
+  magnifier, freehand pen/highlighter strokes and stamp images over a downsampled preview; the flattened
+  copy is written at the original resolution as `<name> Annotated.<ext>`. Every mark is stored in
+  original-image pixels, so resizing the window never moves it.
+- **Edit Photos — `tools.editphotos`.** Sixteen sliders in five groups (Light, Color, Detail, Effects,
+  Noise) over a live preview that never blocks the window: a 24 MP photo refreshes in ~350 ms and the
+  save renders the original. With every slider at its default the result is a **byte-identical copy** of
+  the source — no recompression, no orientation rewrite — and the name is `<name> Edited.<ext>`.
+- **Add BG — `tools.addbackground`.** Padding, rounded corners, shadow and a backdrop of nine gradients,
+  nine solids, a custom colour or an image, then 1:1 / 16:9 / 4:5 / square crops of the composition.
+  Slider values are original-image pixels; the result is `<name> With Background.png` (PNG, alpha kept).
+- **Collage — `tools.collage`.** Two or more photos in a grid at 1080 × 1080, 1920 × 1080 or 1080 × 1920,
+  rendered from the sources (never from the 640 px preview) as `Collage.png` next to the first input; the
+  inputs keep their bytes and timestamps.
+- **Redact image — `tools.redact`.** Draw the areas to hide and cover each with a solid fill, a blur or
+  pixelation, or let the Windows OCR engine propose the text areas; the flattened copy is
+  `<name> Redacted.<ext>`.
+- **Crop Image** from 2.3.0 keeps its corner/edge handles, ratio chips and W/H boxes in original pixels.
+
+#### Video
+
+- **Trim Video, Crop Video, Change Speed — `tools.videotrim` / `tools.videocrop` / `tools.videospeed`.**
+  A frame preview, a filmstrip and a timeline; trim a range, crop the frame, or change the speed with the
+  pitch kept. Outputs are `<name> Trimmed.<ext>`, `<name> Cropped.<ext>` and `<name> <rate>x.<ext>`.
+- **Split Video and Join Videos — `tools.videosplit` / `tools.videojoin`.** Click a timeline to add split
+  points (drag to move, double-click to remove) and get `<name> Parts` with numbered parts, or reorder
+  clips by dragging and join them into `Joined.mp4`; the first clip defines size and frame rate, a clip
+  without audio gets silence, and stream copy is used when the container allows it.
+- **Save frames — `tools.videoframes`.** Scrub, step one frame at a time and capture stills; every
+  captured frame is written at full resolution as `<name> frame 001.png` in a new `<name> frames` folder.
+  The button counts what it will write ("Save 3 Frames").
+- **Redact video — `tools.videoredact`.** Drag a rectangle over what must be hidden, give each area its
+  own time range and choose a solid colour or a blur; the whole result is one FFmpeg filter graph and
+  `<name> Redacted.<ext>`.
+- Video tools keep MP4, MOV, MKV and WebM and write legacy containers (AVI, WMV, FLV, MPG, 3GP, TS) as
+  MP4. A cancelled or failed run leaves no temporary file and no partial result.
+
+#### Audio
+
+- **Trim Audio — `tools.audiotrim`.** The real waveform with draggable orange Start/End handles, exact
+  time boxes, an automatic silent-ends trim and playback of the selection; output `<name> Trimmed.<ext>`.
+- **Normalize Audio — `tools.audionormalize`.** An EBU R128 target, an analysis pass that measures the
+  source and predicts the result on the waveform, then a two-pass apply into `<name> Normalized.<ext>`.
+- **Audio Channels — `tools.audiochannels`.** Mono or stereo, two channel volumes and a solo, with the
+  real waveform in view; output `<name> Mono.<ext>` or `<name> Stereo.<ext>`.
+- **Bleep Audio — `tools.audiobleep`.** Drag sections on the Bleep layer above the waveform, resize them,
+  set the tone in Hz and its volume, preview "With Bleeps", and save `<name> Bleeped.<ext>`.
+- **Audio Visualizer — `tools.audiovisualizer`.** Turn audio into an MP4 with an animated waveform or a
+  vector scope, on black or over a still image, in landscape, portrait or square:
+  `<name> Visualizer.mp4`.
+- Audio tools keep the source format when FFmpeg can write it (WMA becomes MP3) and need FFmpeg; without
+  it their slices stay on the wheel dimmed with the helper-tool prompt.
+
+#### Documents
+
+- **Merge to PDF — `tools.pdfmerge`.** Two or more PDFs and/or images in one `Merged.pdf`, in the order
+  you set with the up/down arrows; page rotation is preserved, one image is exactly one page, and a
+  corrupt or password-protected source fails with a message instead of a half-written file.
+- **Organize Pages — `tools.pdforganize`.** A numbered card per page: drag to reorder, rotate, duplicate,
+  remove (never the last page), and an optional "Make all pages the same width"; output
+  `<name> Organized.pdf`, source untouched.
+
+#### Any file
+
+- **Compress File — `tools.compress`.** One image, audio file, video or PDF, by preset, target size or
+  percentage, with an optional cap on the image's long side. Output `<name> Compressed.<ext>`; video and
+  audio keep their duration and audio track; a target size is a goal the encoder lands within about 10 %
+  above, and image compression never upscales.
+- **Edit Metadata — `tools.metadata`.** Searchable sections (File, Image, Video track, Audio track,
+  ExifIFD, IPTC, XMP, PDF info, Chapters) with editable rows first, per-field removal, chapters as
+  `mm:ss Title`, and one **Remove All** that also strips hidden camera and processing data. Output
+  `<name> Edited metadata.<ext>`.
+
+#### Protection and privacy
+
+- **Password protection — `tools.protect`.** One file, one folder or several files become
+  `<name> Protected.zip` with WinZip AES-256 entry encryption, or `<name> Protected.pdf` with AES-256
+  (PDF 2.0) when a single PDF is selected. Two password fields, a match line, a strength meter and an
+  8-character minimum; the password is never stored, and the window states the two limits that matter —
+  a ZIP cannot hide its file names, and PDF owner permissions are enforced by the reader, not by
+  DropWheel.
+- **Remove password — `tools.unlock`.** One protected ZIP or PDF becomes `<name> Unlocked.zip` /
+  `<name> Unlocked.pdf`; a wrong password or a cancelled run leaves no partial file, and an unencrypted
+  ZIP is reported as not protected instead of being rewritten. Password recovery is not attempted.
+- **Lock — `tools.lock` (Beta).** A file or folder is transformed **in place** into one self-contained
+  `.dwenc` / `.dwdir`: `report.pdf` becomes `report.pdf.dwenc`, `Photos` becomes `Photos.dwdir`. It ships
+  a three-slot envelope (file password, Rescuer password, Rescuer recovery key shown once), an
+  authenticated header, chunked AES-256-GCM frames, a verified atomic replacement, a folder
+  `desktop.ini` badge with the purple two-tone padlock, auto-relock and crash recovery. No password or
+  key is written under `%LOCALAPPDATA%\DropWheel`, the copy left in the Recycle Bin after an unlock is
+  off by default, and the registry work stays per user (HKCU).
+
+#### Tool windows, wheel and motion
+
+- **One floating tool, 26 times.** Each tool lives in its own file and registers itself; the registry is
+  the single list, and a slice opens its own window by tool id, so Crop, Annotate and Edit Photos never
+  compete for the same photo.
+- **Windows adapt to the media.** A tool opens at its default size, probes the file asynchronously and
+  animates in 180 ms to a size that fits the media's aspect ratio inside the tool's preview bounds,
+  clamped to 95 % of the work-area width and 90 % of its height on the monitor under the cursor; tiny
+  media is never enlarged past 200 %. Preview bounds, chrome size and minimum panel live with the tool.
+- **Speed and colour of the chrome.** Each tool states its own verb on the primary button ("Create
+  Collage", "Merge PDFs", "Save Edited Copy", "Encrypt"…), **Reset** is always on the left, **Esc**
+  closes, **Enter** runs the primary action, the title bar drags the card, and a finished result is
+  announced with a "Saved" notification that names the file. Tools use the theme brushes only and retint
+  on a live dark/light switch.
+- **Motion is a token set, not decoration.** One file (`UI/Motion/Motion.cs`) owns every duration and
+  easing; only `RenderTransform` and `Opacity` animate (the single exception is the 180 ms media resize),
+  nothing polls, and with **Settings → General → Animations** off — or Windows' animation effects off —
+  every transition is instant with no idle cost.
+- **Nothing is overwritten.** Results go to the folder the drop resolved (2.2.3 rules) or next to the
+  source, and a second result becomes `<name> (2).<ext>`.
+
+#### Performance and quality
+
+- The `--self-test` motion gate fails CI when the UI frame p95 exceeds **16.7 ms**, idle CPU exceeds
+  **5 %** or the motion surfaces retain more than **12 MB** after closing. The recorded run on the merge
+  head: UI frame p95 **0.02–0.07 ms**, idle CPU **0.39 %**, retained **0.0 MB** (`docs/PERF.md`).
+- Compress caps its video two-pass average with `maxrate`/`bufsize` so a target size is reached honestly,
+  and a cancelled video run cleans its temporary files without touching the source.
+- Both string tables carry **1,094 keys each** with identical key sets and placeholders, enforced by the
+  localization tests in CI; the self-test renders the app in English and Arabic, light and dark.
+
+#### Not in this release
+
+- **Redact image has no face detection.** Manual areas and OCR text detection ship; a face detector needs
+  either the Windows SDK projection this build does not carry or a new third-party package.
+- **QR decoding is read-only** and only `http`/`https` can be opened from a code.
+- **Lock is Beta** until the owner signs the container format off.
+- The binaries are still Authenticode-unsigned (SmartScreen may ask once); auto-updates are separately
+  signed with ECDSA P-256.
+- Both string tables are complete and enforced (1,094 keys each, identical key sets and placeholders,
+  parity tests in CI) and the self-test renders the shipped build. The per-window bilingual rendering
+  gate — every tool window in English and Arabic at 100/150/200 % DPI — is still landing in
+  `audit/selftest`; until it is green, no claim is made that every window has been rendered in both
+  languages.
+
+### العربية
+
+**⁦26⁩ نافذة أدوات بإيماءة واحدة.** لم يعد اختيار أداة من عجلة الأدوات (Ctrl) يبدأ مهمة في الخلفية حين
+يحتاج العمل إلى نظر: صار يفتح بطاقة عائمة فوق الملف. خمس وعشرون من النوافذ الست والعشرين جديدة في هذا
+الإصدار (وصلت أداة قصّ الصورة في ⁦2.3.0⁩)، وكلها تكتب ملفًا جديدًا وتترك الأصل سليمًا، إلا «قفل الملفات»
+الذي يحوّل العنصر في مكانه.
+
+#### الصور
+
+- **إضافة تعليقات على الصورة — `tools.annotate`.** ارسم أسهمًا وخطوطًا وأشكالًا ونصوصًا وتعليقات مرقّمة
+  وعدسة مكبّرة وخطوط قلم حرّ وتظليلًا وأختام صور فوق معاينة مصغّرة، وتُكتب النسخة المسطّحة بدقة الصورة
+  الأصلية باسم `<الاسم> Annotated.<الامتداد>`. تُحفظ كل علامة ببكسلات الصورة الأصلية، فلا تحرّكها إعادة
+  تحجيم النافذة.
+- **تعديل الصور — `tools.editphotos`.** ستة عشر شريط تمرير في خمس مجموعات (الضوء، اللون، التفاصيل،
+  المؤثرات، الضجيج) فوق معاينة حيّة لا تجمّد النافذة: صورة بدقة ⁦24⁩ ميغابكسل تتحدّث في نحو ⁦350⁩ مللي
+  ثانية، والحفظ يعالج الأصل. وعندما تكون كل الشرائط على وضعها الافتراضي تكون النتيجة **نسخة مطابقة بايتًا
+  ببايت** من المصدر، بلا إعادة ضغط ولا إعادة كتابة لاتجاه EXIF، والاسم `<الاسم> Edited.<الامتداد>`.
+- **إضافة خلفية — `tools.addbackground`.** حشوة وزوايا مستديرة وظلّ وخلفية من تسعة تدرّجات أو تسعة ألوان
+  صريحة أو لون مخصّص أو صورة، ثم قصّ التكوين بنسب ⁦1:1⁩ و⁦16:9⁩ و⁦4:5⁩ والمربّع. قيم الشرائط ببكسلات
+  الصورة الأصلية، والناتج `<الاسم> With Background.png` (صيغة PNG مع الحفاظ على الشفافية).
+- **تجميع الصور — `tools.collage`.** صورتان أو أكثر في شبكة بمقاس ⁦1080 × 1080⁩ أو ⁦1920 × 1080⁩ أو
+  ⁦1080 × 1920⁩، تُرسم من المصادر لا من معاينة ⁦640⁩ بكسل، وتُكتب `Collage.png` بجانب أول ملف، مع بقاء
+  بايتات المصادر وتواريخ تعديلها كما هي.
+- **حجب الصورة — `tools.redact`.** ارسم المناطق التي تريد إخفاءها وغطِّ كل واحدة بتعبئة صلبة أو ضباب أو
+  بكسلة، أو دع محرّك التعرف الضوئي في Windows يقترح مناطق النص؛ والنسخة المسطّحة `<الاسم> Redacted.<الامتداد>`.
+- **قصّ الصورة** من ⁦2.3.0⁩ يحتفظ بمقابض الزوايا والحواف وشرائح النسب ومربّعَي العرض والارتفاع ببكسلات الأصل.
+
+#### الفيديو
+
+- **اقتصاص الفيديو وقصّ الفيديو وتغيير السرعة — `tools.videotrim` و`tools.videocrop` و`tools.videospeed`.**
+  معاينة إطار وشريط إطارات وخط زمني؛ اقتصّ مقطعًا، أو اقصص الإطار، أو غيّر السرعة مع الحفاظ على حدة الصوت.
+  النواتج `<الاسم> Trimmed.<الامتداد>` و`<الاسم> Cropped.<الامتداد>` و`<الاسم> <المعدّل>x.<الامتداد>`.
+- **تقسيم الفيديو ودمج الفيديوهات — `tools.videosplit` و`tools.videojoin`.** انقر على الخط الزمني لإضافة
+  نقاط تقسيم (اسحبها لتحريكها وانقر نقرًا مزدوجًا لحذفها) لتحصل على مجلد `<الاسم> Parts` بأجزاء مرقّمة، أو
+  أعد ترتيب المقاطع بالسحب ثم ادمجها في `Joined.mp4`؛ أول مقطع يحدّد المقاس ومعدّل الإطارات، والمقطع الذي
+  بلا صوت يحصل على صمت، ويُستخدم النسخ المباشر حين تسمح الحاوية بذلك.
+- **حفظ الإطارات — `tools.videoframes`.** حرّك المؤشر وتنقّل إطارًا بإطار والتقط اللقطات؛ يُكتب كل إطار
+  ملتقط بالدقة الكاملة باسم `<الاسم> frame 001.png` في مجلد جديد `<الاسم> frames`. ويعرض الزر عدد ما
+  سيُكتب («حفظ ⁦3⁩ إطارات»).
+- **حجب الفيديو — `tools.videoredact`.** اسحب مستطيلًا فوق ما يجب إخفاؤه، وأعطِ كل منطقة مداها الزمني
+  واختر تعبئة صلبة أو ضبابًا؛ والنتيجة كلها مخطط مرشّحات واحد في FFmpeg وملف `<الاسم> Redacted.<الامتداد>`.
+- تحتفظ أدوات الفيديو بحاويات MP4 وMOV وMKV وWebM وتكتب الحاويات القديمة (AVI وWMV وFLV وMPG و3GP وTS)
+  بصيغة MP4. والتشغيل الملغى أو الفاشل لا يترك ملفًا مؤقتًا ولا نتيجة ناقصة.
+
+#### الصوت
+
+- **اقتصاص الصوت — `tools.audiotrim`.** الموجة الحقيقية بمقبضَي بداية ونهاية برتقاليين قابلين للسحب،
+  ومربّعا وقت دقيقان، وخيار اقتصاص الصمت الطرفي تلقائيًا، وتشغيل المقطع المحدّد؛ والناتج
+  `<الاسم> Trimmed.<الامتداد>`.
+- **تطبيع الصوت — `tools.audionormalize`.** هدف ⁦EBU R128⁩، ثم تحليل يقيس المصدر ويتوقّع النتيجة على
+  الموجة، ثم تطبيق بمرورين إلى `<الاسم> Normalized.<الامتداد>`.
+- **قنوات الصوت — `tools.audiochannels`.** أحادي أو ستيريو، ومستويا صوت للقناتين، وعزل قناة، مع الموجة
+  الحقيقية أمامك؛ والناتج `<الاسم> Mono.<الامتداد>` أو `<الاسم> Stereo.<الامتداد>`.
+- **استبدال الصوت بصافرة — `tools.audiobleep`.** اسحب مقاطع على طبقة الصافرة فوق الموجة، وغيّر أحجامها،
+  واضبط النغمة بالهرتز ومستواها، وعاين «مع الصافرات»، ثم احفظ `<الاسم> Bleeped.<الامتداد>`.
+- **مُصوِّر الصوت — `tools.audiovisualizer`.** حوّل الصوت إلى ⁦MP4⁩ بموجة متحركة أو بمؤشر متجهي، على
+  خلفية سوداء أو فوق صورة ثابتة، بأبعاد عرضية أو طولية أو مربّعة: `<الاسم> Visualizer.mp4`.
+- تحتفظ أدوات الصوت بصيغة المصدر حين يستطيع FFmpeg كتابتها (فيصبح ⁦WMA⁩ ملف ⁦MP3⁩)، وتحتاج FFmpeg؛ وبدونه
+  تبقى قطاعاتها باهتة على العجلة مع دعوة تنزيل الأداة.
+
+#### المستندات
+
+- **الدمج إلى PDF — `tools.pdfmerge`.** ملفا PDF أو أكثر و/أو صور في `Merged.pdf` واحد بالترتيب الذي
+  تضبطه بالأسهم؛ يُحفظ تدوير كل صفحة، والصورة الواحدة صفحة واحدة بالضبط، والمصدر التالف أو المحمي بكلمة
+  مرور يفشل برسالة بدل ملف نصف مكتوب.
+- **تنظيم الصفحات — `tools.pdforganize`.** بطاقة مرقّمة لكل صفحة: اسحب لإعادة الترتيب، ودوّر، وكرّر، واحذف
+  (لا آخر صفحة أبدًا)، مع خيار «جعل كل الصفحات بالعرض نفسه»؛ والناتج `<الاسم> Organized.pdf` والأصل سليم.
+
+#### أي ملف
+
+- **ضغط الملف — `tools.compress`.** صورة أو ملف صوت أو فيديو أو PDF واحد، بإعداد جاهز أو حجم مستهدف أو
+  نسبة مئوية، مع خيار تحديد حدّ أقصى للضلع الأطول في الصور. الناتج `<الاسم> Compressed.<الامتداد>`؛
+  ويحتفظ الفيديو والصوت بالمدّة ومسار الصوت، والحجم المستهدف هدف يبلغه المرمّز في حدود ⁦10⁩٪ أعلى منه
+  تقريبًا، وضغط الصور لا يكبّرها أبدًا.
+- **تعديل البيانات الوصفية — `tools.metadata`.** أقسام قابلة للبحث (الملف، الصورة، مسار الفيديو، مسار
+  الصوت، ⁦ExifIFD⁩، ⁦IPTC⁩، ⁦XMP⁩، معلومات PDF، الفصول) مع تقديم الصفوف القابلة للتحرير، وإزالة حقل
+  بحقل، والفصول بصيغة `mm:ss العنوان`، وزر **إزالة الكل** الذي يمحو أيضًا بيانات الكاميرا والمعالجة
+  المخفية. الناتج `<الاسم> Edited metadata.<الامتداد>`.
+
+#### الحماية والخصوصية
+
+- **الحماية بكلمة مرور — `tools.protect`.** ملف واحد أو مجلد واحد أو عدة ملفات تصبح
+  `<الاسم> Protected.zip` بتشفير ⁦AES-256⁩ على مستوى العنصر (WinZip)، أو `<الاسم> Protected.pdf` بتشفير
+  ⁦AES-256⁩ (⁦PDF 2.0⁩) عند اختيار ملف ⁦PDF⁩ واحد. حقلان لكلمة المرور وسطر مطابقة ومقياس قوة وحدّ أدنى
+  من ⁦8⁩ أحرف؛ ولا تُحفظ كلمة المرور، وتذكر النافذة الحدّين المهمين: الأرشيف لا يخفي أسماء ملفاته، وأذونات
+  مالك ⁦PDF⁩ يطبّقها القارئ لا DropWheel.
+- **إزالة كلمة المرور — `tools.unlock`.** ملف ⁦ZIP⁩ أو ⁦PDF⁩ محمي واحد يصبح `<الاسم> Unlocked.zip` أو
+  `<الاسم> Unlocked.pdf`؛ وكلمة المرور الخاطئة أو التشغيل الملغى لا يتركان ملفًا ناقصًا، والأرشيف غير
+  المشفّر يُبلَّغ عنه بأنه غير محمي بدل إعادة كتابته. ولا تُحاول الأداة استعادة كلمة المرور.
+- **قفل الملفات — `tools.lock` (إصدار تجريبي).** يُحوَّل الملف أو المجلد **في مكانه** إلى حاوية واحدة
+  مكتفية ذاتيًّا بامتداد ⁦.dwenc⁩ أو ⁦.dwdir⁩: يصبح `report.pdf` ملف `report.pdf.dwenc`، ويصبح `Photos`
+  مجلد `Photos.dwdir`. وتحمل الحاوية مغلّفًا بثلاثة مداخل (كلمة سر الملف، وكلمة سر المنقذ، ومفتاح المنقذ
+  الذي يظهر مرة واحدة)، وترويسة موثّقة، وإطارات ⁦AES-256-GCM⁩ مقسّمة، واستبدالًا ذرّيًّا موثّقًا، وشارة
+  `desktop.ini` للمجلد بقفل بنفسجي بلونين، وإعادة قفل تلقائية واستردادًا بعد الانهيار. ولا تُكتب كلمة سر
+  ولا مفتاح تحت `%LOCALAPPDATA%\DropWheel`، ونسخة سلة المحذوفات متوقفة افتراضيًّا، والعمل على السجل يبقى
+  للمستخدم الحالي (⁦HKCU⁩).
+
+#### نوافذ الأدوات والعجلة والحركة
+
+- **أداة عائمة واحدة، ⁦26⁩ مرة.** كل أداة في ملفها وتُسجّل نفسها؛ والسجل هو القائمة الوحيدة، ويفتح القطاع
+  نافذته بحسب معرّف الأداة، فلا تتنافس أدوات القصّ والتعليقات وتعديل الصور على الصورة نفسها.
+- **النوافذ تتكيّف مع الوسائط.** تُفتح الأداة بحجمها الافتراضي، وتفحص الملف في الخلفية، ثم تتحرك في ⁦180⁩
+  مللي ثانية إلى حجم يناسب نسبة أبعاد الوسائط داخل حدود معاينتها، مقيَّدًا بـ⁦95⁩٪ من عرض مساحة العمل
+  و⁦90⁩٪ من ارتفاعها على شاشة المؤشر؛ ولا تُكبَّر الوسائط الصغيرة أكثر من ⁦200⁩٪. وحدود المعاينة وحجم
+  الهيكل وأصغر لوحة تبقى مع الأداة نفسها.
+- **سرعة الهيكل ولونه.** تُعلن كل أداة فعلها على الزر الأساسي («إنشاء تجميع»، «دمج ملفات PDF»،
+  «حفظ نسخة معدّلة»، «تشفير»…)، و**إعادة ضبط** على اليسار دائمًا، و**Esc** يغلق، و**Enter** ينفّذ الإجراء
+  الأساسي، وشريط العنوان يسحب البطاقة، وتُعلَن النتيجة المحفوظة بإشعار «تم الحفظ» يذكر اسم الملف. وتستخدم
+  الأدوات فرش السمة وحدها وتتبع تبديل الوضع الفاتح/الداكن الحي.
+- **الحركة مجموعة رموز لا زخرفة.** ملف واحد (`UI/Motion/Motion.cs`) يملك كل المدَد ومنحنيات التهدئة؛ ولا
+  تُحرَّك إلا خصائص `RenderTransform` و`Opacity` (والاستثناء الوحيد إعادة تحجيم الوسائط في ⁦180⁩ مللي
+  ثانية)، ولا شيء يستقصي دوريًّا، ومع إيقاف **الإعدادات ← عام ← الحركات** — أو إيقاف تأثيرات الحركة في
+  Windows — تصبح كل الانتقالات فورية بلا كلفة في الخمول.
+- **لا شيء يُستبدل.** تذهب النتائج إلى المجلد الذي حُلّت إليه الإفلاتة (قواعد ⁦2.2.3⁩) أو بجانب المصدر،
+  والنتيجة الثانية تصبح `<الاسم> (2).<الامتداد>`.
+
+#### الأداء والجودة
+
+- تفشّل بوابة الحركة في `--self-test` الاختبار إذا تجاوز الإطار p95 في خيط الواجهة **⁦16.7⁩ مللي ثانية**،
+  أو تجاوز خمول المعالج **⁦5⁩٪**، أو احتفظت أسطح الحركة بأكثر من **⁦12⁩ ميغابايت** بعد الإغلاق. وفي
+  التشغيل المسجّل على رأس الدمج: p95 للواجهة **⁦0.02–0.07⁩ مللي ثانية**، وخمول المعالج **⁦0.39⁩٪**،
+  والاحتفاظ **⁦0.0⁩ ميغابايت** (`docs/PERF.md`).
+- يقيّد ضغط الفيديو متوسط مروره المزدوج بـ`maxrate`/`bufsize` ليبلغ الحجم المستهدف بأمانة، والتشغيل الملغى
+  ينظّف ملفاته المؤقتة دون المساس بالمصدر.
+- يحمل جدولا النصوص **⁦1,094⁩ مفتاحًا لكل منهما** بمجموعات مفاتيح وعناصر بديلة متطابقة، تفرضها اختبارات
+  التوطين في CI؛ ويعرض الاختبار الذاتي التطبيق بالإنجليزية والعربية بالوضعين الفاتح والداكن.
+
+#### ليس في هذا الإصدار
+
+- **لا كشف وجوه في حجب الصورة.** المخرَج يشمل المناطق اليدوية وكشف النص بالتعرف الضوئي؛ أما كاشف الوجوه
+  فيحتاج إمّا إسقاط Windows SDK الذي لا تحمله هذه النسخة أو حزمة خارجية جديدة.
+- **قراءة رمز QR للقراءة فقط**، ولا يُفتح من الرمز إلا `http` و`https`.
+- **قفل الملفات إصدار تجريبي** حتى يعتمده المالك نهائيًّا.
+- الملفات التنفيذية ما زالت غير موقّعة بـAuthenticode (قد يسأل SmartScreen مرة واحدة)؛ أما التحديثات
+  التلقائية فموقّعة منفصلًا بـ⁦ECDSA P-256⁩.
+- جدولا النصوص مكتملان ومفروضان (⁦1,094⁩ مفتاحًا لكل منهما، بمجموعات مفاتيح وعناصر بديلة متطابقة،
+  واختبارات تطابق في CI)، والاختبار الذاتي يعرض النسخة المُسلَّمة. أما بوابة عرض كل نافذة بالعربية
+  والإنجليزية بدقة ⁦100⁩٪ و⁦150⁩٪ و⁦200⁩٪ فهي قيد الإنجاز في `audit/selftest`؛ وإلى أن تصبح خضراء لا
+  يُدَّعى أن كل نافذة عُرضت باللغتين.
 
 ## 2.3.0
 
