@@ -114,6 +114,192 @@ internal static class SelfTest
         }
     }
 
+    /// <summary>
+    /// Recognises <c>--screenshots [folder]</c> as the first argument, the same shape as
+    /// <c>--self-test [folder]</c>. Split out of <see cref="Program.Main"/> so a unit test can prove the
+    /// flag is recognised without starting WPF.
+    /// </summary>
+    internal static bool TryScreenshots(string[] args, out string outDir)
+    {
+        outDir = "screenshots";
+        if (args.Length == 0 || args[0] != "--screenshots")
+            return false;
+        if (args.Length >= 2 && !args[1].StartsWith("--", StringComparison.Ordinal))
+            outDir = args[1];
+        return true;
+    }
+
+    /// <summary>
+    /// <c>DropWheel.exe --screenshots [folder]</c>: the production renderer behind the website assets.
+    /// For en/ar × dark/light it renders the real wheel and Settings window and all registered tool
+    /// windows into <c>&lt;folder&gt;/&lt;language&gt;/&lt;theme&gt;/{wheel,settings,tools}</c> (other
+    /// preview surfaces go to <c>other/</c>) and exits 0. It deliberately does NOT run the cold-start /
+    /// idle-memory budget, the motion gates, the lock/settings round trips or the 20× open/close leak
+    /// loops: those stay in <see cref="Run"/> and are not weakened by this mode.
+    /// </summary>
+    public static int RunScreenshots(string outDir)
+    {
+        var log = new List<string>();
+        var work = Path.Combine(outDir, ".work");
+        try
+        {
+            Directory.CreateDirectory(outDir);
+            if (Directory.Exists(work))
+                Directory.Delete(work, recursive: true);
+            _ = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            JobCard.Animate = false;
+
+            // Same real update service the installed app builds. Creating it starts no network work; it is
+            // here so the rendered Settings window takes the production path instead of a test-only one.
+            using var updateService = new UpdateService(
+                typeof(Program).Assembly.GetName().Version ?? new Version(2, 2, 1),
+                UpdatePaths.IsPortable);
+            SettingsWindow.Updates = updateService;
+            try
+            {
+                var samplesDir = Path.Combine(work, "samples");
+                Directory.CreateDirectory(samplesDir);
+                var samples = CreateToolSamples(samplesDir);
+                foreach (var (language, dark, languageFolder, themeFolder) in new[]
+                         {
+                             (UiLanguage.English, true, "en", "dark"),
+                             (UiLanguage.English, false, "en", "light"),
+                             (UiLanguage.Arabic, true, "ar", "dark"),
+                             (UiLanguage.Arabic, false, "ar", "light"),
+                         })
+                {
+                    LanguageManager.Apply(language);
+                    Theme.Override = dark;
+                    Theme.Refresh();
+                    var keys = Loc.KeyCount;
+                    if (keys < 300)
+                        throw new InvalidOperationException(
+                            $"localization loaded only {keys} keys for {Loc.Current}; embedded string tables are broken");
+
+                    var staging = Path.Combine(work, languageFolder + "-" + themeFolder);
+                    var destination = Path.Combine(outDir, languageFolder, themeFolder);
+                    RenderAll(staging, language, log, measureLaunch: false);
+                    // Re-runs must not keep a stale PNG that the current build no longer renders.
+                    if (Directory.Exists(destination))
+                        Directory.Delete(destination, recursive: true);
+                    MoveSurfaces(staging, destination);
+                    RenderTools(Path.Combine(destination, "tools"), samples, log);
+                    log.Add($"ok {languageFolder}/{themeFolder}: wheel {CountPngs(Path.Combine(destination, "wheel"))}, " +
+                            $"settings {CountPngs(Path.Combine(destination, "settings"))}, " +
+                            $"tools {CountPngs(Path.Combine(destination, "tools"))}, " +
+                            $"other {CountPngs(Path.Combine(destination, "other"))}");
+                }
+            }
+            finally
+            {
+                SettingsWindow.Updates = null;
+            }
+
+            LanguageManager.Apply(UiLanguage.English);
+            Theme.Override = null;
+            Theme.Refresh();
+
+            Directory.Delete(work, recursive: true);
+            File.WriteAllLines(Path.Combine(outDir, "screenshots.txt"), log);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            log.Add("FAILED: " + ex);
+            try
+            {
+                Directory.CreateDirectory(outDir);
+                File.WriteAllLines(Path.Combine(outDir, "screenshots.txt"), log);
+                if (Directory.Exists(work))
+                    Directory.Delete(work, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Moves the previews <see cref="RenderAll"/> wrote at the staging root into the website's fixed
+    /// layout: <c>wheel/</c> (wheel surfaces), <c>settings/</c>, and <c>other/</c> for the remaining
+    /// surfaces (shelf, jobs, wheel editor, parameter dialog).
+    /// </summary>
+    private static void MoveSurfaces(string staging, string destination)
+    {
+        var wheel = Path.Combine(destination, "wheel");
+        Directory.CreateDirectory(wheel);
+        foreach (var file in Directory.GetFiles(staging, "wheel-*.png"))
+        {
+            // The wheel editor is a Settings-side window, not a wheel surface: it belongs in other/.
+            if (string.Equals(Path.GetFileName(file), "wheel-editor.png", StringComparison.OrdinalIgnoreCase))
+                continue;
+            File.Move(file, Path.Combine(wheel, Path.GetFileName(file)));
+        }
+
+        var settings = Path.Combine(destination, "settings");
+        Directory.CreateDirectory(settings);
+        MoveIfExists(Path.Combine(staging, "settings.png"), Path.Combine(settings, "settings.png"));
+
+        var other = Path.Combine(destination, "other");
+        Directory.CreateDirectory(other);
+        foreach (var file in Directory.GetFiles(staging, "*.png"))
+            File.Move(file, Path.Combine(other, Path.GetFileName(file)));
+
+        Directory.Delete(staging, recursive: true);
+    }
+
+    private static void MoveIfExists(string source, string destination)
+    {
+        if (File.Exists(source))
+            File.Move(source, destination);
+    }
+
+    private static int CountPngs(string directory) =>
+        Directory.Exists(directory) ? Directory.GetFiles(directory, "*.png").Length : 0;
+
+    /// <summary>
+    /// Renders every registered tool exactly once with the same sample media the self-test uses. There is
+    /// no warm-up/leak loop and no working-set gate here; the preview is captured once per combination.
+    /// </summary>
+    private static void RenderTools(string directory, IReadOnlyList<FileItem> samples, List<string> log)
+    {
+        Directory.CreateDirectory(directory);
+        if (ToolRegistry.All.Count == 0)
+            throw new InvalidOperationException("no tool windows registered");
+
+        // Capture the settled state: the open fade must not be caught mid-animation by the PNG encoder.
+        var previousMotion = Motion.Override;
+        Motion.Override = false;
+        try
+        {
+            foreach (var spec in ToolRegistry.All)
+            {
+                var items = FindToolSample(spec, samples)
+                    ?? throw new InvalidOperationException(
+                        $"the screenshots mode has no sample media for '{spec.Id}'; add its format to CreateToolSamples()");
+                var window = new ToolWindow(spec, items, null);
+                ShowOffscreen(window);
+                var prepared = PumpTool(() => window.PrepareAsync(animate: false), TimeSpan.FromSeconds(20));
+                PumpFor(TimeSpan.FromMilliseconds(300));
+                if (prepared)
+                {
+                    SaveWindow(window, Path.Combine(directory, PreviewName(spec) + ".png"), window.Width, desktop: true);
+                    log.Add($"ok tools/{PreviewName(spec)}");
+                }
+                else
+                {
+                    log.Add($"skipped tools/{PreviewName(spec)} (the preview did not prepare within 20 s)");
+                }
+                CloseToolWindow(window);
+            }
+        }
+        finally
+        {
+            Motion.Override = previousMotion;
+        }
+    }
+
     private static void RenderAll(string outDir, UiLanguage language, List<string> log, bool measureLaunch)
     {
         Directory.CreateDirectory(outDir);

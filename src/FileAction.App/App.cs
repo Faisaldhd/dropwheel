@@ -25,6 +25,10 @@ public static class Program
 
         if (args.Length >= 1 && args[0] == "--self-test")
             return SelfTest.Run(args.Length >= 2 ? args[1] : "self-test");
+        // 2.4.1 production screenshot mode for the website: renders the four language/theme combinations
+        // and exits, without the self-test's performance, motion, lock and leak gates.
+        if (SelfTest.TryScreenshots(args, out var screenshotsDir))
+            return SelfTest.RunScreenshots(screenshotsDir);
         if (args.Contains("--diagnose"))
             return Diagnose.Run(args.SkipWhile(a => a != "--diagnose").Skip(1).FirstOrDefault());
         if (args.Contains("--set-watch"))
