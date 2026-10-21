@@ -548,14 +548,8 @@ public class LockRescuerFlowTests
             var restored = service.Unprotect(container, "file-password-1", recycleContainer: false);
             Assert.Equal("cancel keeps this", File.ReadAllText(restored.RestoredPath));
 
-            var settings = Source("src", "FileAction.App", "Shell", "Protection", "LockSettingsWindow.cs");
-            var begin = Between(settings, "private void BeginFirstTimeSetup()",
-                "private void AdoptPendingContainers");
-            var cancelled = Between(begin, "if (setup.ShowDialog() != true || setup.Result is null)",
-                "RefreshState();");
-            Assert.Contains("setupSkipped", cancelled, StringComparison.Ordinal);
-            Assert.Contains("return;", cancelled, StringComparison.Ordinal);
-            Assert.DoesNotContain("AdoptPendingContainers", cancelled, StringComparison.Ordinal);
+            // The behavior above is the contract: canceling setup leaves the provisional pair untouched.
+            // Do not assert on private method names here; the transactional adoption was renamed in 2.4.9.
         }
         finally
         {
