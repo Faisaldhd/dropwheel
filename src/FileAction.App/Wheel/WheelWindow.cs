@@ -58,6 +58,7 @@ internal sealed class WheelWindow : Window
     private readonly StackPanel _tabs = new() { Orientation = Orientation.Horizontal };
     private readonly Border _tabTrack = new() { CornerRadius = new CornerRadius(10), Padding = new Thickness(2), HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
     private readonly StackPanel _hubContent = new() { Width = InnerRadius * 1.75 };
+    private Action? _afterClose;
 
     private IReadOnlyList<FileItem> _items;
     private IReadOnlyList<Operation> _ops = [];
@@ -394,8 +395,10 @@ internal sealed class WheelWindow : Window
         _closeTimer.Start();
     }
 
-    public void Finish()
+    public void Finish(Action? afterClose = null)
     {
+        if (afterClose is not null)
+            _afterClose = afterClose;
         if (_finished)
             return;
         _finished = true;
@@ -411,6 +414,25 @@ internal sealed class WheelWindow : Window
         }
         // ~100 ms: fade the window while the disc scales down by 3.5 %.
         Motion.Play(Motion.CloseWheel(this, _motion, Close), this);
+    }
+
+    /// <summary>
+    /// The chosen action runs only after the wheel's close animation has released the window, so a tool
+    /// window never pops on top of a still-visible wheel.
+    /// </summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        var after = _afterClose;
+        _afterClose = null;
+        base.OnClosed(e);
+        try
+        {
+            after?.Invoke();
+        }
+        catch
+        {
+            // A tool failing to open must not take the app down after the wheel closed.
+        }
     }
 
     /// <summary>Renders the wheel to a PNG without showing it (used by --self-test).</summary>
@@ -669,13 +691,11 @@ internal sealed class WheelWindow : Window
             // drop on a parent that cannot expand.
             if (OpenGroup is { } open)
             {
-                Finish();
-                open(group, items);
+                Finish(() => open(group, items));
             }
             return;
         }
-        Finish();
-        Dispatch(op, items);
+        Finish(() => Dispatch(op, items));
     }
 
     private void Dispatch(Operation op, IReadOnlyList<FileItem> items)
