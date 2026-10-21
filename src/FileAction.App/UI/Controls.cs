@@ -80,9 +80,9 @@ internal static class Controls
             Background = Theme.Card,
             BorderBrush = Theme.PanelBorder,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(10),
-            Padding = new Thickness(18, 14, 18, 14),
-            Margin = new Thickness(0, 0, 0, 4),
+            CornerRadius = new CornerRadius(Design.Radius.Card),
+            Padding = Design.CardPadding,
+            Margin = new Thickness(0, 0, 0, Design.Space.Sm),
             Child = content,
         };
     }
