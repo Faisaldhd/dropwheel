@@ -44,6 +44,9 @@ internal sealed class SettingsWindow : Window
     private readonly Action _changed;
     private readonly List<ScrollViewer> _pages = [];
 
+    /// <summary>The tab host lives inside the custom rounded frame; kept for SelectTab/rebuilds.</summary>
+    private TabControl? _tabs;
+
     /// <summary>The scroll area of the selected tab; <see cref="Rebuild"/> restores its position.</summary>
     private ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private int _tabIndex;
@@ -55,14 +58,17 @@ internal sealed class SettingsWindow : Window
         _changed = changed;
         Theme.Refresh();
         Title = T("settings.title");
-        Width = 680;
-        Height = 820;
+        WindowStyle = WindowStyle.None;
+        AllowsTransparency = true;
+        ResizeMode = ResizeMode.NoResize;
+        Background = Brushes.Transparent;
+        Width = 700;
+        Height = 860;
         MinWidth = 520;
         UiSetup.Configure(this);
-        // At 200 % display scaling an 820-DIP window is taller than a 1080p work area.
-        UiSetup.FitToWorkArea(this, 680, 820, 520, 360);
+        // At 200 % display scaling an 860-DIP window is taller than a 1080p work area.
+        UiSetup.FitToWorkArea(this, 700, 860, 520, 360);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Background = Theme.Page;
         FontFamily = Theme.UiFont;
         Build();
         Closed += (_, _) =>
@@ -98,7 +104,7 @@ internal sealed class SettingsWindow : Window
         if (_pages.Count == 0)
             return;
         _tabIndex = Math.Clamp(index, 0, _pages.Count - 1);
-        if (Content is TabControl tabs)
+        if (_tabs is { } tabs)
             tabs.SelectedIndex = _tabIndex;
         _scroll = _pages[_tabIndex];
     }
@@ -146,7 +152,7 @@ internal sealed class SettingsWindow : Window
     private void ShowBuildFailure(Exception ex)
     {
         Title = "DropWheel – settings";
-        Background = Theme.Page;
+        Background = Brushes.Transparent;
         FlowDirection = LanguageManager.FlowDirection;
         var panel = new StackPanel { Margin = new Thickness(32, 28, 32, 32), MaxWidth = 720 };
         panel.Children.Add(Text("DropWheel settings could not be drawn.", 20, FontWeights.SemiBold));
@@ -154,14 +160,133 @@ internal sealed class SettingsWindow : Window
             "The window hit an unexpected error. Run \"DropWheel.exe --diagnose\" and send the report; " +
             "the details are also in log.txt.", 13, brush: Theme.Muted));
         panel.Children.Add(Text($"{ex.GetType().Name}: {ex.Message}", 12, brush: Theme.Error));
-        Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        Content = BuildFrame(new ScrollViewer
+        {
+            Content = panel,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        });
     }
+
+    /// <summary>
+    /// The same rounded frame as the floating tools: translucent window, 20 DIP corners, a title bar with
+    /// one close control, and a clipped body. Settings has no native title bar so it reads as one product
+    /// with the tool windows instead of a stock Windows dialog.
+    /// </summary>
+    private FrameworkElement BuildFrame(UIElement body)
+    {
+        var close = new Border
+        {
+            Width = 32,
+            Height = 32,
+            CornerRadius = new CornerRadius(16),
+            Background = Theme.Track,
+            Child = new TextBlock
+            {
+                Text = "\uE711",
+                FontFamily = Theme.Icons,
+                FontSize = Design.Icon.Inline,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = Theme.Text,
+            },
+            Cursor = Cursors.Hand,
+            ToolTip = T("tool.window.close"),
+            Focusable = true,
+        };
+        KeyboardNavigation.SetIsTabStop(close, true);
+        close.MouseLeftButtonDown += (_, e) =>
+        {
+            e.Handled = true;
+            Close();
+        };
+        close.KeyDown += (_, e) =>
+        {
+            if (e.Key is Key.Enter or Key.Space)
+            {
+                e.Handled = true;
+                Close();
+            }
+        };
+        Motion.Interactive(close);
+
+        var title = Text(T("settings.title"), Design.Type.Title, FontWeights.SemiBold);
+        title.HorizontalAlignment = HorizontalAlignment.Center;
+        title.VerticalAlignment = VerticalAlignment.Center;
+
+        var bar = new DockPanel
+        {
+            // WPF only hit-tests a panel where it paints; transparent is required for the empty title
+            // space to start DragMove, not just the title glyphs.
+            Background = Brushes.Transparent,
+            Margin = new Thickness(Design.Gutter, Design.Space.Xl, Design.Gutter, Design.Space.Md),
+        };
+        DockPanel.SetDock(close, Dock.Left);
+        bar.Children.Add(close);
+        bar.Children.Add(title);
+        bar.MouseLeftButtonDown += (_, _) =>
+        {
+            if (close.IsMouseOver)
+                return;
+            if (Mouse.LeftButton == MouseButtonState.Pressed)
+                DragMove();
+        };
+
+        var grid = new Grid { ClipToBounds = true };
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        Grid.SetRow(bar, 0);
+        Grid.SetRow(body, 1);
+        grid.Children.Add(bar);
+        grid.Children.Add(body);
+        grid.SizeChanged += (_, _) =>
+        {
+            if (grid.ActualWidth <= 0 || grid.ActualHeight <= 0)
+                return;
+            grid.Clip = new RectangleGeometry(
+                new Rect(0, 0, grid.ActualWidth, grid.ActualHeight),
+                Design.Radius.Window - 1, Design.Radius.Window - 1);
+        };
+
+        UseLayoutRounding = true;
+        SnapsToDevicePixels = true;
+        return new Border
+        {
+            CornerRadius = new CornerRadius(Design.Radius.Window),
+            Background = Theme.Panel,
+            BorderBrush = Theme.PanelBorder,
+            BorderThickness = new Thickness(1),
+            // 24 DIP leaves room for the 38 DIP dark halo inside the transparent window bounds.
+            Margin = new Thickness(24),
+            Effect = WindowShadow(),
+            Child = grid,
+        };
+    }
+
+    /// <summary>
+    /// A black drop shadow disappears on the dark page, so dark mode gets a soft violet halo; light mode
+    /// keeps the neutral shadow.
+    /// </summary>
+    private static System.Windows.Media.Effects.DropShadowEffect WindowShadow() => Theme.IsDark
+        ? new System.Windows.Media.Effects.DropShadowEffect
+        {
+            BlurRadius = 38,
+            ShadowDepth = 0,
+            Opacity = 0.55,
+            Color = Theme.AccentColor,
+        }
+        : new System.Windows.Media.Effects.DropShadowEffect
+        {
+            BlurRadius = 30,
+            ShadowDepth = 6,
+            Opacity = 0.28,
+            Color = Colors.Black,
+        };
 
     private void BuildCore()
     {
         Title = T("settings.title");
         FlowDirection = LanguageManager.FlowDirection;
-        Background = Theme.Page;
+        Background = Brushes.Transparent;
 
         var itemStyle = TabItemStyle();
         var tabs = new TabControl
@@ -194,7 +319,8 @@ internal sealed class SettingsWindow : Window
         _tabIndex = Math.Clamp(selected, 0, _pages.Count - 1);
         tabs.SelectedIndex = _tabIndex;
         _scroll = _pages[_tabIndex];
-        Content = tabs;
+        _tabs = tabs;
+        Content = BuildFrame(tabs);
     }
 
     private void AddTab(TabControl tabs, Style itemStyle, string header, ScrollViewer page)
