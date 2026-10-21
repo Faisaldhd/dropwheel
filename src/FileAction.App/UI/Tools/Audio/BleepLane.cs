@@ -32,6 +32,7 @@ internal sealed class BleepLaneView : FrameworkElement
     private DragMode _mode;
     private int _dragIndex = -1;
     private double _anchor;
+    private double? _playhead;
 
     private enum DragMode
     {
@@ -56,6 +57,19 @@ internal sealed class BleepLaneView : FrameworkElement
     public IReadOnlyList<AudioRange> Ranges => _ranges;
 
     public int Selected => _selected;
+
+    /// <summary>Current preview position in seconds; draws a vertical line over the layer.</summary>
+    public double? Playhead
+    {
+        get => _playhead;
+        set
+        {
+            if (_playhead == value)
+                return;
+            _playhead = value;
+            InvalidateVisual();
+        }
+    }
 
     /// <summary>Ranges or the selection changed; repaint the count, the audio lane and the toolbar.</summary>
     public event Action? Changed;
@@ -101,6 +115,12 @@ internal sealed class BleepLaneView : FrameworkElement
 
         for (var i = 0; i < _ranges.Count; i++)
             DrawSection(dc, _ranges[i], i == _selected, width, height);
+
+        if (_playhead is { } playhead && playhead >= 0 && playhead <= Duration)
+        {
+            var x = XFor(playhead, width);
+            dc.DrawLine(new Pen(Theme.Text, 1.5), new Point(x, 0), new Point(x, height));
+        }
     }
 
     private void DrawSection(DrawingContext dc, AudioRange range, bool selected, double width, double height)
