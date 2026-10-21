@@ -121,7 +121,7 @@ internal sealed class UnlockedPanel : Window
         };
         // A short confirmation only: the session keeps locking in the background, the panel does not
         // need to sit on top of every window for the whole editing session.
-        _hide = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Normal, (_, _) =>
+        _hide = new DispatcherTimer(TimeSpan.FromSeconds(1.5), DispatcherPriority.Normal, (_, _) =>
         {
             _hide.Stop();
             Hide();
