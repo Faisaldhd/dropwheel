@@ -364,6 +364,7 @@ internal sealed class AnnotateView
             Visibility = Visibility.Collapsed,
         };
         _previewHost = new Grid { Margin = new Thickness(0, 6, 0, 10), ClipToBounds = true };
+        MediaSurface.Round(_previewHost);
         _previewHost.Children.Add(_surface);
         _previewHost.Children.Add(_placeholder);
         _previewHost.Children.Add(_editorShade);

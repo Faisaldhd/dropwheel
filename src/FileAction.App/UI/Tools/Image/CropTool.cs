@@ -218,7 +218,7 @@ internal sealed class CropView
         var height = _preview.ActualHeight;
         if (width <= 0 || height <= 0)
             return;
-        _preview.Clip = new RectangleGeometry(new Rect(0, 0, width, height), 8, 8);
+        _preview.Clip = new RectangleGeometry(new Rect(0, 0, width, height), Design.Radius.Card, Design.Radius.Card);
     }
 
     private FrameworkElement BuildChips()

@@ -194,6 +194,7 @@ internal sealed class RedactView
         _preview.Children.Add(_overlay);
         _preview.Children.Add(new Grid { Children = { _placeholder } });
         _preview.SizeChanged += (_, _) => Layout();
+        MediaSurface.Round(_preview);
 
         return new Border
         {

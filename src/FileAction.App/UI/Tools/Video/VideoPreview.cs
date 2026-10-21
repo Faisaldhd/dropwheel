@@ -78,6 +78,7 @@ internal sealed class VideoEditPreview : IDisposable
         _surface.Children.Add(_placeholder);
         _surface.Children.Add(_message);
         _surface.SizeChanged += (_, _) => SurfaceChanged?.Invoke();
+        MediaSurface.Round(_surface);
 
         View = new Border
         {

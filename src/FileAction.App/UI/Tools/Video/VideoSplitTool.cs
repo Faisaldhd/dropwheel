@@ -254,6 +254,7 @@ internal sealed class VideoSplitView
     private FrameworkElement BuildPreview()
     {
         _preview.Margin = new Thickness(0, 2, 0, 8);
+        MediaSurface.Round(_preview);
         return new Border
         {
             Background = Theme.Card,
