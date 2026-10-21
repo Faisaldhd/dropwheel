@@ -194,6 +194,17 @@ public class WheelGeometryTests
         throw new InvalidOperationException("FileAction.sln not found above the test output");
     }
 
+    [Fact]
+    public void Inner_hover_is_sticky_past_the_slice_midpoint()
+    {
+        // Five slices, 72 degrees each. Slice 0 is centered at 0.
+        Assert.Equal(0, WheelWindow.InnerHoverIndex(30, 5, 0));  // before midpoint + 8
+        Assert.Equal(0, WheelWindow.InnerHoverIndex(40, 5, 0));  // midpoint, still sticky
+        Assert.Equal(1, WheelWindow.InnerHoverIndex(46, 5, 0));  // past midpoint + 8
+        Assert.Equal(1, WheelWindow.InnerHoverIndex(80, 5, 1));
+        Assert.Equal(4, WheelWindow.InnerHoverIndex(330, 5, 4)); // wraps across 0
+    }
+
     private sealed class FakeOperation(string id, string? label = null, string? subtitle = null)
         : Operation(id, WheelKind.Tools, label ?? id, "x", subtitle)
     {

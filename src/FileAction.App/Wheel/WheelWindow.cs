@@ -107,6 +107,12 @@ internal sealed class WheelWindow : Window
 
     internal const int InnerPerPage = 5;
 
+    /// <summary>
+    /// Keeps the current inner slice selected for this many degrees past its midpoint. Without it the
+    /// highlight flips on every pixel at a slice boundary and the small ring feels twitchy.
+    /// </summary>
+    internal const double InnerHysteresisDeg = 8;
+
     // ------------------------------------------------------------------ motion budget
     /// <summary>Hovering a category opens it only after the pointer rests on it this long.</summary>
     internal const double DwellMs = 450;
@@ -1687,6 +1693,27 @@ internal sealed class WheelWindow : Window
             _execute(op, items, _targets);
     }
 
+    private double AngleAt(Point point)
+    {
+        var dx = point.X - Size / 2;
+        var dy = point.Y - Size / 2;
+        return (Math.Atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+    }
+
+    /// <summary>
+    /// Nearest inner slice, but sticky: the current slice stays selected until the pointer is
+    /// <see cref="InnerHysteresisDeg"/> degrees past its midpoint. This removes the boundary flicker
+    /// without changing click/drop hit-testing, which still uses the exact slice.
+    /// </summary>
+    internal static int InnerHoverIndex(double angle, int count, int current)
+    {
+        if (count <= 1 || current < 0 || current >= count)
+            return SliceIndexAt(angle, count);
+        var step = 360.0 / count;
+        var delta = Math.Abs((angle - SliceAngle(current, count) + 540) % 360 - 180);
+        return delta <= step / 2 + InnerHysteresisDeg ? current : SliceIndexAt(angle, count);
+    }
+
     /// <summary>
     /// The single hover rule of the two-ring wheel, shared by Click and Drag mode: outer slices dwell
     /// for <see cref="DwellMs"/> when no ring is open; once it is open, moving to another category swaps
@@ -1704,7 +1731,7 @@ internal sealed class WheelWindow : Window
                 CancelDwell();
                 CancelSwapDwell();
                 _suppressIndex = -1;
-                SetInnerHighlight(hit.Index);
+                SetInnerHighlight(InnerHoverIndex(AngleAt(point), _innerChoices.Count, _innerHighlight));
                 break;
             case WheelZone.Outer:
                 SetInnerHighlight(-1);
