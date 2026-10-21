@@ -84,7 +84,7 @@ internal sealed class RescuerSetupWindow : Window
                 Text = T("tool.lock.rescuer.newKeyIntro"),
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = 12.5,
-                Foreground = Theme.Muted,
+                Foreground = Theme.LockMuted,
                 Margin = new Thickness(0, 0, 0, 10),
             });
             currentCard.Children.Add(new TextBlock
@@ -119,7 +119,7 @@ internal sealed class RescuerSetupWindow : Window
             Text = T("tool.lock.rescuer.intro"),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 0, 0, 10),
         });
         passwordCard.Children.Add(new TextBlock
@@ -142,7 +142,7 @@ internal sealed class RescuerSetupWindow : Window
         _match = new TextBlock
         {
             FontSize = 11.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 6, 0, 0),
             Text = T("tool.lock.gateHint"),
@@ -172,7 +172,7 @@ internal sealed class RescuerSetupWindow : Window
             Text = T("tool.lock.rescuer.keyIntro"),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 0, 0, 10),
         });
         _keyBox = new TextBox
@@ -183,7 +183,7 @@ internal sealed class RescuerSetupWindow : Window
             TextAlignment = TextAlignment.Center,
             Padding = new Thickness(12, 12, 12, 12),
             Background = Theme.Card,
-            Foreground = Theme.LockBadge,
+            Foreground = Theme.LockBadgeText,
             BorderBrush = Theme.PanelBorder,
             BorderThickness = new Thickness(1),
         };
@@ -333,9 +333,9 @@ internal sealed class RescuerSetupWindow : Window
         };
         _match.Foreground = status switch
         {
-            LockSecrets.PairStatus.Mismatch => Theme.Error,
-            LockSecrets.PairStatus.Match => Theme.Success,
-            _ => Theme.Muted,
+            LockSecrets.PairStatus.Mismatch => Theme.BadgeErrorText,
+            LockSecrets.PairStatus.Match => Theme.BadgeSuccessText,
+            _ => Theme.LockMuted,
         };
         _next.IsEnabled = status == LockSecrets.PairStatus.Match;
     }
@@ -511,16 +511,24 @@ internal sealed class RescuerSessionWindow : Window
     private readonly SecretField _password;
     private readonly SecretField _key;
     private readonly TextBlock _error;
+    private readonly Border _ok;
+    private readonly IReadOnlyList<string> _verifiers;
+    private bool _checking;
 
-    public RescuerSessionWindow()
+    /// <param name="verifiers">
+    /// Existing containers whose Rescuer slots must open with the typed values. Empty when no protected
+    /// file is known yet; the post-write slot check still fails closed in that case.
+    /// </param>
+    public RescuerSessionWindow(IReadOnlyList<string>? verifiers = null)
     {
+        _verifiers = verifiers ?? Array.Empty<string>();
         var body = LockUi.Configure(this, T("tool.lock.rescuer.sessionTitle"), 450, 390);
         body.Children.Add(new TextBlock
         {
             Text = T("tool.lock.rescuer.sessionIntro"),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 0, 0, 10),
         });
         body.Children.Add(new TextBlock
@@ -544,7 +552,7 @@ internal sealed class RescuerSessionWindow : Window
         _error = new TextBlock
         {
             FontSize = 11.5,
-            Foreground = Theme.Error,
+            Foreground = Theme.BadgeErrorText,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 8, 0, 0),
         };
@@ -554,17 +562,17 @@ internal sealed class RescuerSessionWindow : Window
             Text = T("tool.lock.rescuer.sessionNote"),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 11.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 10, 0, 0),
         });
 
         var buttons = new DockPanel { Margin = new Thickness(0, 16, 0, 0) };
         var cancel = Controls.Button(T("tool.lock.cancel"), Close);
-        var ok = Controls.Button(T("tool.lock.rescuer.next"), Continue, primary: true);
+        _ok = Controls.Button(T("tool.lock.rescuer.next"), Continue, primary: true);
         DockPanel.SetDock(cancel, Dock.Left);
-        DockPanel.SetDock(ok, Dock.Right);
+        DockPanel.SetDock(_ok, Dock.Right);
         buttons.Children.Add(cancel);
-        buttons.Children.Add(ok);
+        buttons.Children.Add(_ok);
         body.Children.Add(buttons);
         Closing += (_, _) =>
         {
@@ -591,8 +599,11 @@ internal sealed class RescuerSessionWindow : Window
 
     public string RecoveryKey { get; private set; } = string.Empty;
 
-    private void Continue()
+    private async void Continue()
     {
+        if (_checking)
+            return;
+        _error.Foreground = Theme.BadgeErrorText;
         if (!LockSecrets.IsAcceptablePassword(_password.Text))
         {
             _error.Text = T("tool.lock.error.short");
@@ -603,6 +614,43 @@ internal sealed class RescuerSessionWindow : Window
             _error.Text = T("tool.lock.rescuer.sessionInvalid");
             return;
         }
+
+        if (_verifiers.Count > 0)
+        {
+            var password = _password.Text;
+            _checking = true;
+            _ok.IsEnabled = false;
+            _error.Foreground = Theme.LockMuted;
+            _error.Text = T("tool.lock.rescuer.sessionVerifying");
+            string? opened;
+            try
+            {
+                // The unwrap is PBKDF2 and must not freeze the dialog.
+                opened = await Task.Run(() => LockVerification.FindOpeningContainer(_verifiers, password,
+                    canonical));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or LockException
+                                           or ArgumentException)
+            {
+                opened = null;
+            }
+            finally
+            {
+                _checking = false;
+                _ok.IsEnabled = true;
+            }
+            if (!IsVisible)
+                return;
+            if (opened is null)
+            {
+                _error.Foreground = Theme.BadgeErrorText;
+                _error.Text = T("tool.lock.rescuer.sessionVerifyFailed",
+                    Bidi.Value(Path.GetFileName(_verifiers[0])));
+                return;
+            }
+            _error.Text = string.Empty;
+        }
+
         RecoveryKey = canonical;
         DialogResult = true;
         Close();
@@ -622,7 +670,7 @@ internal sealed class RescuerKeyWindow : Window
             Text = T("tool.lock.rescuer.keyOnlyBody"),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 0, 0, 10),
         });
         _key = new SecretField(T("tool.lock.rescuer.sessionKey"));
@@ -630,7 +678,7 @@ internal sealed class RescuerKeyWindow : Window
         _error = new TextBlock
         {
             FontSize = 11.5,
-            Foreground = Theme.Error,
+            Foreground = Theme.BadgeErrorText,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 8, 0, 0),
         };
@@ -687,7 +735,7 @@ internal sealed class RescuerPasswordWindow : Window
             Text = T("tool.lock.rescuer.passwordIntro"),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 0, 0, 10),
         });
         _password = new SecretField(T("tool.lock.rescuer.password"));

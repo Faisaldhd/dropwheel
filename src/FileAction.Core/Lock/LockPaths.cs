@@ -1,4 +1,5 @@
 using System.Text;
+using static FileAction.Core.Loc;
 
 namespace FileAction.Core.Lock;
 
@@ -8,16 +9,24 @@ public static class LockPaths
     /// <summary>The restored-on-collision suffix; the UI shows it verbatim.</summary>
     public const string RestoredSuffix = " (restored)";
 
+    /// <summary>Windows' maximum length for one file or folder name, in UTF-16 code units.</summary>
+    public const int MaxComponentLength = 255;
+
     /// <summary>
     /// <c>report.pdf</c> → <c>report.pdf.dwenc</c>, <c>Photos</c> → <c>Photos.dwdir</c>. The original name
     /// stays visible so a folder full of protected files is understandable without opening anything.
+    /// Adding the extension must not push the component past Windows' 255-character limit: a clear refusal
+    /// is better than a late <see cref="PathTooLongException"/> after the source has been encrypted.
     /// </summary>
     public static string TargetName(string sourcePath, bool isDirectory)
     {
         var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(sourcePath));
         if (string.IsNullOrEmpty(name))
             throw new ArgumentException("The path has no file or folder name.", nameof(sourcePath));
-        return name + (isDirectory ? LockFormat.FolderExtension : LockFormat.FileExtension);
+        var extension = isDirectory ? LockFormat.FolderExtension : LockFormat.FileExtension;
+        if (name.Length + extension.Length > MaxComponentLength)
+            throw new LockPolicyException(T("tool.lock.error.nameTooLong", extension, MaxComponentLength));
+        return name + extension;
     }
 
     public static string TargetPath(string sourcePath, bool isDirectory, string outputDirectory)

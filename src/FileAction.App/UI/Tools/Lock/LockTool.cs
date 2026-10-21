@@ -201,7 +201,7 @@ internal sealed class LockProtectView
         _match = new TextBlock
         {
             FontSize = 11.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 6, 0, 0),
             Text = T("tool.lock.gateHint"),
@@ -227,14 +227,15 @@ internal sealed class LockProtectView
         {
             Text = T("tool.lock.rescuer.checking"),
             FontSize = 11.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 2, 0, 0),
             TextWrapping = TextWrapping.Wrap,
         };
         rescuerText.Children.Add(_rescuerStatus);
         var setup = Controls.Button(T("tool.lock.rescuer.setup"), () =>
         {
-            LockRuntime.RequireRescuer(Window.GetWindow(_root));
+            // Nearby containers let the re-entry prompt prove the typed Rescuer against a real header.
+            LockRuntime.RequireRescuer(Window.GetWindow(_root), _items[0].Path);
             RefreshRescuer();
         });
         DockPanel.SetDock(setup, Dock.Right);
@@ -252,7 +253,7 @@ internal sealed class LockProtectView
                     Text = "\uE72E",
                     FontFamily = Theme.Icons,
                     FontSize = 13,
-                    Foreground = Theme.LockBadge,
+                    Foreground = Theme.LockBadgeText,
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(0, 0, 7, 0),
                 },
@@ -260,7 +261,7 @@ internal sealed class LockProtectView
                 {
                     Text = T("tool.lock.status"),
                     FontSize = 11.5,
-                    Foreground = Theme.Muted,
+                    Foreground = Theme.LockMuted,
                     VerticalAlignment = VerticalAlignment.Center,
                 },
             },
@@ -269,7 +270,7 @@ internal sealed class LockProtectView
         _progress = new TextBlock
         {
             FontSize = 11.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(2, 6, 2, 0),
             TextWrapping = TextWrapping.Wrap,
             Text = T("tool.lock.ready"),
@@ -310,9 +311,9 @@ internal sealed class LockProtectView
         };
         _match.Foreground = status switch
         {
-            LockSecrets.PairStatus.Mismatch => Theme.Error,
-            LockSecrets.PairStatus.Match => Theme.Success,
-            _ => Theme.Muted,
+            LockSecrets.PairStatus.Mismatch => Theme.BadgeErrorText,
+            LockSecrets.PairStatus.Match => Theme.BadgeSuccessText,
+            _ => Theme.LockMuted,
         };
         _root.SetCanApply(status == LockSecrets.PairStatus.Match);
     }
@@ -326,8 +327,8 @@ internal sealed class LockProtectView
                 ? T("tool.lock.rescuer.needsPassword")
                 : T("tool.lock.rescuer.ready");
         _rescuerStatus.Foreground = stored is null || string.IsNullOrEmpty(stored.Password)
-            ? Theme.LockBadge
-            : Theme.Success;
+            ? Theme.LockBadgeText
+            : Theme.BadgeSuccessText;
     }
 
     private void Reset()
@@ -353,7 +354,7 @@ internal sealed class LockProtectView
             return null;
         LockSessionConsent.Granted = true;
 
-        var rescuer = LockRuntime.RequireRescuer(owner);
+        var rescuer = LockRuntime.RequireRescuer(owner, _items[0].Path);
         if (rescuer is null || string.IsNullOrEmpty(rescuer.Password))
             return null;
 
@@ -400,6 +401,9 @@ internal sealed class LockProtectView
             }
         }
 
+        // Keep one real container as the next session's proof for the re-entered Rescuer secret.
+        if (outputs.Count > 0)
+            LockRuntime.RememberContainer(outputs[^1]);
         LockRuntime.EnsureAssociation();
 
         if (failures.Count > 0)
@@ -430,7 +434,7 @@ internal sealed class LockWarningDialog : Window
         {
             Text = items.Count == 1 ? Bidi.Value(items[0].Name) : Items(items.Count),
             FontSize = 12,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 0, 0, 8),
         });
         body.Children.Add(new TextBlock
@@ -551,7 +555,7 @@ internal sealed class LockUnlockView
                 ? "tool.lock.unlock.folderHint"
                 : "tool.lock.unlock.fileHint"),
             FontSize = 12,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 10),
         });
@@ -569,7 +573,7 @@ internal sealed class LockUnlockView
         _error = new TextBlock
         {
             FontSize = 11.5,
-            Foreground = Theme.Error,
+            Foreground = Theme.BadgeErrorText,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 6, 0, 0),
         };
@@ -588,7 +592,7 @@ internal sealed class LockUnlockView
         {
             Text = T("tool.lock.unlock.ladder"),
             FontSize = 11.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 6, 0, 0),
             Visibility = Visibility.Collapsed,
@@ -614,7 +618,7 @@ internal sealed class LockUnlockView
         {
             Text = T("tool.lock.unlock.removeHint"),
             FontSize = 11.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(2, 8, 2, 0),
         });
@@ -740,7 +744,7 @@ internal sealed class ChangeFilePasswordWindow : Window
             Text = T("tool.lock.changePasswordHint"),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 0, 0, 10),
         });
         body.Children.Add(new TextBlock
@@ -775,7 +779,7 @@ internal sealed class ChangeFilePasswordWindow : Window
         _status = new TextBlock
         {
             FontSize = 11.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 6, 0, 0),
             Text = T("tool.lock.gateHint"),
@@ -833,9 +837,9 @@ internal sealed class ChangeFilePasswordWindow : Window
         };
         _status.Foreground = status switch
         {
-            LockSecrets.PairStatus.Mismatch => Theme.Error,
-            LockSecrets.PairStatus.Match => Theme.Success,
-            _ => Theme.Muted,
+            LockSecrets.PairStatus.Mismatch => Theme.BadgeErrorText,
+            LockSecrets.PairStatus.Match => Theme.BadgeSuccessText,
+            _ => Theme.LockMuted,
         };
         _apply.IsEnabled = string.IsNullOrEmpty(_current.Text) ? false : status == LockSecrets.PairStatus.Match;
     }
@@ -845,7 +849,7 @@ internal sealed class ChangeFilePasswordWindow : Window
         if (LockRuntime.Journal.FindByContainer(_item.Path) is not null)
         {
             _status.Text = T("tool.lock.error.openSession");
-            _status.Foreground = Theme.Error;
+            _status.Foreground = Theme.BadgeErrorText;
             return;
         }
         try
@@ -859,13 +863,13 @@ internal sealed class ChangeFilePasswordWindow : Window
         catch (LockPolicyException)
         {
             _status.Text = T("tool.lock.changePasswordKeyRefused");
-            _status.Foreground = Theme.Error;
+            _status.Foreground = Theme.BadgeErrorText;
         }
         catch (Exception ex) when (ex is LockException or IOException or UnauthorizedAccessException
                                        or ArgumentException)
         {
             _status.Text = LockRuntime.Describe(ex);
-            _status.Foreground = Theme.Error;
+            _status.Foreground = Theme.BadgeErrorText;
         }
     }
 }

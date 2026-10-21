@@ -73,7 +73,7 @@ internal static class LockRuntime
     /// password and the one-time key; every later session asks for both once, because neither is written to
     /// the settings file, the journal or any other file. Returns null when the user cancels.
     /// </summary>
-    public static RescuerSecrets? RequireRescuer(Window? owner)
+    public static RescuerSecrets? RequireRescuer(Window? owner, string? nearbyPath = null)
     {
         Initialize();
         var stored = Vault.Load();
@@ -91,12 +91,76 @@ internal static class LockRuntime
             return setup.Result;
         }
 
-        var prompt = new RescuerSessionWindow { Owner = owner };
+        // Re-entry: the prompt proves both slots against a real header before these values are baked into
+        // new containers. With no existing container there is nothing to compare against, so it accepts
+        // the format-valid pair and the post-write slot verification still fails closed.
+        var prompt = new RescuerSessionWindow(FindVerifierContainers(nearbyPath)) { Owner = owner };
         if (prompt.ShowDialog() != true || string.IsNullOrEmpty(prompt.Password))
             return null;
         var secrets = new RescuerSecrets(prompt.RecoveryKey, prompt.Password);
         Vault.Save(secrets);
         return secrets;
+    }
+
+    /// <summary>
+    /// Existing containers that can prove a re-entered Rescuer secret: the item's own folder first (the
+    /// files a user protects usually live together), then the last container this install wrote, then any
+    /// container named by an open crash-recovery journal. Only paths are returned; nothing is read here.
+    /// </summary>
+    public static IReadOnlyList<string> FindVerifierContainers(string? nearbyPath = null)
+    {
+        Initialize();
+        var candidates = new List<string>();
+        void Add(string? path)
+        {
+            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                candidates.Add(LockPaths.Normalize(path));
+        }
+
+        if (!string.IsNullOrWhiteSpace(nearbyPath))
+        {
+            var directory = Directory.Exists(nearbyPath) ? nearbyPath : Path.GetDirectoryName(nearbyPath);
+            if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+            {
+                try
+                {
+                    foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
+                                 .Where(LockFormat.IsProtectedName)
+                                 .OrderByDescending(File.GetLastWriteTimeUtc))
+                        Add(file);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+        Add(Settings.LastContainerPath);
+        try
+        {
+            foreach (var record in Journal.List())
+                Add(record.ContainerPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+        return candidates.Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToList();
+    }
+
+    /// <summary>Remembers the newest container so the next session can verify its Rescuer secrets.</summary>
+    public static void RememberContainer(string containerPath)
+    {
+        if (string.IsNullOrWhiteSpace(containerPath))
+            return;
+        Initialize();
+        Settings.LastContainerPath = LockPaths.Normalize(containerPath);
+        try
+        {
+            Settings.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A path hint is a convenience; losing it only removes one verification candidate.
+        }
     }
 
     /// <summary>True once the runtime has created its journal/service; used by the exit hook.</summary>

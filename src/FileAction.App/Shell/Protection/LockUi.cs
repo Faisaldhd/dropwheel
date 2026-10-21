@@ -197,7 +197,7 @@ internal sealed class StrengthMeter : StackPanel
         _label = new TextBlock
         {
             FontSize = 11.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(8, 0, 0, 0),
             Text = T("tool.lock.strength.empty"),
@@ -230,8 +230,8 @@ internal static class LockUi
 {
     public static Border Card(UIElement content, Thickness? padding = null) => new()
     {
-        Background = Theme.Card,
-        BorderBrush = Theme.PanelBorder,
+        Background = Theme.LockCard,
+        BorderBrush = Theme.LockCardBorder,
         BorderThickness = new Thickness(1),
         CornerRadius = new CornerRadius(10),
         Padding = padding ?? new Thickness(14, 12, 14, 12),
@@ -327,7 +327,7 @@ internal static class LockUi
         {
             CornerRadius = new CornerRadius(18),
             Background = new SolidColorBrush(Color.FromArgb(0xF7, panelColor.R, panelColor.G, panelColor.B)),
-            BorderBrush = Theme.PanelBorder,
+            BorderBrush = Theme.LockCardBorder,
             BorderThickness = new Thickness(1),
             Margin = new Thickness(10),
             Child = grid,

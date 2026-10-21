@@ -180,6 +180,51 @@ public static class LockContainer
         return dataKey;
     }
 
+    /// <summary>
+    /// Tries the one slot with the requested role. A re-entered Rescuer password or key can be checked
+    /// against an existing header without deriving keys for the other two slots; the header MAC is still
+    /// verified, so a slot that opens proves the whole header.
+    /// </summary>
+    public static bool TryUnwrapRole(LockHeader header, LockSecretKind role, string secret, out byte[] dataKey)
+    {
+        ArgumentNullException.ThrowIfNull(header);
+        dataKey = [];
+        if (string.IsNullOrEmpty(secret))
+            return false;
+        var index = Array.FindIndex(header.Slots, slot => slot.Kind == role);
+        if (index < 0)
+            return false;
+
+        var stable = header.StableAad();
+        var secretBytes = role == LockSecretKind.RescuerKey
+            ? global::FileAction.Core.Lock.RescuerKey.TryParse(secret, out var canonical)
+                ? global::FileAction.Core.Lock.RescuerKey.ToSecretBytes(canonical)
+                : null
+            : LockSecrets.ToBytes(secret);
+        if (secretBytes is null)
+            return false;
+        try
+        {
+            if (!TryUnwrapSlot(header, header.Slots[index], index, stable, secretBytes, out var candidate))
+                return false;
+            try
+            {
+                VerifyHeaderMac(header, candidate);
+            }
+            catch
+            {
+                LockSecrets.Wipe(candidate);
+                throw;
+            }
+            dataKey = candidate;
+            return true;
+        }
+        finally
+        {
+            LockSecrets.Wipe(secretBytes);
+        }
+    }
+
     private static bool TryUnwrapSlot(
         LockHeader header, LockSlot slot, int index, byte[] stable, byte[] secretBytes, out byte[] dataKey)
     {

@@ -10,18 +10,26 @@ namespace FileAction.App.Shell.Protection;
 /// <summary>One unlocked plaintext copy that the panel is watching.</summary>
 internal sealed class LockSession : IDisposable
 {
-    public LockSession(LockSessionRecord record, LockHeader header, byte[] dataKey, bool isDirectory)
+    public LockSession(LockSessionRecord record, LockHeader header, byte[] dataKey, bool isDirectory,
+        int originalAttributes, int originalDesktopIniAttributes)
     {
         Record = record;
         Header = header;
         DataKey = dataKey;
         IsDirectory = isDirectory;
+        OriginalAttributes = originalAttributes;
+        OriginalDesktopIniAttributes = originalDesktopIniAttributes;
     }
 
     public LockSessionRecord Record { get; set; }
     public LockHeader Header { get; }
     public byte[] DataKey { get; }
     public bool IsDirectory { get; }
+
+    /// <summary>Attributes the original item had before the editable copy cleared ReadOnly.</summary>
+    public int OriginalAttributes { get; }
+
+    public int OriginalDesktopIniAttributes { get; }
     public DateTimeOffset LastChange { get; set; }
     public bool Busy { get; set; }
     public FileSystemWatcher? Watcher { get; set; }
@@ -99,7 +107,10 @@ internal sealed class LockSessionManager
         {
             // Extraction can take seconds for a large file; the UI thread stays responsive and the
             // continuation returns to it before any window or journal work happens.
-            extracted = await Task.Run(() => _service.ExtractTo(containerPath, secret, tempRoot));
+            // The session copy is disposable: clear ReadOnly so the editor can save. The attributes captured
+            // before that change are carried to RelockFromSession so the container keeps the original meaning.
+            extracted = await Task.Run(() => _service.ExtractTo(containerPath, secret, tempRoot,
+                editableCopy: true));
         }
         catch
         {
@@ -133,7 +144,8 @@ internal sealed class LockSessionManager
                 : Convert.ToHexString(extracted.Read.Digest.Sha256),
         };
         _journal.Write(record);
-        var session = new LockSession(record, extracted.Header, extracted.DataKey, extracted.Read.Meta.IsDirectory)
+        var session = new LockSession(record, extracted.Header, extracted.DataKey, extracted.Read.Meta.IsDirectory,
+            extracted.Read.Meta.Attributes, extracted.Read.Meta.PreviousDesktopIniAttributes)
         {
             LastChange = DateTimeOffset.Now,
         };
@@ -196,7 +208,9 @@ internal sealed class LockSessionManager
             await Task.Run(() => _service.RelockFromSession(session.Record.ContainerPath, session.Header,
                 session.DataKey, session.Record.PlaintextPath,
                 expectedFileHash: wasError ? session.Record.FileHash : null,
-                expectedTreeHash: wasError ? session.Record.TreeHash : null));
+                expectedTreeHash: wasError ? session.Record.TreeHash : null,
+                originalAttributes: session.OriginalAttributes,
+                originalDesktopIniAttributes: session.OriginalDesktopIniAttributes));
             _journal.Delete(session.Record.Id);
             NotifyLocked(session.Record);
             lock (_gate)
@@ -404,7 +418,8 @@ internal sealed class LockSessionManager
             if (window.ShowDialog() != true)
                 continue; // the journal and the plaintext stay for the next start
 
-            var rescuer = LockRuntime.RequireRescuer(owner);
+            // The journal names a real container whose Rescuer slots can prove the typed secret.
+            var rescuer = LockRuntime.RequireRescuer(owner, record.ContainerPath);
             if (rescuer is null || string.IsNullOrEmpty(rescuer.Password))
                 continue;
             var credentials = new LockCredentials
@@ -494,7 +509,8 @@ internal sealed class LockSessionManager
             try
             {
                 _service.RelockFromSession(session.Record.ContainerPath, session.Header, session.DataKey,
-                    session.Record.PlaintextPath);
+                    session.Record.PlaintextPath, originalAttributes: session.OriginalAttributes,
+                    originalDesktopIniAttributes: session.OriginalDesktopIniAttributes);
                 _journal.Delete(session.Record.Id);
                 lock (_gate)
                     _sessions.Remove(session.Record.Id);

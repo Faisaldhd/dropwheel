@@ -1,6 +1,7 @@
 using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using FileAction.App.Shell.Protection;
@@ -987,6 +988,7 @@ public class LockSafetyTests
                 GraceSeconds = 12,
                 RecycleContainerAfterUnlock = false,
                 AssociationsRegistered = true,
+                LastContainerPath = @"C:\protected\report.pdf.dwenc",
             };
             settings.SaveTo(path);
             var text = File.ReadAllText(path);
@@ -998,6 +1000,7 @@ public class LockSafetyTests
             Assert.Equal(12, loaded.GraceSeconds);
             Assert.False(loaded.RecycleContainerAfterUnlock);
             Assert.True(loaded.AssociationsRegistered);
+            Assert.Equal(@"C:\protected\report.pdf.dwenc", loaded.LastContainerPath);
         }
         finally
         {
@@ -1707,7 +1710,244 @@ public class LockSafetyTests
             Cleanup(directory);
         }
     }
+    // ------------------------------------------------------------------ 2.4.7 polish
+
+    [Fact]
+    public void Lock_cards_and_badge_text_are_visibly_distinct_in_both_themes()
+    {
+        var previous = Theme.Override;
+        try
+        {
+            Theme.Override = true;
+            Theme.Refresh();
+            Assert.True(Theme.IsDark);
+            Assert.True(Ratio(Theme.LockCard, Theme.Panel) >= 1.20, "dark lock card vs dialog panel");
+            Assert.True(Ratio(Theme.LockCard, Theme.Card) >= 1.20, "dark lock card vs tool content card");
+            Assert.True(Ratio(Theme.LockCardBorder, Theme.LockCard) >= 3.0, "dark lock card border");
+            Assert.True(Ratio(Theme.LockCardBorder, Theme.Panel) >= 3.0, "dark lock card border vs panel");
+            Assert.True(Ratio(Theme.LockBadgeText, Theme.Card) >= 3.0, "dark badge text on a card");
+            Assert.True(Ratio(Theme.LockBadgeText, Theme.LockCard) >= 3.0, "dark badge text on a lock card");
+            Assert.True(Ratio(Theme.LockMuted, Theme.LockCard) >= 4.5, "dark secondary text on a lock card");
+            Assert.True(Ratio(Theme.BadgeSuccessText, Theme.LockCard) >= 4.5, "dark success text on a lock card");
+            Assert.True(Ratio(Theme.BadgeErrorText, Theme.LockCard) >= 4.5, "dark error text on a lock card");
+            var darkCard = ColorOf(Theme.LockCard);
+
+            Theme.Override = false;
+            Theme.Refresh();
+            Assert.False(Theme.IsDark);
+            Assert.NotEqual(darkCard, ColorOf(Theme.LockCard));
+            Assert.True(Ratio(Theme.LockCard, Theme.Panel) >= 1.20, "light lock card vs dialog panel");
+            Assert.True(Ratio(Theme.LockCard, Theme.Card) >= 1.20, "light lock card vs tool content card");
+            Assert.True(Ratio(Theme.LockCardBorder, Theme.LockCard) >= 3.0, "light lock card border");
+            Assert.True(Ratio(Theme.LockCardBorder, Theme.Panel) >= 3.0, "light lock card border vs panel");
+            Assert.True(Ratio(Theme.LockBadgeText, Theme.Card) >= 3.0, "light badge text on a card");
+            Assert.True(Ratio(Theme.LockBadgeText, Theme.LockCard) >= 3.0, "light badge text on a lock card");
+            Assert.True(Ratio(Theme.LockMuted, Theme.LockCard) >= 4.5, "light secondary text on a lock card");
+            Assert.True(Ratio(Theme.BadgeSuccessText, Theme.LockCard) >= 4.5, "light success text on a lock card");
+            Assert.True(Ratio(Theme.BadgeErrorText, Theme.LockCard) >= 4.5, "light error text on a lock card");
+
+            // The brand purple remains the badge fill; only the foreground variant must be legible.
+            Assert.Equal(Theme.LockBadgeColor, ColorOf(Theme.LockBadge));
+            RunSta(() =>
+            {
+                var card = LockUi.Card(new TextBlock());
+                Assert.Same(Theme.LockCard, card.Background);
+                Assert.Same(Theme.LockCardBorder, card.BorderBrush);
+            });
+        }
+        finally
+        {
+            Theme.Override = previous;
+            Theme.Refresh();
+        }
+    }
+
+    [Fact]
+    public void A_container_extension_that_would_exceed_255_characters_is_refused_clearly()
+    {
+        var maximum = new string('a', LockPaths.MaxComponentLength - LockFormat.FileExtension.Length);
+        Assert.Equal(LockPaths.MaxComponentLength, LockPaths.TargetName(maximum, false).Length);
+        var tooLong = new string('a', maximum.Length + 1);
+        var fileError = Assert.Throws<LockPolicyException>(() => LockPaths.TargetName(tooLong, false));
+        Assert.Contains("255", fileError.Message);
+        Assert.Contains(LockFormat.FileExtension, fileError.Message);
+        var folderError = Assert.Throws<LockPolicyException>(() => LockPaths.TargetName(tooLong, true));
+        Assert.Contains(LockFormat.FolderExtension, folderError.Message);
+
+        var directory = NewDirectory();
+        try
+        {
+            Assert.Throws<LockPolicyException>(() =>
+                LockPaths.TargetPath(Path.Combine(directory, tooLong), false, directory));
+            Assert.Equal(LockPaths.MaxComponentLength,
+                LockPaths.TargetName(new string('b', maximum.Length), true).Length);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void Rescuer_reentry_is_proved_against_an_existing_container()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var key = RescuerKey.Generate();
+            var file = Path.Combine(directory, "proof.txt");
+            WriteFile(file, "proof");
+            var container = NewService().Protect(file, directory, Credentials(key)).OutputPath;
+
+            Assert.True(LockVerification.OpensWithRescuer(container, "rescuer-password-1", key));
+            Assert.True(LockVerification.OpensWithRescuer(container, "rescuer-password-1", RescuerKey.Format(key)));
+            Assert.False(LockVerification.OpensWithRescuer(container, "rescuer-password-typo", key));
+            Assert.False(LockVerification.OpensWithRescuer(container, "rescuer-password-1", RescuerKey.Generate()));
+            // The file password opens the container, but not through the Rescuer password slot.
+            Assert.False(LockVerification.OpensWithRescuer(container, "file-password-1", key));
+
+            Assert.Equal(container,
+                LockVerification.FindOpeningContainer([container], "rescuer-password-1", key));
+            Assert.Null(LockVerification.FindOpeningContainer([container], "rescuer-password-typo", key));
+            Assert.Null(LockVerification.FindOpeningContainer([Path.Combine(directory, "missing.dwenc")],
+                "rescuer-password-1", key));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void An_editable_session_copy_clears_read_only_and_relock_keeps_the_original_attribute()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var file = Path.Combine(directory, "readonly.txt");
+            WriteFile(file, "read only content");
+            File.SetAttributes(file, FileAttributes.ReadOnly);
+            var service = NewService();
+            var container = service.Protect(file, directory, Credentials()).OutputPath;
+
+            var sessionDirectory = Path.Combine(directory, "session");
+            var editable = service.ExtractTo(container, "file-password-1", sessionDirectory, editableCopy: true);
+            try
+            {
+                Assert.Equal("read only content", File.ReadAllText(editable.Path));
+                Assert.False((File.GetAttributes(editable.Path) & FileAttributes.ReadOnly) != 0,
+                    "the editable copy must be writable");
+                service.RelockFromSession(container, editable.Header, editable.DataKey, editable.Path,
+                    originalAttributes: editable.Read.Meta.Attributes);
+            }
+            finally
+            {
+                LockSecrets.Wipe(editable.DataKey);
+            }
+
+            var restored = service.Unprotect(container, "file-password-1", recycleContainer: false);
+            Assert.True((File.GetAttributes(restored.RestoredPath) & FileAttributes.ReadOnly) != 0,
+                "a relock must keep the original ReadOnly semantics");
+        }
+        finally
+        {
+            MakeWritable(directory);
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void An_editable_folder_copy_clears_read_only_everywhere_but_unprotect_restores_it()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var folder = Path.Combine(directory, "readonly-folder");
+            Directory.CreateDirectory(Path.Combine(folder, "nested"));
+            var inner = Path.Combine(folder, "nested", "locked.txt");
+            File.WriteAllText(inner, "read only content");
+            File.SetAttributes(inner, FileAttributes.ReadOnly);
+            File.SetAttributes(folder, FileAttributes.Directory | FileAttributes.ReadOnly);
+
+            var service = NewService();
+            var container = service.Protect(folder, directory, Credentials()).OutputPath;
+            var sessionDirectory = Path.Combine(directory, "session");
+            var editable = service.ExtractTo(container, "file-password-1", sessionDirectory, editableCopy: true);
+            try
+            {
+                var copy = Path.Combine(editable.Path, "nested", "locked.txt");
+                Assert.False((File.GetAttributes(copy) & FileAttributes.ReadOnly) != 0,
+                    "a file inside the editable folder copy must be writable");
+                Assert.False((File.GetAttributes(editable.Path) & FileAttributes.ReadOnly) != 0,
+                    "the editable folder copy itself must not be ReadOnly");
+            }
+            finally
+            {
+                LockSecrets.Wipe(editable.DataKey);
+            }
+
+            var restored = service.Unprotect(container, "file-password-1", recycleContainer: false);
+            Assert.True((File.GetAttributes(Path.Combine(restored.RestoredPath, "nested", "locked.txt")) &
+                         FileAttributes.ReadOnly) != 0);
+            Assert.True((File.GetAttributes(restored.RestoredPath) & FileAttributes.ReadOnly) != 0);
+        }
+        finally
+        {
+            MakeWritable(directory);
+            Cleanup(directory);
+        }
+    }
+
     // ------------------------------------------------------------------ helpers
+
+    private static Color ColorOf(Brush brush) => ((SolidColorBrush)brush).Color;
+
+    /// <summary>WCAG 2.1 relative-luminance contrast ratio for two solid colours.</summary>
+    private static double Ratio(Brush foreground, Brush background) =>
+        Ratio(ColorOf(foreground), ColorOf(background));
+
+    private static double Ratio(Color left, Color right)
+    {
+        var first = Luminance(left);
+        var second = Luminance(right);
+        return (Math.Max(first, second) + 0.05) / (Math.Min(first, second) + 0.05);
+
+        static double Luminance(Color color)
+        {
+            static double Channel(byte value)
+            {
+                var channel = value / 255.0;
+                return channel <= 0.03928 ? channel / 12.92 : Math.Pow((channel + 0.055) / 1.055, 2.4);
+            }
+            return (0.2126 * Channel(color.R)) + (0.7152 * Channel(color.G)) + (0.0722 * Channel(color.B));
+        }
+    }
+
+    /// <summary>Clears ReadOnly before deleting a fixture that deliberately contained read-only items.</summary>
+    private static void MakeWritable(string directory)
+    {
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+            {
+                var attributes = File.GetAttributes(file);
+                if ((attributes & FileAttributes.ReadOnly) != 0)
+                    File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
+            }
+            foreach (var child in Directory.EnumerateDirectories(directory, "*", SearchOption.AllDirectories))
+            {
+                var attributes = File.GetAttributes(child);
+                if ((attributes & FileAttributes.ReadOnly) != 0)
+                    File.SetAttributes(child, attributes & ~FileAttributes.ReadOnly);
+            }
+            var root = File.GetAttributes(directory);
+            if ((root & FileAttributes.ReadOnly) != 0)
+                File.SetAttributes(directory, root & ~FileAttributes.ReadOnly);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
 
     private static string ReadContent(LockService service, string container, string secret)
     {

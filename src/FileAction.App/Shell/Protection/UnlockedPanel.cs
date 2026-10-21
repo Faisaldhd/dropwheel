@@ -48,7 +48,7 @@ internal sealed class UnlockedPanel : Window
             Text = "\uE72E",
             FontFamily = Theme.Icons,
             FontSize = 16,
-            Foreground = Theme.LockBadge,
+            Foreground = Theme.LockBadgeText,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 8, 0),
         };
@@ -69,7 +69,7 @@ internal sealed class UnlockedPanel : Window
         {
             Text = T("tool.lock.panel.note"),
             FontSize = 11.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 3, 0, 0),
             TextWrapping = TextWrapping.Wrap,
         };
@@ -78,7 +78,7 @@ internal sealed class UnlockedPanel : Window
         {
             Text = T("tool.lock.panel.synced"),
             FontSize = 11.5,
-            Foreground = Theme.Success,
+            Foreground = Theme.BadgeSuccessText,
             VerticalAlignment = VerticalAlignment.Center,
         };
         _retry = Controls.Button(T("tool.lock.panel.retry"), () => Retry?.Invoke());
@@ -136,9 +136,9 @@ internal sealed class UnlockedPanel : Window
         });
         _status.Foreground = status switch
         {
-            UnlockedStatus.Synced => Theme.Success,
-            UnlockedStatus.Syncing => Theme.Muted,
-            _ => Theme.Error,
+            UnlockedStatus.Synced => Theme.BadgeSuccessText,
+            UnlockedStatus.Syncing => Theme.LockMuted,
+            _ => Theme.BadgeErrorText,
         };
         _retry.Visibility = status == UnlockedStatus.Error ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -146,7 +146,7 @@ internal sealed class UnlockedPanel : Window
     public void SetError(string detail)
     {
         _status.Text = detail;
-        _status.Foreground = Theme.Error;
+        _status.Foreground = Theme.BadgeErrorText;
         _retry.Visibility = Visibility.Visible;
     }
 
@@ -193,7 +193,7 @@ internal sealed class LockRecoveryWindow : Window
                 : "tool.lock.recovery.body", Bidi.Value(record.OriginalName)),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 0, 0, 10),
         });
         body.Children.Add(new TextBlock
@@ -201,7 +201,7 @@ internal sealed class LockRecoveryWindow : Window
             Text = Bidi.Value(record.ContainerPath),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 11,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 0, 0, 12),
         });
         body.Children.Add(new TextBlock

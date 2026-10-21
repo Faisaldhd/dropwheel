@@ -27,14 +27,14 @@ internal sealed class LockSettingsWindow : Window
         _status = new TextBlock
         {
             FontSize = 11.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(2, 4, 2, 8),
         };
         _busy = new TextBlock
         {
             FontSize = 11.5,
-            Foreground = Theme.LockBadge,
+            Foreground = Theme.LockBadgeText,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(2, 0, 2, 8),
         };
@@ -45,7 +45,7 @@ internal sealed class LockSettingsWindow : Window
         {
             Text = T("tool.lock.settings.rescuerExplained"),
             FontSize = 12,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 10),
         });
@@ -64,7 +64,7 @@ internal sealed class LockSettingsWindow : Window
         {
             Text = T("tool.lock.settings.updateExplained"),
             FontSize = 12,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 10),
         });
@@ -102,7 +102,7 @@ internal sealed class LockSettingsWindow : Window
         {
             Text = T("tool.lock.settings.associationExplained"),
             FontSize = 12,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 10),
         });
@@ -119,7 +119,7 @@ internal sealed class LockSettingsWindow : Window
         {
             Text = T("tool.lock.settings.footer"),
             FontSize = 11,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(2, 6, 2, 0),
         });
@@ -141,13 +141,13 @@ internal sealed class LockSettingsWindow : Window
         if (!LockRuntime.Settings.RescuerConfigured)
         {
             _status.Text = T("tool.lock.settings.rescuerMissing");
-            _status.Foreground = Theme.LockBadge;
+            _status.Foreground = Theme.LockBadgeText;
             return;
         }
         _status.Text = stored is null || string.IsNullOrEmpty(stored.Password)
             ? T("tool.lock.settings.rescuerNoPassword")
             : T("tool.lock.settings.rescuerReady");
-        _status.Foreground = Theme.Muted;
+        _status.Foreground = Theme.LockMuted;
     }
 
     private void ChangeRescuerPassword()
@@ -272,7 +272,7 @@ internal sealed class LockSettingsWindow : Window
             {
                 _busy.Text = string.Empty;
                 _status.Text = failures == 0 ? doneText : T("tool.lock.settings.partial", done - failures, failures);
-                _status.Foreground = failures == 0 ? Theme.Success : Theme.Error;
+                _status.Foreground = failures == 0 ? Theme.BadgeSuccessText : Theme.BadgeErrorText;
             }));
         });
     }
@@ -314,7 +314,7 @@ internal sealed class SecretPromptWindow : Window
             Text = hint,
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 0, 0, 10),
         });
         _secret = new SecretField(title);
