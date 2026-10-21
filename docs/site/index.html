@@ -82,10 +82,10 @@
   <div class="release-bar" role="region" data-label-en="Release status" data-label-ar="حالة الإصدار">
     <div class="wrap release-bar__inner">
       <!--release-status:start-->
-      <span class="release-bar__tag"><bdi dir="ltr">2.4.0</bdi></span>
+      <span class="release-bar__tag"><bdi dir="ltr">2.4.1</bdi></span>
       <p class="release-bar__text">
-        <span data-lang="en">Final verification. Downloads stay on the last signed release (<bdi dir="ltr">2.3.0</bdi>) until <bdi dir="ltr">2.4.0</bdi> is published.</span>
-        <span data-lang="ar" lang="ar">التحقق النهائي. يبقى التنزيل على آخر إصدار موقَّع (<bdi dir="ltr">2.3.0</bdi>) حتى نشر <bdi dir="ltr">2.4.0</bdi>.</span>
+        <span data-lang="en"><bdi dir="ltr">2.4.1</bdi> is verified and published. The installer below is the verified release build.</span>
+        <span data-lang="ar" lang="ar">تم التحقق من <bdi dir="ltr">2.4.1</bdi> ونشره. المثبّت أدناه هو بناء الإصدار الذي تم التحقق منه.</span>
       </p>
       <!--release-status:end-->
       <a class="release-bar__link" href="#whats-new">
@@ -164,19 +164,19 @@
             </li>
             <li>
               <svg class="icon" width="17" height="17" aria-hidden="true"><use href="#i-check"/></svg>
-              <span data-lang="en"><bdi dir="ltr">v<!--release-version:start-->2.3.0<!--release-version:end--></bdi> signed</span>
-              <span data-lang="ar" lang="ar"><bdi dir="ltr">v<!--release-version:start-->2.3.0<!--release-version:end--></bdi> موقَّع</span>
+              <span data-lang="en"><bdi dir="ltr">v<!--release-version:start-->2.4.1<!--release-version:end--></bdi> signed</span>
+              <span data-lang="ar" lang="ar"><bdi dir="ltr">v<!--release-version:start-->2.4.1<!--release-version:end--></bdi> موقَّع</span>
             </li>
             <li>
               <svg class="icon" width="17" height="17" aria-hidden="true"><use href="#i-hash"/></svg>
-              <span data-lang="en"><!--release-mb:start-->60.05<!--release-mb:end--> MB installer</span>
-              <span data-lang="ar" lang="ar">المثبّت <!--release-mb:start-->60.05<!--release-mb:end--> ميجابايت</span>
+              <span data-lang="en"><!--release-mb:start-->60.41<!--release-mb:end--> MB installer</span>
+              <span data-lang="ar" lang="ar">المثبّت <!--release-mb:start-->60.41<!--release-mb:end--> ميجابايت</span>
             </li>
           </ul>
 
           <p class="hero-hash">
             <span class="hero-hash__label">SHA-256</span>
-            <code dir="ltr"><!--release-sha256:start-->7381cbd5b59249f3279b62af31091d89d3d8d994faa57fcdd08ec4331d7156ce<!--release-sha256:end--></code>
+            <code dir="ltr"><!--release-sha256:start-->5a1608334aeb7575cb3ad1dd2a30edfa423388ef50379372ef96656e5a03b619<!--release-sha256:end--></code>
             <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a>
           </p>
 
@@ -922,12 +922,12 @@
         <div class="verify-grid">
           <article class="verify-card">
             <h3><span class="verify-card__step">1</span><span data-lang="en">SHA-256</span><span data-lang="ar" lang="ar">بصمة SHA-256</span></h3>
-            <pre dir="ltr" tabindex="0"><code>Get-FileHash .\DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-Setup.exe -Algorithm SHA256</code></pre>
+            <pre dir="ltr" tabindex="0"><code>Get-FileHash .\DropWheel-<!--release-version:start-->2.4.1<!--release-version:end-->-Setup.exe -Algorithm SHA256</code></pre>
             <p><span data-lang="en">Compare the result with the setup line in <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a>.</span><span data-lang="ar" lang="ar">قارن الناتج بسطر المثبّت في <a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a>.</span></p>
           </article>
           <article class="verify-card">
             <h3><span class="verify-card__step">2</span><span data-lang="en">Signature</span><span data-lang="ar" lang="ar">التوقيع</span></h3>
-            <pre dir="ltr" tabindex="0"><code>pwsh ./scripts/verify-signature.ps1 .\DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-Setup.exe</code></pre>
+            <pre dir="ltr" tabindex="0"><code>pwsh ./scripts/verify-signature.ps1 .\DropWheel-<!--release-version:start-->2.4.1<!--release-version:end-->-Setup.exe</code></pre>
             <p><span data-lang="en">Exit code 0 means the ECDSA P-256 signature matches the key compiled into DropWheel. Any other code: do not run the file.</span><span data-lang="ar" lang="ar">رمز الخروج 0 يعني أن توقيع ECDSA P-256 يطابق المفتاح المضمَّن في DropWheel. أي رمز آخر: لا تشغّل الملف.</span></p>
           </article>
         </div>
@@ -936,25 +936,25 @@
           <div class="release-card__head">
             <div>
               <p class="release-card__label"><span data-lang="en">Latest signed release</span><span data-lang="ar" lang="ar">آخر إصدار موقَّع</span></p>
-              <p class="release-card__version"><bdi dir="ltr"><!--release-version:start-->2.3.0<!--release-version:end--></bdi></p>
+              <p class="release-card__version"><bdi dir="ltr"><!--release-version:start-->2.4.1<!--release-version:end--></bdi></p>
             </div>
             <a class="btn btn--primary" href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/DropWheel-Setup.exe" rel="noopener noreferrer">
               <svg class="icon" width="18" height="18" aria-hidden="true"><use href="#i-download"/></svg>
-              <span data-lang="en">Download installer · <!--release-mb:start-->60.05<!--release-mb:end--> MB</span><span data-lang="ar" lang="ar">تنزيل المثبّت · <!--release-mb:start-->60.05<!--release-mb:end--> ميجابايت</span>
+              <span data-lang="en">Download installer · <!--release-mb:start-->60.41<!--release-mb:end--> MB</span><span data-lang="ar" lang="ar">تنزيل المثبّت · <!--release-mb:start-->60.41<!--release-mb:end--> ميجابايت</span>
             </a>
           </div>
           <dl class="release-files">
             <div>
               <dt><span data-lang="en">Installer</span><span data-lang="ar" lang="ar">المثبّت</span></dt>
-              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/DropWheel-2.3.0-Setup.exe" rel="noopener noreferrer"><bdi dir="ltr">DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-Setup.exe</bdi></a></dd>
+              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.4.1/DropWheel-2.4.1-Setup.exe" rel="noopener noreferrer"><bdi dir="ltr">DropWheel-<!--release-version:start-->2.4.1<!--release-version:end-->-Setup.exe</bdi></a></dd>
             </div>
             <div>
               <dt><span data-lang="en">Portable ZIP</span><span data-lang="ar" lang="ar">أرشيف محمول</span></dt>
-              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/DropWheel-2.3.0-portable-win-x64.zip" rel="noopener noreferrer"><bdi dir="ltr">DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-portable-win-x64.zip</bdi></a></dd>
+              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.4.1/DropWheel-2.4.1-portable-win-x64.zip" rel="noopener noreferrer"><bdi dir="ltr">DropWheel-<!--release-version:start-->2.4.1<!--release-version:end-->-portable-win-x64.zip</bdi></a><span class="size"><span data-lang="en">85.56 MB</span><span data-lang="ar" lang="ar">85.56 ميجابايت</span></span></dd>
             </div>
             <div>
               <dt><span data-lang="en">Checksums</span><span data-lang="ar" lang="ar">البصمات</span></dt>
-              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer"><bdi dir="ltr">SHA256SUMS.txt</bdi></a><a class="inline-link" href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.3.0/DropWheel-2.3.0-Setup.exe.sig" rel="noopener noreferrer"><bdi dir="ltr">.sig</bdi></a></dd>
+              <dd><a href="https://github.com/Faisaldhd/dropwheel/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer"><bdi dir="ltr">SHA256SUMS.txt</bdi></a><a class="inline-link" href="https://github.com/Faisaldhd/dropwheel/releases/download/v2.4.1/DropWheel-2.4.1-Setup.exe.sig" rel="noopener noreferrer"><bdi dir="ltr">.sig</bdi></a></dd>
             </div>
           </dl>
 
@@ -965,14 +965,14 @@
             </summary>
             <div class="hash-block">
               <div class="hash-block__head">
-                <span class="hash-block__label">SHA-256 · <bdi dir="ltr">DropWheel-<!--release-version:start-->2.3.0<!--release-version:end-->-Setup.exe</bdi></span>
+                <span class="hash-block__label">SHA-256 · <bdi dir="ltr">DropWheel-<!--release-version:start-->2.4.1<!--release-version:end-->-Setup.exe</bdi></span>
                 <button type="button" class="copy-button" data-copy-target="sha-setup" data-label-en="Copy" data-label-ar="نسخ">
                   <svg class="icon" width="15" height="15" aria-hidden="true"><use href="#i-copy"/></svg>
                   <span class="copy-button__text" data-en="Copy" data-ar="نسخ">Copy</span>
                 </button>
               </div>
-              <code class="hash-block__value" id="sha-setup" dir="ltr"><!--release-sha256:start-->7381cbd5b59249f3279b62af31091d89d3d8d994faa57fcdd08ec4331d7156ce<!--release-sha256:end--></code>
-              <p class="hash-block__meta"><span data-lang="en">Installer size</span><span data-lang="ar" lang="ar">حجم المثبّت</span><bdi dir="ltr"><!--release-bytes:start-->62,967,948<!--release-bytes:end--> B</bdi></p>
+              <code class="hash-block__value" id="sha-setup" dir="ltr"><!--release-sha256:start-->5a1608334aeb7575cb3ad1dd2a30edfa423388ef50379372ef96656e5a03b619<!--release-sha256:end--></code>
+              <p class="hash-block__meta"><span data-lang="en">Installer size</span><span data-lang="ar" lang="ar">حجم المثبّت</span><bdi dir="ltr"><!--release-bytes:start-->63,340,505<!--release-bytes:end--> B</bdi></p>
               <p class="copy-status" id="copy-status" aria-live="polite"></p>
             </div>
           </details>
