@@ -1110,5 +1110,7 @@
   "tool.lock.recovery.orphanTitle": "مجلدات فتح يتيمة",
   "tool.lock.recovery.orphanBody": "وجد DropWheel {0} من مجلدات الجلسات بلا سجل. هل تريد حذفها؟ الملفات المحمية لم تتغير.",
   "tool.lock.panel.changedSalvage": "تغيّر المحتوى منذ آخر حفظ. تم رفض إعادة المحاولة؛ الملف المحمي السليم محفوظ. افتح العنصر واستعد النسخة.",
-  "wheel.group.resize": "تغيير الحجم"
+  "wheel.group.resize": "تغيير الحجم",
+  "wheel.group.archive": "الأرشيف",
+  "wheel.group.metadata": "البيانات الوصفية"
 }

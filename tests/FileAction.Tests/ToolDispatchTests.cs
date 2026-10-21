@@ -82,13 +82,16 @@ public class ToolDispatchTests
     }
 
     [Fact]
-    public void CropRotateAndResizeAreOneParentSliceWithAllTheirChoices()
+    public void BatchRotateResizeAndArchiveAreParentSlicesAndToolsStayDirect()
     {
-        var groups = WheelSlices().OfType<WheelGroupOperation>().ToArray();
+        var slices = WheelSlices();
+        var groups = slices.OfType<WheelGroupOperation>().ToArray();
 
-        var crop = Assert.Single(groups, group => group.GroupId == "image.crop");
-        Assert.Equal("Crop", crop.Label);
-        Assert.Equal(new[] { "tools.crop", "image.square" }, crop.Children.Select(child => child.Id).ToArray());
+        // Interactive tool windows must stay one click away: a tool hidden behind a chooser reads as
+        // "the tool does not open". Crop and Crop Square are separate slices on purpose.
+        Assert.DoesNotContain(groups, group => group.GroupId == "image.crop");
+        Assert.Contains(slices, slice => slice.Id == "tools.crop");
+        Assert.Contains(slices, slice => slice.Id == "image.square");
 
         var rotate = Assert.Single(groups, group => group.GroupId == "image.rotate");
         Assert.Equal("Rotate", rotate.Label);
@@ -101,6 +104,12 @@ public class ToolDispatchTests
         Assert.Equal(
             new[] { "image.half", "image.max1920" },
             resize.Children.Select(child => child.Id).ToArray());
+
+        var archive = Assert.Single(groups, group => group.GroupId == "tools.archive");
+        Assert.Equal("Archive", archive.Label);
+        Assert.Equal(
+            new[] { "pack.zip", "pack.tar.gz" },
+            archive.Children.Select(child => child.Id).ToArray());
 
         Assert.All(groups, group => Assert.True(group.Children.Count >= 2));
     }
@@ -121,13 +130,13 @@ public class ToolDispatchTests
     [Fact]
     public void GroupParentIsNeverDispatchedAsAJob()
     {
-        var crop = WheelSlices().OfType<WheelGroupOperation>().Single(group => group.GroupId == "image.crop");
+        var group = WheelSlices().OfType<WheelGroupOperation>().Single(g => g.GroupId == "image.rotate");
         var settings = new AppSettings();
         var jobs = new JobRunner(settings, new ToolLocator());
 
         var error = Assert.Throws<InvalidOperationException>(() =>
             WheelController.Dispatch(
-                crop,
+                group,
                 [new FileItem(Path.Combine(Path.GetTempPath(), "group-parent.png"))],
                 null,
                 jobs));
