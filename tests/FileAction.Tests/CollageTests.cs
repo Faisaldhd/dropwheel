@@ -70,6 +70,74 @@ public class CollageTests
         Assert.Equal(450, cells[3].Bounds.Y, Precision);
     }
 
+    [Fact]
+    public void Grid_uses_the_chosen_column_count()
+    {
+        var cells = CollageMath.Cells(6, CollageLayout.Grid, 900, 600, 0, columns: 3);
+
+        Assert.Equal(6, cells.Count);
+        // Three 300-pixel columns and two 300-pixel rows.
+        Assert.Equal(300, cells[0].Bounds.Width, Precision);
+        Assert.Equal(300, cells[0].Bounds.Height, Precision);
+        Assert.Equal(300, cells[1].Bounds.X, Precision);
+        Assert.Equal(600, cells[2].Bounds.X, Precision);
+        Assert.Equal(0, cells[2].Bounds.Y, Precision);
+        Assert.Equal(0, cells[3].Bounds.X, Precision);
+        Assert.Equal(300, cells[3].Bounds.Y, Precision);
+        Assert.Equal(300, cells[5].Bounds.Y, Precision);
+    }
+
+    [Fact]
+    public void Grid_with_two_columns_centres_the_last_partial_row()
+    {
+        var cells = CollageMath.Cells(5, CollageLayout.Grid, 1000, 600, 0, columns: 2);
+
+        // Three 500 x 200 rows; the fifth image sits alone in the middle of the last row.
+        Assert.Equal(500, cells[0].Bounds.Width, Precision);
+        Assert.Equal(200, cells[0].Bounds.Height, Precision);
+        Assert.Equal(250, cells[4].Bounds.X, Precision);
+        Assert.Equal(400, cells[4].Bounds.Y, Precision);
+        Assert.Equal(500, cells[4].Bounds.Width, Precision);
+    }
+
+    [Fact]
+    public void Grid_columns_are_clamped_to_the_image_count()
+    {
+        Assert.Equal(2, CollageMath.GridColumns(2, 5));
+        Assert.Equal(4, CollageMath.GridColumns(7, 4));
+        Assert.Equal(9, CollageMath.GridColumns(9, 99));
+
+        // Auto (0 or a negative request) keeps the near-square count, and an empty set still needs one.
+        Assert.Equal(3, CollageMath.GridColumns(9));
+        Assert.Equal(3, CollageMath.GridColumns(9, 0));
+        Assert.Equal(3, CollageMath.GridColumns(9, -4));
+        Assert.Equal(1, CollageMath.GridColumns(0, 4));
+    }
+
+    [Fact]
+    public void Explicit_columns_only_change_the_grid_layout()
+    {
+        foreach (var layout in new[] { CollageLayout.Row, CollageLayout.Column, CollageLayout.Featured })
+        {
+            var auto = CollageMath.Cells(5, layout, 1000, 800, 10);
+            var explicitColumns = CollageMath.Cells(5, layout, 1000, 800, 10, columns: 1);
+
+            Assert.Equal(auto.Select(cell => cell.Bounds), explicitColumns.Select(cell => cell.Bounds));
+        }
+    }
+
+    [Fact]
+    public void Explicit_columns_cap_spacing_against_the_chosen_column_count()
+    {
+        // Six images in two columns means one horizontal gap and two vertical gaps: 99 is the tighter cap.
+        Assert.Equal(99, CollageMath.ClampSpacing(6, CollageLayout.Grid, 100, 600, 500, columns: 2), Precision);
+        // Three columns make two horizontal gaps: 49.5 is the cap.
+        Assert.Equal(49.5, CollageMath.ClampSpacing(6, CollageLayout.Grid, 100, 600, 500, columns: 3), Precision);
+
+        var cells = CollageMath.Cells(6, CollageLayout.Grid, 100, 600, 500, columns: 2);
+        Assert.All(cells, cell => Assert.True(cell.Bounds.Width > 0 && cell.Bounds.Height > 0));
+    }
+
     [Theory]
     [InlineData(2)]
     [InlineData(3)]
@@ -101,6 +169,23 @@ public class CollageTests
             Assert.Equal(7, cells.Count);
             Assert.Equal(Enumerable.Range(0, 7), cells.Select(cell => cell.Index));
             AssertNoOverlap(cells);
+        }
+    }
+
+    [Fact]
+    public void Every_grid_column_choice_places_all_images_inside_the_canvas_without_overlap()
+    {
+        foreach (var count in new[] { 2, 3, 5, 7, 9 })
+        {
+            for (var columns = 1; columns <= count; columns++)
+            {
+                var cells = CollageMath.Cells(count, CollageLayout.Grid, 1200, 800, 12, columns);
+
+                Assert.Equal(count, cells.Count);
+                Assert.Equal(Enumerable.Range(0, count), cells.Select(cell => cell.Index));
+                AssertInside(cells, 1200, 800);
+                AssertNoOverlap(cells);
+            }
         }
     }
 
@@ -228,6 +313,23 @@ public class CollageTests
         Assert.Equal(1.0, Math.Round(CollagePresets.All[0].Aspect, 6));
         Assert.Equal(Math.Round(16.0 / 9.0, 6), Math.Round(CollagePresets.All[1].Aspect, 6));
         Assert.Equal(Math.Round(9.0 / 16.0, 6), Math.Round(CollagePresets.All[2].Aspect, 6));
+    }
+
+    [Fact]
+    public void Options_start_with_automatic_columns()
+    {
+        Assert.Equal(0, CollageOptions.Default.Columns);
+        Assert.Equal(0, new CollageOptions().Columns);
+        Assert.Equal(new CollageSize(1080, 1080), CollageOptions.Default.Size);
+    }
+
+    [Fact]
+    public void Columns_label_is_localized()
+    {
+        Assert.True(Loc.HasKey("tool.collage.columns", Language.English));
+        Assert.True(Loc.HasKey("tool.collage.columns", Language.Arabic));
+        Assert.Equal("Columns", Loc.Table(Language.English)["tool.collage.columns"]);
+        Assert.NotEqual("Columns", Loc.Table(Language.Arabic)["tool.collage.columns"]);
     }
 
     [Fact]
@@ -420,6 +522,48 @@ public class CollageTests
             AssertColour(rendered, 250, 120, MagickColors.Goldenrod);
             AssertColour(rendered, 70, 5, MagickColors.RebeccaPurple);
             AssertColour(rendered, 315, 120, MagickColors.Goldenrod);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Renderer_uses_the_chosen_grid_columns()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "dropwheel-collage-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var colours = new[] { MagickColors.Red, MagickColors.Lime, MagickColors.Blue, MagickColors.Yellow };
+            var paths = new List<string>();
+            for (var i = 0; i < colours.Length; i++)
+            {
+                var path = Path.Combine(directory, $"image{i}.png");
+                using (var image = new MagickImage(colours[i], 100, 100))
+                    image.Write(path);
+                paths.Add(path);
+            }
+
+            var options = new CollageOptions
+            {
+                Layout = CollageLayout.Grid,
+                Fit = CollageFit.Fill,
+                Size = new CollageSize(400, 100),
+                Columns = 4,
+                Spacing = 0,
+                Radius = 0,
+                Background = CollageBackground.Solid(CollageColor.Black),
+            };
+
+            var output = await CollageRenderer.RenderAsync(paths, options, directory);
+            using var rendered = new MagickImage(output);
+
+            // Four columns on a 400-pixel canvas: one 100-pixel cell per image, all on a single row.
+            // With the automatic two columns the second cell would span the middle of the canvas.
+            for (var i = 0; i < colours.Length; i++)
+                AssertColour(rendered, 50 + i * 100, 50, colours[i]);
         }
         finally
         {

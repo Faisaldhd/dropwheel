@@ -315,6 +315,7 @@
   "tool.collage.layout.row": "Row",
   "tool.collage.layout.column": "Column",
   "tool.collage.layout.featured": "Featured",
+  "tool.collage.columns": "Columns",
   "tool.collage.size": "Size",
   "tool.collage.custom": "Custom",
   "tool.collage.width": "Width",

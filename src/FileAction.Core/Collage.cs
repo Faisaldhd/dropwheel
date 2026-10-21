@@ -164,6 +164,12 @@ public sealed record CollageOptions
 
     public CollageSize Size { get; init; } = CollagePresets.Square;
 
+    /// <summary>
+    /// Columns the grid layout uses; 0 (the default) picks the near-square column count. Ignored by the
+    /// row, column and featured layouts.
+    /// </summary>
+    public int Columns { get; init; }
+
     /// <summary>Gap between neighbouring cells, in output pixels.</summary>
     public double Spacing { get; init; } = 12;
 
@@ -188,10 +194,11 @@ public static class CollageMath
     /// <summary>
     /// The cell rectangles in reading order. <paramref name="spacing"/> is the gap between neighbours;
     /// it is capped so cells never collapse to zero. A partial last grid row is centred and keeps the
-    /// same cell size as the full rows.
+    /// same cell size as the full rows. <paramref name="columns"/> sets the grid's column count; 0 picks
+    /// the near-square count and the other layouts ignore it.
     /// </summary>
     public static IReadOnlyList<CollageCell> Cells(
-        int count, CollageLayout layout, double width, double height, double spacing)
+        int count, CollageLayout layout, double width, double height, double spacing, int columns = 0)
     {
         if (count <= 0)
             return [];
@@ -203,7 +210,7 @@ public static class CollageMath
             CollageLayout.Row => Row(count, width, height, spacing),
             CollageLayout.Column => Column(count, width, height, spacing),
             CollageLayout.Featured => Featured(count, width, height, spacing),
-            _ => Grid(count, width, height, spacing),
+            _ => Grid(count, width, height, spacing, columns),
         };
     }
 
@@ -275,24 +282,26 @@ public static class CollageMath
         Math.Clamp(requested, 0, Math.Max(0, Math.Min(cell.Width, cell.Height) / 2));
 
     /// <summary>The spacing a layout can honour without making a cell zero-sized.</summary>
-    public static double ClampSpacing(int count, CollageLayout layout, double width, double height, double spacing)
+    public static double ClampSpacing(
+        int count, CollageLayout layout, double width, double height, double spacing, int columns = 0)
     {
         if (count <= 1 || spacing <= 0)
             return 0;
         width = Math.Max(1, width);
         height = Math.Max(1, height);
+        var gridColumns = GridColumns(count, columns);
         var horizontalGaps = layout switch
         {
             CollageLayout.Column => 0,
             CollageLayout.Row => count - 1,
-            CollageLayout.Grid => GridColumns(count) - 1,
+            CollageLayout.Grid => gridColumns - 1,
             _ => 1,
         };
         var verticalGaps = layout switch
         {
             CollageLayout.Row => 0,
             CollageLayout.Column => count - 1,
-            CollageLayout.Grid => GridRows(count) - 1,
+            CollageLayout.Grid => GridRows(count, gridColumns) - 1,
             _ => Math.Max(0, count - 2),
         };
         var cap = double.MaxValue;
@@ -303,11 +312,12 @@ public static class CollageMath
         return Math.Clamp(spacing, 0, Math.Max(0, cap));
     }
 
-    private static IReadOnlyList<CollageCell> Grid(int count, double width, double height, double spacing)
+    private static IReadOnlyList<CollageCell> Grid(
+        int count, double width, double height, double spacing, int requestedColumns)
     {
-        var columns = GridColumns(count);
-        var rows = GridRows(count);
-        var gap = ClampSpacing(count, CollageLayout.Grid, width, height, spacing);
+        var columns = GridColumns(count, requestedColumns);
+        var rows = GridRows(count, columns);
+        var gap = ClampSpacing(count, CollageLayout.Grid, width, height, spacing, columns);
         var cellWidth = (width - gap * (columns - 1)) / columns;
         var cellHeight = (height - gap * (rows - 1)) / rows;
         var cells = new List<CollageCell>(count);
@@ -363,9 +373,21 @@ public static class CollageMath
         return cells;
     }
 
-    private static int GridColumns(int count) => Math.Max(1, (int)Math.Ceiling(Math.Sqrt(count)));
+    /// <summary>
+    /// The column count the grid actually uses: <paramref name="columns"/> when positive (never more than
+    /// the image count), otherwise the near-square count. Exposed so the window can show the effective
+    /// value while "auto" is still selected.
+    /// </summary>
+    public static int GridColumns(int count, int columns = 0)
+    {
+        if (count <= 0)
+            return 1;
+        if (columns > 0)
+            return Math.Clamp(columns, 1, count);
+        return Math.Max(1, (int)Math.Ceiling(Math.Sqrt(count)));
+    }
 
-    private static int GridRows(int count) => Math.Max(1, (int)Math.Ceiling(count / (double)GridColumns(count)));
+    private static int GridRows(int count, int columns) => Math.Max(1, (int)Math.Ceiling(count / (double)columns));
 
     private static CollageRect Normalized(CollageRect rect) =>
         new(rect.X, rect.Y, Math.Max(1, rect.Width), Math.Max(1, rect.Height));
