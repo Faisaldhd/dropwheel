@@ -25,6 +25,9 @@ scripts/_*
 # The floating-tool source folder is not the downloaded helper-tools folder.
 !src/FileAction.App/UI/Tools/
 
+# The website tool captures are shipped assets, not downloaded helper tools.
+!docs/site/assets/tools/
+
 # Hostile-input audit scratch (tests create and delete their own roots here)
 _audit-ci/
 _local/tmp/
