@@ -256,14 +256,24 @@ public static class PdfBackend
         document.Save(output);
     }
 
-    /// <summary>Re-saves with compressed streams and without unused objects.</summary>
+    /// <summary>
+    /// Re-saves with compressed streams and without unused objects. PDFsharp can re-encode an already
+    /// compact file into a larger one (the shipped doc.pdf grows 3770 → 5464 bytes), so the optimized
+    /// result is only kept when it is actually smaller; otherwise the original bytes are copied through.
+    /// The output never grows.
+    /// </summary>
     public static void Optimize(string input, string output)
     {
-        using var document = Open(input, PdfDocumentOpenMode.Modify);
-        document.Options.CompressContentStreams = true;
-        document.Options.NoCompression = false;
-        document.Options.EnableCcittCompressionForBilevelImages = true;
-        document.Save(output);
+        using (var document = Open(input, PdfDocumentOpenMode.Modify))
+        {
+            document.Options.CompressContentStreams = true;
+            document.Options.NoCompression = false;
+            document.Options.EnableCcittCompressionForBilevelImages = true;
+            document.Save(output);
+        }
+
+        if (new FileInfo(output).Length >= new FileInfo(input).Length)
+            File.Copy(input, output, overwrite: true);
     }
 
     private static PdfSharp.Pdf.PdfDocument Open(string path, PdfDocumentOpenMode mode)

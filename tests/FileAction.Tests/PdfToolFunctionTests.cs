@@ -1,7 +1,9 @@
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Text;
 using FileAction.App.UI.Tools.Pdf;
 using FileAction.Core;
+using FileAction.Core.Backends;
 using PdfSharp.Drawing;
 using PdfSharp.Pdf.IO;
 using UglyToad.PdfPig;
@@ -96,6 +98,39 @@ public sealed class PdfToolFunctionTests : IDisposable
 
     private string Output(string name) => Path.Combine(_directory, name);
 
+    /// <summary>
+    /// A hand-written one-page PDF with no compression and no spare objects. PDFsharp's re-save of it is
+    /// larger than the source, which is the "optimize grows the file" case the backend must not keep.
+    /// </summary>
+    private string CreateMinimalPdf(string name)
+    {
+        const string Catalog = "<< /Type /Catalog /Pages 2 0 R >>";
+        const string Pages = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>";
+        const string Page = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R >>";
+        const string Contents = "<< /Length 0 >>\nstream\n\nendstream";
+        string[] objects = [Catalog, Pages, Page, Contents];
+
+        var builder = new StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int>(objects.Length);
+        for (var index = 0; index < objects.Length; index++)
+        {
+            offsets.Add(builder.Length);
+            builder.Append(index + 1).Append(" 0 obj\n").Append(objects[index]).Append("\nendobj\n");
+        }
+
+        var xref = builder.Length;
+        builder.Append("xref\n0 ").Append(objects.Length + 1).Append('\n');
+        builder.Append("0000000000 65535 f \n");
+        foreach (var offset in offsets)
+            builder.Append(offset.ToString("0000000000")).Append(" 00000 n \n");
+        builder.Append("trailer\n<< /Size ").Append(objects.Length + 1).Append(" /Root 1 0 R >>\n");
+        builder.Append("startxref\n").Append(xref).Append("\n%%EOF\n");
+
+        var path = Path.Combine(_directory, name);
+        File.WriteAllText(path, builder.ToString(), Encoding.ASCII);
+        return path;
+    }
+
     private static string[] PageTexts(string pdf)
     {
         using var document = PigDocument.Open(pdf);
@@ -179,6 +214,62 @@ public sealed class PdfToolFunctionTests : IDisposable
         Assert.Equal(200 * 72.0 / 96.0, pages[1].Height, 1);
     }
 
+    [Fact]
+    public void Merge_normalizes_a_palette_png_that_PDFsharp_rejects()
+    {
+        var pdf = CreatePdf("palette-source.pdf", ("PaletteSource", 0, 300, 400));
+        var image = Output("four-colour.png");
+
+        // Four colours (including transparent) make Magick's default encoder write an indexed
+        // 2-bit PNG — the exact input PDFsharp rejects with "Unsupported image format".
+        using (var bitmap = new ImageMagick.MagickImage(ImageMagick.MagickColors.Transparent, 320, 200))
+        {
+            bitmap.Settings.FillColor = ImageMagick.MagickColors.Green;
+            bitmap.Draw(new ImageMagick.Drawing.Drawables().Rectangle(20, 20, 300, 180));
+            bitmap.Settings.FillColor = ImageMagick.MagickColors.White;
+            bitmap.Draw(new ImageMagick.Drawing.Drawables().Rectangle(80, 60, 240, 140));
+            bitmap.Settings.FillColor = ImageMagick.MagickColors.Black;
+            bitmap.Draw(new ImageMagick.Drawing.Drawables().Rectangle(120, 80, 200, 120));
+            File.WriteAllBytes(image, bitmap.ToByteArray(ImageMagick.MagickFormat.Png));
+        }
+
+        var header = File.ReadAllBytes(image);
+        Assert.Equal(3, header[25]); // PNG colour type 3: indexed palette
+        Assert.Equal(2, header[24]); // 2 bits per pixel
+
+        var output = Output("MergedPalette.pdf");
+        PdfMergeWriter.Write(
+            [new PdfMergeSource(pdf, PdfPlanKind.Pdf), new PdfMergeSource(image, PdfPlanKind.Image)],
+            output);
+
+        Assert.Equal(2, PageTexts(output).Length);
+        var pages = SharpPages(output);
+        Assert.Equal(320 * 72.0 / 96.0, pages[1].Width, 1);
+        Assert.Equal(200 * 72.0 / 96.0, pages[1].Height, 1);
+    }
+
+    [Fact]
+    public void Merge_keeps_a_transparent_image_on_a_white_page()
+    {
+        var pdf = CreatePdf("alpha-source.pdf", ("AlphaSource", 0, 300, 400));
+        var image = Output("transparent.png");
+        using (var bitmap = new ImageMagick.MagickImage(ImageMagick.MagickColors.Transparent, 320, 200))
+            File.WriteAllBytes(image, bitmap.ToByteArray(ImageMagick.MagickFormat.Png));
+        var output = Output("MergedTransparent.pdf");
+
+        PdfMergeWriter.Write(
+            [new PdfMergeSource(pdf, PdfPlanKind.Pdf), new PdfMergeSource(image, PdfPlanKind.Image)],
+            output);
+
+        Assert.Equal(2, PageTexts(output).Length);
+
+        // Transparency is composited on white; a dropped alpha channel would paint the page black.
+        using var rendered = PDFtoImage.Conversion.ToImage(
+            File.ReadAllBytes(output), 1,
+            options: new PDFtoImage.RenderOptions(Dpi: 24, BackgroundColor: SkiaSharp.SKColors.White));
+        Assert.Equal(SkiaSharp.SKColors.White, rendered.GetPixel(5, 5));
+    }
+
     // ------------------------------------------------------------------ organize
 
     [Fact]
@@ -229,6 +320,44 @@ public sealed class PdfToolFunctionTests : IDisposable
         var texts = PageTexts(output);
         Assert.Contains("Narrow", texts[0], StringComparison.Ordinal);
         Assert.Contains("Wide", texts[1], StringComparison.Ordinal);
+    }
+
+    // ------------------------------------------------------------------ optimize
+
+    [Fact]
+    public void Optimize_never_grows_the_file()
+    {
+        var source = CreatePdf("compact.pdf", ("Compact", 0, 300, 400));
+        var before = new FileInfo(source).Length;
+        var output = Output("Compact optimized.pdf");
+
+        PdfBackend.Optimize(source, output);
+
+        Assert.True(File.Exists(output), "optimize did not write its output");
+        var after = new FileInfo(output).Length;
+        Assert.True(after <= before, $"optimize grew the file from {before} to {after} bytes");
+        Assert.Contains("Compact", PageTexts(output)[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Optimize_copies_the_original_through_when_recompression_would_grow()
+    {
+        var source = CreateMinimalPdf("minimal.pdf");
+        var before = new FileInfo(source).Length;
+
+        // Prove the fixture really is one PDFsharp would grow; otherwise this test would not cover
+        // the copy-through branch if a future PDFsharp learned to write it smaller.
+        var reference = Output("minimal re-saved.pdf");
+        using (var document = PdfReader.Open(source, PdfDocumentOpenMode.Modify))
+            document.Save(reference);
+        Assert.True(new FileInfo(reference).Length > before, "the fixture no longer reproduces the grow case");
+
+        var output = Output("minimal optimized.pdf");
+        PdfBackend.Optimize(source, output);
+
+        Assert.Equal(before, new FileInfo(output).Length);
+        Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(output));
+        Assert.Single(SharpPages(output));
     }
 
     // ------------------------------------------------------------------ failure paths

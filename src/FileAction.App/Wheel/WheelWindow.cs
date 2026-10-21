@@ -93,7 +93,7 @@ internal sealed class WheelWindow : Window
 
     // ------------------------------------------------------------------ motion budget
     /// <summary>Hovering a category opens it only after the pointer rests on it this long.</summary>
-    internal const double DwellMs = 2000;
+    internal const double DwellMs = 450;
 
     /// <summary>First frame of an inner ring is already visible; the entrance finishes inside 120 ms.</summary>
     internal const double InnerEnterMs = 90;
@@ -130,8 +130,48 @@ internal sealed class WheelWindow : Window
     private readonly List<Canvas> _innerGroups = [];
     private readonly List<Path> _innerSlices = [];
     private readonly List<StackPanel> _innerLabels = [];
-    private readonly Image _icon = new() { Width = 22, Height = 22, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 3) };
     private readonly TextBlock _iconGlyph = new() { FontSize = 18, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 3) };
+    // The hub shows the format of the selection, not the Windows shell icon: one item is its extension
+    // (JPG, PDF, MP4), a folder is DIR and a multi-file drop is FILES. Drawn as a small folder card.
+    private readonly Grid _formatBadge = new()
+    {
+        Width = 46,
+        Height = 31,
+        HorizontalAlignment = HorizontalAlignment.Center,
+        Margin = new Thickness(0, 0, 0, 3),
+        IsHitTestVisible = false,
+    };
+    private readonly Border _formatTab = new()
+    {
+        Width = 17,
+        Height = 8,
+        CornerRadius = new CornerRadius(4, 4, 0, 0),
+        HorizontalAlignment = HorizontalAlignment.Left,
+        VerticalAlignment = VerticalAlignment.Top,
+        Margin = new Thickness(5, 0, 0, 0),
+    };
+    private readonly Border _formatBody = new()
+    {
+        Width = 46,
+        Height = 23,
+        CornerRadius = new CornerRadius(5),
+        BorderThickness = new Thickness(1),
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Bottom,
+    };
+    private readonly TextBlock _formatText = new()
+    {
+        FontFamily = Theme.DisplayFont,
+        FontSize = 10,
+        FontWeight = FontWeights.Bold,
+        Foreground = Theme.TextOnAccent,
+        TextAlignment = TextAlignment.Center,
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center,
+        TextTrimming = TextTrimming.CharacterEllipsis,
+        MaxWidth = 39,
+        IsHitTestVisible = false,
+    };
     private readonly TextBlock _title = HubText(13.5, FontWeights.SemiBold);
     private readonly TextBlock _detail = HubText(10, FontWeights.Normal);
     private readonly TextBlock _destination = HubText(9, FontWeights.Normal);
@@ -226,7 +266,10 @@ internal sealed class WheelWindow : Window
         _hubLayer.Clip = new EllipseGeometry(new Point(Size / 2, Size / 2), HubRadius - 5, HubRadius - 5);
         _tabTrack.Child = _tabs;
         _iconGlyph.FontFamily = Theme.Icons;
-        _hubContent.Children.Add(_icon);
+        _formatBody.Child = _formatText;
+        _formatBadge.Children.Add(_formatTab);
+        _formatBadge.Children.Add(_formatBody);
+        _hubContent.Children.Add(_formatBadge);
         _hubContent.Children.Add(_iconGlyph);
         _hubContent.Children.Add(_title);
         _hubContent.Children.Add(_detail);
@@ -247,15 +290,7 @@ internal sealed class WheelWindow : Window
 
         DragEnter += OnDragOver;
         DragOver += OnDragOver;
-        DragLeave += (_, e) =>
-        {
-            CancelDwell();
-            SetHighlight(-1);
-            SetInnerHighlight(-1);
-            if (_innerGroupId is not null)
-                ClearInner();
-            e.Handled = true;
-        };
+        DragLeave += OnDragLeave;
         Drop += OnDrop;
         MouseMove += (_, e) =>
         {
@@ -268,6 +303,11 @@ internal sealed class WheelWindow : Window
             CancelDwell();
             SetHighlight(-1);
             SetInnerHighlight(-1);
+            // In Click mode leaving the window means leaving the disc: the ring goes with it. During a
+            // drag the inner ring is seeded by the drop and a leave may just be the OLE drag churn, so
+            // only a real exit past the rim clears it (see OnDragLeave).
+            if (Mode == WheelMode.Click && !_finished && !KeepsInnerRing(HitAt(Mouse.GetPosition(_canvas)).Zone))
+                ClearInner();
         };
         MouseLeftButtonUp += OnClick;
         // Pressed micro-scale (90 ms): confirms the pointer landed on the slice before the action runs.
@@ -1074,7 +1114,7 @@ internal sealed class WheelWindow : Window
                 Stroke = Theme.SliceEdge,
                 StrokeThickness = 1,
             };
-            var label = InnerLabel(_innerChoices[i]);
+            var label = InnerLabel(_innerChoices[i], InnerTextWidth(n, i));
             var fit = new Viewbox
             {
                 Child = label,
@@ -1249,7 +1289,7 @@ internal sealed class WheelWindow : Window
 
     // ------------------------------------------------------------------ dwell
 
-    /// <summary>Starts the 2 s dwell on a category and paints its progress arc.</summary>
+    /// <summary>Starts the short dwell on a category and paints its progress arc.</summary>
     private void BeginDwell(int index)
     {
         if (index < 0 || index >= _ops.Count)
@@ -1337,6 +1377,21 @@ internal sealed class WheelWindow : Window
     }
 
     // ------------------------------------------------------------------ drag & drop
+
+    /// <summary>
+    /// The drag stopped being over the wheel. WPF raises DragLeave for child-to-child moves too (the
+    /// backdrop, hub and the inner ring are separate visuals), so only a pointer that is truly past the
+    /// rim may dismiss the inner ring: moving from a category into its children keeps the ring open.
+    /// </summary>
+    private void OnDragLeave(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        CancelDwell();
+        SetHighlight(-1);
+        SetInnerHighlight(-1);
+        if (!KeepsInnerRing(HitAt(e.GetPosition(_canvas)).Zone))
+            ClearInner();
+    }
 
     private void OnDragOver(object sender, DragEventArgs e)
     {
@@ -1609,6 +1664,13 @@ internal sealed class WheelWindow : Window
         : radius <= OuterRadius + Rim ? WheelZone.Outer
         : WheelZone.None;
 
+    /// <summary>
+    /// The inner ring belongs to the whole disc, not to the outer band: a pointer in the hub, the inner
+    /// ring or an outer slice is still inside the wheel and must not dismiss it. Only a real exit (or
+    /// Escape/deactivation) may clear it.
+    /// </summary>
+    internal static bool KeepsInnerRing(WheelZone zone) => zone != WheelZone.None;
+
     private readonly record struct Hit(WheelZone Zone, int Index);
 
     private Hit HitAt(Point point)
@@ -1697,6 +1759,29 @@ internal sealed class WheelWindow : Window
     }
 
     internal static double InnerLabelWidth => LabelWidth(InnerCapacity, InnerLabelRadius, InnerLabelMaxHeight);
+
+    /// <summary>
+    /// The widest inner text box, used by the top and bottom slices where the horizontal room is the
+    /// slice's chord. Text on the left/right of the disc is constrained by the ring's radial thickness
+    /// instead (see <see cref="InnerTextWidth"/>), or the slice clip would cut it.
+    /// </summary>
+    internal static double InnerLabelTextWidth => InnerLabelWidth - 8;
+
+    /// <summary>
+    /// The text width for one inner slice. On a slice at the side of the disc only the ring's radial
+    /// thickness is horizontal room (a chord there runs vertically); the 0.92 keeps the box clear of
+    /// the outline. Using the angle keeps the type as wide as its own slice allows: "Compress" fits at
+    /// 60°, while a long label at 90° is ellipsized instead of being cut by the clip.
+    /// </summary>
+    internal static double InnerTextWidth(int count, int index)
+    {
+        if (count <= 1)
+            return InnerLabelTextWidth;
+        var angle = SliceAngle(index, count) * Math.PI / 180;
+        var sideways = Math.Max(0.5, Math.Abs(Math.Sin(angle)));
+        var radial = (InnerOuterRadius - InnerInnerRadius) * 0.92 / sideways;
+        return Math.Min(InnerLabelTextWidth, radial);
+    }
 
     // ------------------------------------------------------------------ visuals
 
@@ -1952,7 +2037,7 @@ internal sealed class WheelWindow : Window
         return panel;
     }
 
-    private static StackPanel InnerLabel(InnerChoice choice)
+    private static StackPanel InnerLabel(InnerChoice choice, double textWidth)
     {
         var panel = new StackPanel
         {
@@ -1976,26 +2061,68 @@ internal sealed class WheelWindow : Window
             return panel;
         }
         var op = choice.Operation!;
-        // Rotate left/right share the same short label; on a narrow inner slice the shared label is
-        // clipped to "Rotate" and the two choices become indistinguishable. Keep the direction.
-        var label = op.Id switch
-        {
-            "image.rotate.right" => "Rotate R",
-            "image.rotate.left" => "Rotate L",
-            _ => op.Label,
-        };
         panel.Children.Add(new TextBlock
         {
-            Text = label,
+            Text = InnerLabelText(op),
+            Width = textWidth,
             FontFamily = Theme.DisplayFont,
             FontSize = 10.5,
             FontWeight = FontWeights.SemiBold,
             Foreground = Theme.Text,
             TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
+            // One line, trimmed with an ellipsis: the label layer clips to the slice, so a long name can
+            // never run into a neighbour or out of the ring.
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
             HorizontalAlignment = HorizontalAlignment.Center,
         });
         return panel;
+    }
+
+    /// <summary>
+    /// What an inner slice says. Two choices can share the same label ("Archive" for ZIP and TAR.GZ), and
+    /// long labels do not fit the narrow band, so the subtitle or a shorter form is used. Rotation keeps
+    /// its direction (the shared "Rotate" label made left and right indistinguishable).
+    /// </summary>
+    internal static string InnerLabelText(Operation op)
+    {
+        if (op.Id == "image.rotate.right")
+            return "Rotate R";
+        if (op.Id == "image.rotate.left")
+            return "Rotate L";
+        if (op.Id.StartsWith("pack.", StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(op.Subtitle))
+            return op.Subtitle.Trim();
+        return op.Id switch
+        {
+            "tools.metadata" => T("wheel.category.metadata"),
+            "image.max1920" => Bidi.Value("1920 px"),
+            _ => ShortenInnerLabel(op.Label),
+        };
+    }
+
+    private static string ShortenInnerLabel(string label)
+    {
+        if (label.Length > 5 && label.StartsWith("Edit ", StringComparison.OrdinalIgnoreCase))
+            return label[5..];
+        if (label.Length > 4 && label.StartsWith("Max ", StringComparison.OrdinalIgnoreCase))
+            return label[4..];
+        if (label.Length > 5 && label.StartsWith("Read ", StringComparison.OrdinalIgnoreCase))
+            return label[5..];
+        return label;
+    }
+
+    /// <summary>
+    /// The format badge in the hub: the extension of a single file, DIR for a folder, FILES for a
+    /// multi-selection or the empty drag wheel. It deliberately ignores the category/tool on screen.
+    /// </summary>
+    internal static string FormatBadgeText(IReadOnlyList<FileItem> items)
+    {
+        if (items.Count != 1)
+            return "FILES";
+        var item = items[0];
+        if (item.IsDirectory)
+            return "DIR";
+        return item.Format is { Length: > 0 } format ? Formats.Display(format) : "FILE";
     }
 
     private void BuildHub()
@@ -2003,26 +2130,25 @@ internal sealed class WheelWindow : Window
         _title.Foreground = Theme.Text;
         _detail.Foreground = Theme.Muted;
         _tabTrack.Background = Theme.Track;
+        _formatBody.Background = Theme.AccentGradient;
+        _formatBody.BorderBrush = Theme.PanelBorder;
+        _formatTab.Background = Theme.AccentGradient;
+        _formatText.Foreground = Theme.TextOnAccent;
 
         if (_repeat)
         {
-            _icon.Visibility = Visibility.Collapsed;
+            _formatBadge.Visibility = Visibility.Collapsed;
             _iconGlyph.Text = "\uE8EE"; // RepeatAll
             _iconGlyph.Foreground = Theme.Accent;
             _iconGlyph.Visibility = Visibility.Visible;
         }
-        else if (_items.Count > 0)
-        {
-            _icon.Source = Shell.FileIcons.Get(_items[0].Path);
-            _icon.Visibility = _icon.Source is null ? Visibility.Collapsed : Visibility.Visible;
-            _iconGlyph.Visibility = Visibility.Collapsed;
-        }
         else
         {
-            _icon.Visibility = Visibility.Collapsed;
-            _iconGlyph.Text = Glyphs.Extract;
-            _iconGlyph.Foreground = Theme.Accent;
-            _iconGlyph.Visibility = Visibility.Visible;
+            // The format of what will be acted on: extension for one file, DIR for a folder, FILES for a
+            // multi-selection (or the empty drag wheel, before the file arrives). Never the category.
+            _formatBadge.Visibility = Visibility.Visible;
+            _formatText.Text = FormatBadgeText(_items);
+            _iconGlyph.Visibility = Visibility.Collapsed;
         }
 
         _tabs.Children.Clear();

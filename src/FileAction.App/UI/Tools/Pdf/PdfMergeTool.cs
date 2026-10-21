@@ -389,7 +389,8 @@ internal sealed class PdfMergeView
             {
                 image.Visibility = Visibility.Collapsed;
                 fallback.Visibility = Visibility.Visible;
-                fallback.Text = T("tool.pdfmerge.thumbFailed");
+                // The row tile is only 44 x 58: the full "Preview unavailable" was clipped to "ew unava".
+                PdfToolChrome.Fail(fallback, "tool.pdfmerge.thumbFailedShort", 44);
             }
         }
     }
@@ -472,7 +473,15 @@ internal static class PdfMergeWriter
             pixelHeight = (int)image.Height;
             if (pixelWidth <= 0 || pixelHeight <= 0)
                 throw new InvalidOperationException("The image has no pixels.");
-            png = image.ToByteArray(ImageMagick.MagickFormat.Png);
+
+            // Magick's default encoder may write an indexed/palette PNG for a flat or few-colour
+            // source, and PDFsharp's XImage decoder rejects that as "Unsupported image format".
+            // Normalize to an 8-bit true-colour (24-bit RGB) PNG, compositing transparency on white.
+            image.BackgroundColor = ImageMagick.MagickColors.White;
+            image.Alpha(ImageMagick.AlphaAction.Remove);
+            image.ColorType = ImageMagick.ColorType.TrueColor;
+            image.Depth = 8;
+            png = image.ToByteArray(ImageMagick.MagickFormat.Png24);
         }
         catch (Exception ex) when (ex is not ConversionException)
         {

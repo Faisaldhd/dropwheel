@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -6,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using FileAction.Core;
 using ImageMagick;
+using SkiaSharp;
 using static FileAction.Core.Loc;
 using WpfImage = System.Windows.Controls.Image;
 
@@ -137,13 +139,21 @@ internal static class PdfThumbnails
 
     private static BitmapSource Decode(Stream stream, int decodeWidth)
     {
-        var bitmap = new BitmapImage();
-        bitmap.BeginInit();
-        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-        bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-        bitmap.DecodePixelWidth = Math.Max(1, decodeWidth);
-        bitmap.StreamSource = stream;
-        bitmap.EndInit();
+        // WPF's BitmapImage/FinalizeCreation touches ImagingCache, which throws ArgumentNullException("key")
+        // when decoding off the UI thread (the PDF tools decode in Task.Run). Skia decodes and scales into a
+        // plain BGRA buffer, then BitmapSource.Create makes a frozen frame with no WPF cache involvement.
+        using var source = SKBitmap.Decode(stream)
+            ?? throw new InvalidOperationException("The PDF page image could not be decoded.");
+        var target = Math.Max(1, decodeWidth);
+        var height = Math.Max(1, (int)Math.Round(source.Height * (double)target / source.Width));
+        using var resized = source.Resize(
+            new SKImageInfo(target, height, SKColorType.Bgra8888, SKAlphaType.Premul),
+            SKFilterQuality.High) ?? throw new InvalidOperationException("The PDF page image could not be resized.");
+        var info = new SKImageInfo(resized.Width, resized.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        var pixels = new byte[info.BytesSize];
+        Marshal.Copy(resized.GetPixels(), pixels, 0, pixels.Length);
+        var bitmap = BitmapSource.Create(info.Width, info.Height, 96, 96,
+            PixelFormats.Bgra32, null, pixels, info.RowBytes);
         bitmap.Freeze();
         return bitmap;
     }
@@ -198,21 +208,44 @@ internal static class PdfToolChrome
         var fallback = new TextBlock
         {
             Text = "\u2026",
-            FontSize = 12,
+            FontSize = FallbackFontSize(width),
             Foreground = Theme.Muted,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = System.Windows.TextAlignment.Center,
+            MaxWidth = FallbackWidth(width),
         };
         var box = new Border
         {
             Width = width,
             Height = height,
             Background = Theme.Page,
-            CornerRadius = new CornerRadius(8),
-            ClipToBounds = true,
+            CornerRadius = new CornerRadius(Design.Radius.Control),
             Child = new Grid { Children = { image, fallback } },
         };
+
+        // Border draws its own background rounded but never clips its children: without a rounded
+        // geometry the page preview paints square over the tile's corners. Same geometry as
+        // MediaSurface.Round, applied now because these tiles have a fixed width and height.
+        box.Clip = new RectangleGeometry(
+            new Rect(0, 0, width, height), Design.Radius.Control, Design.Radius.Control);
         return (box, image, fallback);
+    }
+
+    /// <summary>
+    /// Shows the muted failure text in a tile's fallback, wrapped and fitted to the tile width so a long
+    /// sentence cannot be clipped in a small 44 x 58 merge row.
+    /// </summary>
+    public static void Fail(TextBlock fallback, string key, double width)
+    {
+        var failed = Failed(key);
+        fallback.Text = failed.Text;
+        fallback.FontSize = FallbackFontSize(width);
+        fallback.Foreground = failed.Foreground;
+        fallback.TextWrapping = failed.TextWrapping;
+        fallback.TextAlignment = failed.TextAlignment;
+        fallback.MaxWidth = FallbackWidth(width);
     }
 
     /// <summary>The muted "preview unavailable" text shown when a thumbnail cannot be decoded.</summary>
@@ -226,4 +259,8 @@ internal static class PdfToolChrome
         HorizontalAlignment = HorizontalAlignment.Center,
         VerticalAlignment = VerticalAlignment.Center,
     };
+
+    private static double FallbackFontSize(double width) => width < 60 ? 9 : 10;
+
+    private static double FallbackWidth(double width) => Math.Max(1, width - 4);
 }

@@ -23,6 +23,7 @@ internal sealed class AnnotateView
     private readonly DropTargets? _targets;
     private readonly Task<(BitmapSource Bitmap, int Width, int Height)> _load;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly ImageGateGrid _root = new();
     private readonly AnnotationSurface _surface = new();
     private readonly List<(AnnotationTool Tool, Border Pill, TextBlock Label)> _toolButtons = [];
     private readonly List<(AnnotationColor Color, Border Swatch)> _swatches = [];
@@ -55,7 +56,8 @@ internal sealed class AnnotateView
         _surface.TextRequested += point => OpenEditor(point, -1, string.Empty, LanguageManager.IsRtl);
         _surface.TextEditRequested += EditExistingText;
 
-        var root = new Grid { Margin = new Thickness(5, 0, 5, 0) };
+        var root = _root;
+        root.Margin = new Thickness(5, 0, 5, 0);
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -102,6 +104,7 @@ internal sealed class AnnotateView
                 _placeholder.Visibility = Visibility.Collapsed;
             _surface.Visibility = Visibility.Visible;
             Refresh();
+            _root.Ready();
             _ready.TrySetResult(new MediaSize(width, height));
         }
         catch (Exception ex)

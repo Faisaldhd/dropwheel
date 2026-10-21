@@ -271,7 +271,7 @@ internal sealed class PdfOrganizeView
         for (var position = 0; position < _plan.Count; position++)
             _grid.Children.Add(BuildCell(_plan.Pages[position], position));
 
-        _summary.Text = T("tool.pdforganize.pages", _plan.Count);
+        _summary.Text = Loc.Plural("pages.count", _plan.Count);
         _summary.Visibility = Visibility.Visible;
         HideStatus();
         foreach (var index in _thumbnails.Keys)
@@ -422,7 +422,7 @@ internal sealed class PdfOrganizeView
             {
                 image.Visibility = Visibility.Collapsed;
                 fallback.Visibility = Visibility.Visible;
-                fallback.Text = T("tool.pdforganize.thumbFailed");
+                PdfToolChrome.Fail(fallback, "tool.pdforganize.thumbFailed", 108);
             }
         }
     }

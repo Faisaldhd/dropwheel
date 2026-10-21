@@ -27,6 +27,7 @@ internal sealed class EditPhotosView
     private readonly PhotoParameters _parameters = new();
     private readonly Task<EditPhotoRenderer.LoadedPhoto> _load;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly ImageGateGrid _root = new();
     private readonly DispatcherTimer _debounce;
     private readonly SemaphoreSlim _renderGate = new(1, 1);
     private readonly StackPanel _rows = new();
@@ -66,7 +67,8 @@ internal sealed class EditPhotosView
 
     public ToolContent Build()
     {
-        var root = new Grid { Margin = new Thickness(18, 0, 18, 0) };
+        var root = _root;
+        root.Margin = new Thickness(18, 0, 18, 0);
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
@@ -92,6 +94,7 @@ internal sealed class EditPhotosView
             _source = source;
             _edited = source.Original;
             Display();
+            _root.Ready();
             _ready.TrySetResult(new MediaSize(source.Width, source.Height));
 
             // A slider may have moved while the photo was still decoding.
@@ -508,7 +511,7 @@ internal sealed class EditPhotosView
 
     private Task<string?> ApplyAsync()
     {
-        if (!EditPhotosTool.Instance.Applies([_item]))
+        if (_source is null || !EditPhotosTool.Instance.Applies([_item]))
             return Task.FromResult<string?>(null);
 
         // The final render must not share a parameter object with a slider still being dragged.

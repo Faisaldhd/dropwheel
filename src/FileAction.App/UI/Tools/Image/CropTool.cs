@@ -65,6 +65,7 @@ internal sealed class CropView
     private readonly DropTargets? _targets;
     private readonly Task<(BitmapSource Bitmap, int Width, int Height)> _load;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly ImageGateGrid _root = new();
     private readonly Grid _preview = new() { ClipToBounds = true };
     private readonly Canvas _overlay = new();
     private readonly Border _frame = new() { BorderBrush = Theme.Accent, BorderThickness = new Thickness(2) };
@@ -110,7 +111,7 @@ internal sealed class CropView
 
     public ToolContent Build()
     {
-        var root = new Grid();
+        var root = _root;
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -142,6 +143,7 @@ internal sealed class CropView
             _rect = CropMath.Full(width, height);
             SyncBoxes();
             Layout();
+            _root.Ready();
             _ready.TrySetResult(new MediaSize(width, height));
         }
         catch (Exception ex)
@@ -357,15 +359,14 @@ internal sealed class CropView
         if (_imageWidth == 0)
             return;
 
-        var availableWidth = Math.Max(1, _preview.ActualWidth - 12);
-        var availableHeight = Math.Max(1, _preview.ActualHeight - 12);
-        _scale = Math.Min(availableWidth / _imageWidth, availableHeight / _imageHeight);
-        if (_scale <= 0 || double.IsInfinity(_scale))
-            _scale = 1;
+        // The Image control fits the bitmap into the whole well (Uniform), so the overlay must use the
+        // same box: subtracting the card padding here made the frame and the saved crop drift.
+        var viewport = CropViewport.Fit(_preview.ActualWidth, _preview.ActualHeight, _imageWidth, _imageHeight);
+        _scale = viewport.Scale;
+        _originX = viewport.OriginX;
+        _originY = viewport.OriginY;
         var displayWidth = _imageWidth * _scale;
         var displayHeight = _imageHeight * _scale;
-        _originX = (_preview.ActualWidth - displayWidth) / 2;
-        _originY = (_preview.ActualHeight - displayHeight) / 2;
 
         var left = _originX + _rect.X * _scale;
         var top = _originY + _rect.Y * _scale;

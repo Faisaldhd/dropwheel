@@ -71,9 +71,10 @@ public class WheelMotionTests
     [Fact]
     public void The_inner_ring_never_waits_visibly_or_exceeds_its_motion_budget()
     {
-        // Owner's budget: 2 s dwell with a visible progress arc, entrance <= 120 ms, category swap
-        // <= 100 ms, clear on Escape <= 100 ms. The first entrance frame is already visible (0.4).
-        Assert.Equal(2000, WheelWindow.DwellMs);
+        // Owner's budget: a short 450 ms dwell with a visible progress arc, entrance <= 120 ms,
+        // category swap <= 100 ms, clear on Escape <= 100 ms. The first entrance frame is already
+        // visible (0.4).
+        Assert.Equal(450, WheelWindow.DwellMs);
         Assert.True(WheelWindow.InnerEnterMs + (WheelWindow.InnerCapacity - 1) * WheelWindow.InnerEnterStaggerMs <= 120);
         Assert.True(WheelWindow.InnerSwapOutMs + WheelWindow.InnerSwapInMs <= 100);
         Assert.True(WheelWindow.InnerExitMs <= 100);

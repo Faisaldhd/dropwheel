@@ -75,7 +75,8 @@ internal sealed class AnnotateOperation : Operation, IInteractiveTool
 
     public void Open(IReadOnlyList<FileItem> items, DropTargets? targets)
     {
-        var spec = ToolRegistry.For(items) ?? AnnotateTool.Instance;
-        new ToolWindow(spec, items, targets).Show();
+        // Open this tool by identity. ToolRegistry.For(items) is first-match and several image tools accept
+        // a single JPEG, so a generic lookup from the Annotate slice could open another tool's window.
+        new ToolWindow(AnnotateTool.Instance, items, targets).Show();
     }
 }

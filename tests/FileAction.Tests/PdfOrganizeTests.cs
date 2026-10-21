@@ -9,6 +9,7 @@ namespace FileAction.Tests;
 /// The page and merge plans behind the 2.4.0 PDF tools. Pure model only: no PDF, image or temp file is
 /// created, so these tests are fast and never depend on PDFsharp or a renderer.
 /// </summary>
+[Collection(nameof(LanguageSwitching))]
 public class PdfOrganizeTests
 {
     private static FileItem Item(string name) => new(Path.Combine(@"C:\DropWheelTests", name));
@@ -386,7 +387,11 @@ public class PdfOrganizeTests
 
     // ---------------------------------------------------------------- strings
 
-    /// <summary>Every key the two PDF tools read, in one list so en and ar are checked together.</summary>
+    /// <summary>
+    /// Every <c>tool.pdfmerge.*</c> / <c>tool.pdforganize.*</c> key, in one list so en and ar are checked
+    /// together. <c>tool.pdforganize.pages</c> stays because released keys are never removed; the live page
+    /// counter is the CLDR group <c>pages.count</c>.
+    /// </summary>
     private static readonly string[] PdfToolKeys =
     [
         "tool.pdfmerge.label",
@@ -396,6 +401,7 @@ public class PdfOrganizeTests
         "tool.pdfmerge.hint",
         "tool.pdfmerge.remove",
         "tool.pdfmerge.thumbFailed",
+        "tool.pdfmerge.thumbFailedShort",
         "tool.pdfmerge.error.plan",
         "tool.pdfmerge.error.pdf",
         "tool.pdfmerge.error.image",
@@ -423,6 +429,8 @@ public class PdfOrganizeTests
 
     private static readonly Regex Placeholder = new(@"\{(\d+)\}", RegexOptions.Compiled);
 
+    private static readonly string[] PluralCategories = ["zero", "one", "two", "few", "many", "other"];
+
     [Fact]
     public void Every_pdf_tool_key_exists_in_english_and_arabic_with_the_same_placeholders()
     {
@@ -433,6 +441,34 @@ public class PdfOrganizeTests
             Assert.True(english.ContainsKey(key), $"en.json is missing '{key}'.");
             Assert.True(arabic.ContainsKey(key), $"ar.json is missing '{key}'.");
             Assert.Equal(Placeholders(english[key]), Placeholders(arabic[key]));
+        }
+    }
+
+    [Fact]
+    public void Organize_page_count_uses_the_loc_plural_forms()
+    {
+        var (english, arabic) = LoadStringTables();
+        foreach (var category in PluralCategories)
+        {
+            Assert.True(english.ContainsKey($"pages.count.{category}"), $"en.json is missing pages.count.{category}.");
+            Assert.True(arabic.ContainsKey($"pages.count.{category}"), $"ar.json is missing pages.count.{category}.");
+        }
+
+        var previous = Loc.Current;
+        try
+        {
+            Loc.Current = Language.English;
+            Assert.Equal("1 page", Loc.Plural("pages.count", 1));
+            Assert.Equal("3 pages", Loc.Plural("pages.count", 3));
+
+            Loc.Current = Language.Arabic;
+            Assert.Equal("صفحة واحدة", Loc.Plural("pages.count", 1));
+            Assert.Equal("صفحتان", Loc.Plural("pages.count", 2));
+            Assert.Equal("5 صفحات", Loc.Plural("pages.count", 5));
+        }
+        finally
+        {
+            Loc.Current = previous;
         }
     }
 
