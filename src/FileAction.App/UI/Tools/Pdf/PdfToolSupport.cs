@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -6,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using FileAction.Core;
 using ImageMagick;
+using SkiaSharp;
 using static FileAction.Core.Loc;
 using WpfImage = System.Windows.Controls.Image;
 
@@ -137,13 +139,21 @@ internal static class PdfThumbnails
 
     private static BitmapSource Decode(Stream stream, int decodeWidth)
     {
-        var bitmap = new BitmapImage();
-        bitmap.BeginInit();
-        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-        bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-        bitmap.DecodePixelWidth = Math.Max(1, decodeWidth);
-        bitmap.StreamSource = stream;
-        bitmap.EndInit();
+        // WPF's BitmapImage/FinalizeCreation touches ImagingCache, which throws ArgumentNullException("key")
+        // when decoding off the UI thread (the PDF tools decode in Task.Run). Skia decodes and scales into a
+        // plain BGRA buffer, then BitmapSource.Create makes a frozen frame with no WPF cache involvement.
+        using var source = SKBitmap.Decode(stream)
+            ?? throw new InvalidOperationException("The PDF page image could not be decoded.");
+        var target = Math.Max(1, decodeWidth);
+        var height = Math.Max(1, (int)Math.Round(source.Height * (double)target / source.Width));
+        using var resized = source.Resize(
+            new SKImageInfo(target, height, SKColorType.Bgra8888, SKAlphaType.Premul),
+            SKFilterQuality.High) ?? throw new InvalidOperationException("The PDF page image could not be resized.");
+        var info = new SKImageInfo(resized.Width, resized.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        var pixels = new byte[info.BytesSize];
+        Marshal.Copy(resized.GetPixels(), pixels, 0, pixels.Length);
+        var bitmap = BitmapSource.Create(info.Width, info.Height, 96, 96,
+            PixelFormats.Bgra32, null, pixels, info.RowBytes);
         bitmap.Freeze();
         return bitmap;
     }
