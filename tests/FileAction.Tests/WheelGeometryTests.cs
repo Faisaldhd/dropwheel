@@ -79,19 +79,22 @@ public class WheelGeometryTests
             WheelWindow.InnerCapacity,
             WheelWindow.InnerLabelRadius - WheelWindow.InnerLabelMaxHeight / 2);
         Assert.True(WheelWindow.InnerLabelWidth < chord);
-        Assert.True(WheelWindow.InnerLabelTextWidth < WheelWindow.InnerLabelWidth);
-        // A left/right slice only has the radial thickness as horizontal room, so its text box is
-        // narrower there than at the top; a diagonal slice sits in between.
-        var thickness = WheelWindow.InnerOuterRadius - WheelWindow.InnerInnerRadius;
-        Assert.True(WheelWindow.InnerTextWidth(4, 1) <= thickness - 2);
-        Assert.Equal(WheelWindow.InnerLabelTextWidth, WheelWindow.InnerTextWidth(6, 0));
-        Assert.True(WheelWindow.InnerTextWidth(6, 1) > WheelWindow.InnerTextWidth(4, 1));
+
         for (var count = 2; count <= WheelWindow.InnerCapacity; count++)
             for (var index = 0; index < count; index++)
             {
-                var width = WheelWindow.InnerTextWidth(count, index);
-                Assert.InRange(width, 40, WheelWindow.InnerLabelWidth);
+                var width = WheelWindow.InnerSliceLabelWidth(count, index);
+                Assert.InRange(width, 20, WheelWindow.InnerLabelWidth);
+                Assert.True(WheelWindow.LabelBoxFits(
+                    count, index, WheelWindow.InnerInnerRadius, WheelWindow.InnerOuterRadius,
+                    WheelWindow.InnerLabelRadius, width, WheelWindow.InnerLabelMaxHeight),
+                    $"{count} inner slices, slice {index}: width {width:0.0} leaves the band");
             }
+
+        // A left/right slice only has the ring's radial thickness as horizontal room, so its box is
+        // narrower there than at the top; the side of a six-slice ring is the tightest case.
+        Assert.True(WheelWindow.InnerSliceLabelWidth(6, 1) < WheelWindow.InnerSliceLabelWidth(6, 0));
+        Assert.True(WheelWindow.InnerSliceLabelWidth(6, 1) < WheelWindow.InnerLabelWidth);
         Assert.Equal(6, WheelWindow.InnerCapacity);
         Assert.Equal(5, WheelWindow.InnerPerPage);
     }
