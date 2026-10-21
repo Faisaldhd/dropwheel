@@ -150,6 +150,8 @@ internal sealed class UnlockedPanel : Window
             _ => Theme.BadgeErrorText,
         };
         _retry.Visibility = status == UnlockedStatus.Error ? Visibility.Visible : Visibility.Collapsed;
+        if (status == UnlockedStatus.Error)
+            Reveal();
     }
 
     public void SetError(string detail)
@@ -157,6 +159,23 @@ internal sealed class UnlockedPanel : Window
         _status.Text = detail;
         _status.Foreground = Theme.BadgeErrorText;
         _retry.Visibility = Visibility.Visible;
+        Reveal();
+    }
+
+    /// <summary>An error after the 1.5 s toast must be visible, otherwise Retry is unreachable.</summary>
+    private void Reveal()
+    {
+        _hide.Stop();
+        if (IsVisible)
+            return;
+        try
+        {
+            Show();
+        }
+        catch (InvalidOperationException)
+        {
+            // The session is closing; the journal still keeps the error.
+        }
     }
 
     public void ClosePanel()

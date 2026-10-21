@@ -311,7 +311,7 @@ internal sealed class VideoEditPreview : IDisposable
     /// <summary>The shared button's first click opens the player lazily; later clicks only toggle.</summary>
     private async Task ToggleFromControlAsync()
     {
-        if (_disposed || _externalPlayback || _playbackUnavailable || Info is null)
+        if (_disposed || _externalPlayback || _playbackUnavailable || _openingPlayback || Info is null)
             return;
 
         if (_player is null)
