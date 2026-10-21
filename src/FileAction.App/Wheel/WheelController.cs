@@ -143,7 +143,7 @@ internal sealed class WheelController
             else if (MissingDownloads(op, items, tools) is { } missing)
                 offered.Add(new NeedsToolOperation(op, missing));
         }
-        return WheelGroups.Arrange(WheelLayout.Arrange(offered, settings.HiddenOperations, settings.FavoriteOperations));
+        return WheelCategories.Arrange(WheelLayout.Arrange(offered, settings.HiddenOperations, settings.FavoriteOperations));
     }
 
     /// <summary>The smallest set of tools that would make <paramref name="op"/> work, or null.</summary>
