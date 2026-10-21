@@ -236,6 +236,19 @@ internal sealed class ToolWindow : Window
 
         var titleBar = BuildTitleBar();
         var bottom = BuildBottomBar();
+        // Hairline separators make the three zones read as one frame instead of a floating stack.
+        var titleHost = new Border
+        {
+            Child = titleBar,
+            BorderBrush = Theme.PanelBorder,
+            BorderThickness = new Thickness(0, 0, 0, 1),
+        };
+        var bottomHost = new Border
+        {
+            Child = bottom,
+            BorderBrush = Theme.PanelBorder,
+            BorderThickness = new Thickness(0, 1, 0, 0),
+        };
         // The content used to sit flush against the card edge while the title and actions were inset.
         // One shared gutter now lines up every tool, including the seven media views.
         var contentHost = new Border
@@ -248,12 +261,12 @@ internal sealed class ToolWindow : Window
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        Grid.SetRow(titleBar, 0);
+        Grid.SetRow(titleHost, 0);
         Grid.SetRow(contentHost, 1);
-        Grid.SetRow(bottom, 2);
-        grid.Children.Add(titleBar);
+        Grid.SetRow(bottomHost, 2);
+        grid.Children.Add(titleHost);
         grid.Children.Add(contentHost);
-        grid.Children.Add(bottom);
+        grid.Children.Add(bottomHost);
 
         // WPF does not clip a Border's children to its CornerRadius. Clip the real content to a slightly
         // smaller radius so previews and action bars never paint over the rounded window corners, while
