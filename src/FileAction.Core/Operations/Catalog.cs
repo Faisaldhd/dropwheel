@@ -67,6 +67,15 @@ public static class Catalog
         ImageEdit(ops, "image.square", T("catalog.image.square.label"), Glyphs.Crop, T("catalog.image.square.subtitle"), T("catalog.image.square.suffix"), ImageBackend.CropSquare);
         ImageEdit(ops, "image.grayscale", T("catalog.image.grayscale.label"), Glyphs.Color, null, T("catalog.image.grayscale.suffix"), ImageBackend.Grayscale);
         ImageEdit(ops, "image.strip", T("catalog.image.strip.label"), Glyphs.Clear, "GPS, EXIF", T("catalog.image.strip.suffix"), img => img.Strip());
+        // The one-click cutout. The windowed tool (tools.removebackground) is the same core with a live
+        // preview and explicit key/tolerance/feather controls; this slice uses the shipped defaults and
+        // always writes a PNG, because JPEG and BMP cannot store the alpha channel it produces.
+        ops.Add(new PerFileOperation("image.bg.remove", WheelKind.Tools, T("catalog.image.bgRemove.label"), Glyphs.Clear, Formats.Images,
+            async (item, ctx, _) => [await RemoveBackground.SaveAsync(item.Path, ctx.OutputDirFor(item.Path),
+                $"{item.BaseName} ({T("catalog.image.bgRemove.suffix")})", RemoveBackground.DefaultFormat,
+                RemoveBackground.DefaultFuzz, RemoveBackground.DefaultFeather, ctx.CancellationToken)],
+            subtitle: T("catalog.image.bgRemove.subtitle"))
+        { Preview = PreviewKind.Image });
         ops.Add(new BatchOperation("image.merge.pdf", WheelKind.Tools, T("catalog.image.mergePdf.label"), Glyphs.Merge,
             BatchOperation.AllOf(Formats.Images, min: 2),
             async (items, ctx) => [await OutputPaths.ProduceAsync(ctx.OutputDirFor(items[0].Path), items[0].BaseName, "pdf",

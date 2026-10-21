@@ -18,6 +18,7 @@ public class ImageToolWindowTests
         Path.Combine("Frame", "AddBackgroundView.cs"),
         "RedactView.cs",
         "EditPhotosView.cs",
+        "RemoveBackgroundView.cs",
         Path.Combine("..", "Collage", "CollageView.cs"),
     };
 

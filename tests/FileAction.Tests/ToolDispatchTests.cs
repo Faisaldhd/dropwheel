@@ -103,9 +103,24 @@ public class ToolDispatchTests
         var annotate = Assert.Single(groups, group => group.GroupId == "category.annotate");
         Assert.Contains(annotate.Children, child => child.Id == "tools.annotate");
         Assert.Contains(annotate.Children, child => child.Id == "tools.redact");
+        Assert.Contains(annotate.Children, child => child.Id == "tools.removebackground");
+        Assert.Contains(annotate.Children, child => child.Id == "image.bg.remove");
 
         Assert.All(groups, group => Assert.True(group.Children.Count >= 2));
         Assert.All(slices, slice => Assert.DoesNotContain("image.to.", slice.Id));
+    }
+
+    [Fact]
+    public void Remove_background_is_a_reachable_interactive_tool()
+    {
+        var operation = WheelGroups.Flatten(WheelSlices()).Single(candidate => candidate.Id == "tools.removebackground");
+        Assert.IsAssignableFrom<IInteractiveTool>(operation);
+
+        var photo = new FileItem(Path.Combine(Path.GetTempPath(), "photo.png"));
+        var spec = ToolRegistry.For("tools.removebackground", [photo]);
+        Assert.NotNull(spec);
+        Assert.Equal("tools.removebackground", spec.Id);
+        Assert.True(spec.Applies([photo]));
     }
 
     [Fact]

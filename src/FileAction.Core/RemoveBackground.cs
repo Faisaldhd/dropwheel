@@ -23,14 +23,23 @@ public static class RemoveBackground
     /// <summary>A background that differs slightly from the sampled colour is still removed.</summary>
     public const int DefaultFuzz = 20;
 
+    /// <summary>No soft ramp: the tolerance edge is a hard alpha cut.</summary>
+    public const int MinFeather = 0;
+
+    /// <summary>The whole tolerance band is a smooth alpha ramp.</summary>
+    public const int MaxFeather = 100;
+
+    /// <summary>The shipped edge softness, a little over a third of the tolerance band.</summary>
+    public const int DefaultFeather = 35;
+
     /// <summary>The default result: PNG is lossless and always keeps the alpha channel.</summary>
     public const string DefaultFormat = "png";
 
     /// <summary>
-    /// Share of the fuzz tolerance used for the soft alpha ramp. At fuzz 0 this is zero, so an exact
-    /// key match alone is removed and every other pixel is left untouched.
+    /// Share of the fuzz tolerance used for the soft alpha ramp at <see cref="DefaultFeather"/>. At fuzz 0
+    /// this is zero, so an exact key match alone is removed and every other pixel is left untouched.
     /// </summary>
-    public const double FeatherFraction = 0.35;
+    public const double FeatherFraction = DefaultFeather / 100.0;
 
     /// <summary>Largest possible channel difference, i.e. the tolerance at <see cref="MaxFuzz"/>.</summary>
     public const double MaxDistance = 255.0;
@@ -40,6 +49,9 @@ public static class RemoveBackground
 
     /// <summary>The fuzz value clamped into its declared 0–100 range.</summary>
     public static int ClampFuzz(int fuzz) => Math.Clamp(fuzz, MinFuzz, MaxFuzz);
+
+    /// <summary>The feather value clamped into its declared 0–100 range.</summary>
+    public static int ClampFeather(int feather) => Math.Clamp(feather, MinFeather, MaxFeather);
 
     /// <summary>Colour distance accepted at <paramref name="fuzz"/>, in the same 0–255 scale as <see cref="Distance"/>.</summary>
     public static double Tolerance(int fuzz) => ClampFuzz(fuzz) / 100.0 * MaxDistance;
@@ -61,19 +73,30 @@ public static class RemoveBackground
     /// feathered inner edge, rises smoothly to 1 at the tolerance and stays 1 beyond it. A fuzz of 0
     /// deliberately has no feather: only <paramref name="distance"/> 0 is removed.
     /// </summary>
-    public static byte AlphaFor(double distance, int fuzz)
+    public static byte AlphaFor(double distance, int fuzz) =>
+        AlphaFor(distance, fuzz, DefaultFeather);
+
+    /// <summary>
+    /// Alpha for one pixel at an explicit feather percentage. Feather 0 is a hard cut at the tolerance;
+    /// higher values start the soft ramp earlier inside the band, up to the whole band at 100.
+    /// </summary>
+    public static byte AlphaFor(double distance, int fuzz, int feather)
     {
         var tolerance = Tolerance(fuzz);
         if (tolerance <= 0)
             return distance <= 0 ? (byte)0 : (byte)255;
         if (distance >= tolerance)
             return 255;
-        return AlphaForDistance(distance, tolerance);
+        return AlphaForDistance(distance, tolerance, feather);
     }
 
     /// <summary>Alpha for one pixel; see <see cref="AlphaFor(double, int)"/>.</summary>
     public static byte AlphaFor(BackgroundColor key, byte r, byte g, byte b, int fuzz) =>
-        AlphaFor(Distance(key, r, g, b), fuzz);
+        AlphaFor(key, r, g, b, fuzz, DefaultFeather);
+
+    /// <summary>Alpha for one pixel at an explicit feather percentage.</summary>
+    public static byte AlphaFor(BackgroundColor key, byte r, byte g, byte b, int fuzz, int feather) =>
+        AlphaFor(Distance(key, r, g, b), fuzz, feather);
 
     /// <summary>
     /// Samples the background from four corner patches and four edge-midpoint patches. The median of
@@ -98,11 +121,15 @@ public static class RemoveBackground
     public static void Apply(MagickImage image, int fuzz = DefaultFuzz)
     {
         ArgumentNullException.ThrowIfNull(image);
-        Apply(image, fuzz, Sample(image));
+        Apply(image, fuzz, Sample(image), DefaultFeather);
     }
 
     /// <summary>Removes <paramref name="key"/> from <paramref name="image"/> in place.</summary>
-    public static void Apply(MagickImage image, int fuzz, BackgroundColor key)
+    public static void Apply(MagickImage image, int fuzz, BackgroundColor key) =>
+        Apply(image, fuzz, key, DefaultFeather);
+
+    /// <summary>Removes <paramref name="key"/> in place with an explicit edge feather.</summary>
+    public static void Apply(MagickImage image, int fuzz, BackgroundColor key, int feather)
     {
         ArgumentNullException.ThrowIfNull(image);
         if (image.Width == 0 || image.Height == 0)
@@ -121,6 +148,7 @@ public static class RemoveBackground
             return;
         var tolerance = Tolerance(fuzz);
         var toleranceSquared = tolerance * tolerance;
+        var softness = ClampFeather(feather);
         for (var offset = 0; offset + 3 < data.Length; offset += 4)
         {
             var dr = data[offset] - key.R;
@@ -133,7 +161,7 @@ public static class RemoveBackground
             // transparency is kept: removal may add transparency, never make a clear pixel opaque.
             var keyed = tolerance <= 0
                 ? squared == 0 ? (byte)0 : (byte)255
-                : squared >= toleranceSquared ? (byte)255 : AlphaForDistance(Math.Sqrt(squared), tolerance);
+                : squared >= toleranceSquared ? (byte)255 : AlphaForDistance(Math.Sqrt(squared), tolerance, softness);
             data[offset + 3] = Math.Min(data[offset + 3], keyed);
         }
         pixels.SetBytePixels(data);
@@ -149,6 +177,7 @@ public static class RemoveBackground
     /// <param name="baseName">Result file name without the extension.</param>
     /// <param name="format">An alpha-capable output format; defaults to PNG.</param>
     /// <param name="fuzz">Tolerance, 0–100.</param>
+    /// <param name="feather">Edge softness, 0–100.</param>
     /// <param name="ct">Cancellation for the decode, the removal and the encode.</param>
     public static Task<string> SaveAsync(
         string input,
@@ -156,6 +185,7 @@ public static class RemoveBackground
         string baseName,
         string format = DefaultFormat,
         int fuzz = DefaultFuzz,
+        int feather = DefaultFeather,
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(input);
@@ -164,11 +194,12 @@ public static class RemoveBackground
 
         var outputFormat = RequireAlphaOutput(format);
         var value = ClampFuzz(fuzz);
+        var softness = ClampFeather(feather);
         return OutputPaths.ProduceAsync(outputDirectory, baseName, outputFormat, temp => Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
             using var image = ImageBackend.Load(input);
-            Apply(image, value);
+            Apply(image, value, Sample(image), softness);
             ct.ThrowIfCancellationRequested();
             ImageBackend.Save(image, temp, outputFormat);
         }, ct));
@@ -194,9 +225,9 @@ public static class RemoveBackground
     }
 
     /// <summary>Alpha from a distance already known to be inside <paramref name="tolerance"/>.</summary>
-    private static byte AlphaForDistance(double distance, double tolerance)
+    private static byte AlphaForDistance(double distance, double tolerance, int feather)
     {
-        var inner = tolerance * (1 - FeatherFraction);
+        var inner = tolerance * (1 - ClampFeather(feather) / 100.0);
         if (distance <= inner)
             return 0;
 
