@@ -1121,5 +1121,6 @@
   "wheel.category.audio": "صوت",
   "wheel.category.pdf": "PDF",
   "wheel.category.protect": "حماية",
-  "wheel.category.archive": "أرشيف"
+  "wheel.category.archive": "أرشيف",
+  "tool.window.loading": "جارٍ التحضير…"
 }

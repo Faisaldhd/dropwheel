@@ -66,18 +66,24 @@ internal sealed class ToolWindow : Window
     private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
 
     private readonly IToolWindowSpec _spec;
-    private readonly ToolContent _content;
+    private readonly IReadOnlyList<FileItem> _items;
+    private readonly DropTargets? _targets;
     private readonly ToolApplyState _applyState = new();
+    private ToolContent _content;
     private Border? _applyButton;
     private Border? _chrome;
+    private Border? _contentHost;
     private Motion.Handle? _motion;
     private NativePoint? _cursorAnchor;
+    private bool _realized;
     private bool _closeMotionRunning;
     private bool _prepared;
 
     public ToolWindow(IToolWindowSpec spec, IReadOnlyList<FileItem> items, DropTargets? targets)
     {
         _spec = spec;
+        _items = items;
+        _targets = targets;
         Title = T(spec.TitleKey);
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
@@ -99,7 +105,9 @@ internal sealed class ToolWindow : Window
         Width = initial.Width;
         Height = initial.Height;
 
-        _content = spec.Create(items, targets);
+        // Show the frame immediately; the tool's real view is built after the window is on screen. This
+        // removes the click-to-window delay on tools whose Create() touches COM, icons or a decoder.
+        _content = Placeholder();
         Content = Build();
         // The one place tool-window motion is wired: the chrome Border contains the title bar, the tool's
         // view (the content root) and the button bar, so one transform set animates all three together.
@@ -140,6 +148,68 @@ internal sealed class ToolWindow : Window
     }
 
     /// <summary>
+    /// The light view shown until the tool's real content is built. It keeps the frame, title and close
+    /// button usable immediately instead of blocking Show() on a decoder or COM initialisation.
+    /// </summary>
+    private static ToolContent Placeholder()
+    {
+        var panel = new StackPanel
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        panel.Children.Add(new TextBlock
+        {
+            Text = T("tool.window.loading"),
+            Foreground = Theme.Muted,
+            FontSize = Design.Type.Caption,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, Design.Space.Md),
+        });
+        panel.Children.Add(new ProgressBar
+        {
+            IsIndeterminate = true,
+            Width = 120,
+            Height = 4,
+            Foreground = Theme.Accent,
+            Background = Theme.Track,
+        });
+        return new ToolContent(
+            panel,
+            () => { },
+            () => Task.FromResult<string?>(null),
+            Task.FromResult<MediaSize?>(null),
+            () => Task.CompletedTask);
+    }
+
+    /// <summary>Builds the real tool view once, after the frame is visible.</summary>
+    private async Task RealizeAsync()
+    {
+        if (_realized)
+            return;
+        _realized = true;
+        try
+        {
+            var content = _spec.Create(_items, _targets);
+            _content = content;
+            if (_contentHost is not null)
+                _contentHost.Child = content.View;
+            RefreshActionBar();
+        }
+        catch (Exception ex)
+        {
+            _contentHost?.Child = new TextBlock
+            {
+                Text = ex.Message,
+                Foreground = Theme.Error,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(Design.Gutter),
+            };
+        }
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
     /// Loads the preview and then sizes the window to the media. Also used by --self-test, where the
     /// window is never shown.
     /// </summary>
@@ -148,6 +218,7 @@ internal sealed class ToolWindow : Window
         if (_prepared)
             return;
         _prepared = true;
+        await RealizeAsync();
 
         try
         {
@@ -251,7 +322,7 @@ internal sealed class ToolWindow : Window
         };
         // The content used to sit flush against the card edge while the title and actions were inset.
         // One shared gutter now lines up every tool, including the seven media views.
-        var contentHost = new Border
+        _contentHost = new Border
         {
             Padding = new Thickness(Design.Gutter, 0, Design.Gutter, 0),
             Child = _content.View,
@@ -262,10 +333,10 @@ internal sealed class ToolWindow : Window
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(titleHost, 0);
-        Grid.SetRow(contentHost, 1);
+        Grid.SetRow(_contentHost, 1);
         Grid.SetRow(bottomHost, 2);
         grid.Children.Add(titleHost);
-        grid.Children.Add(contentHost);
+        grid.Children.Add(_contentHost);
         grid.Children.Add(bottomHost);
 
         // WPF does not clip a Border's children to its CornerRadius. Clip the real content to a slightly
@@ -422,6 +493,24 @@ internal sealed class ToolWindow : Window
         DockPanel.SetDock(apply, Dock.Right);
         bar.Children.Add(reset);
         bar.Children.Add(apply);        return bar;
+    }
+
+    /// <summary>Updates the action bar once the real tool view exists (the placeholder has no gate).</summary>
+    private void RefreshActionBar()
+    {
+        if (_applyButton is null)
+            return;
+        var label = (_content.View as IToolActionLabel)?.PrimaryLabelKey ?? _spec.PrimaryLabelKey;
+        Controls.SetText(_applyButton, T(label));
+        if (_content.View is IToolActionGate gate)
+        {
+            _applyButton.IsEnabled = gate.CanApply;
+            gate.CanApplyChanged += () =>
+            {
+                if (_applyButton is not null)
+                    _applyButton.IsEnabled = gate.CanApply;
+            };
+        }
     }
 
     /// <summary>

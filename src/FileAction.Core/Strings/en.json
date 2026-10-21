@@ -1121,5 +1121,6 @@
   "wheel.category.audio": "Audio",
   "wheel.category.pdf": "PDF",
   "wheel.category.protect": "Protect",
-  "wheel.category.archive": "Archive"
+  "wheel.category.archive": "Archive",
+  "tool.window.loading": "Preparing…"
 }
