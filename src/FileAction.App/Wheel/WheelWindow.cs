@@ -203,8 +203,15 @@ internal sealed class WheelWindow : Window
         Drop += OnDrop;
         MouseMove += (sender, e) =>
         {
-            if (Mode == WheelMode.Click)
-                SetHighlight(HitTest(e.GetPosition(_canvas), out bool _));
+            if (Mode != WheelMode.Click)
+                return;
+            var index = HitTest(e.GetPosition(_canvas), out bool _);
+            SetHighlight(index);
+            // Hovering a category opens it immediately; the owner asked for "point at it, don't click".
+            // Only the main ring does this, so the sub-wheel's children stay click targets.
+            if (!_trail.InSubWheel && !_switching && index >= 0 && index < _ops.Count
+                && _ops[index] is WheelGroupOperation)
+                EnterGroup(index);
         };
         MouseLeftButtonUp += OnClick;
         // Pressed micro-scale (90 ms): confirms the pointer landed on the slice before the action runs.
