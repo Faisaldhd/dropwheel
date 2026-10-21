@@ -81,6 +81,18 @@ internal sealed class AnnotateView
         root.Children.Add(sizes);
         root.Children.Add(preview);
 
+        // Annotate flattens to one still image. Say so for a GIF instead of silently writing a one-frame
+        // copy over the four-frame animation the user dropped.
+        if (ImageOutput.StillFormatFor(Formats.Normalize(_item.Format)) != Formats.Normalize(_item.Format))
+        {
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var note = Controls.Text(T("tool.annotate.gifNote"), 11.5, brush: Theme.Muted);
+            note.Margin = new Thickness(2, 6, 2, 0);
+            note.TextWrapping = TextWrapping.Wrap;
+            Grid.SetRow(note, 5);
+            root.Children.Add(note);
+        }
+
         // Keyboard shortcuts belong to the whole tool window, not to the drawing surface, so Delete and
         // Ctrl+Z work while any of the toolbar pills has the focus.
         root.Loaded += (_, _) =>

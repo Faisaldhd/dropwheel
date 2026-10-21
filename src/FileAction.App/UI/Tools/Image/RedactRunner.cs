@@ -50,21 +50,44 @@ internal static class RedactRunner
         return (bitmap, png, width, height);
     }
 
-    /// <summary>Flattens <paramref name="plan"/> into a new file and returns its path.</summary>
+    /// <summary>
+    /// Flattens <paramref name="plan"/> into a new file and returns its path. Every frame of an animated
+    /// GIF is painted, so the animation is not silently reduced to frame 1; the write is atomic.
+    /// </summary>
     public static string Apply(FileItem item, IReadOnlyList<RedactionStep> plan, string outputDirectory)
     {
+        var format = ImageOutput.FormatFor(Formats.Normalize(item.Format));
+        return ImageOutput.WriteAtomic(outputDirectory, $"{item.BaseName} {T("tool.redact.suffix")}", format,
+            temporary => Write(item, plan, temporary, format));
+    }
+
+    private static void Write(FileItem item, IReadOnlyList<RedactionStep> plan, string target, string format)
+    {
+        if (format == "gif")
+        {
+            using var frames = new MagickImageCollection(item.Path);
+            if (frames.Count > 1)
+                frames.Coalesce();
+
+            foreach (var element in frames)
+            {
+                var frame = (MagickImage)element;
+                frame.AutoOrient();
+                Paint(frame, plan);
+                // No EXIF, GPS, comments, colour profiles or embedded thumbnail survive a redaction.
+                frame.Strip();
+            }
+
+            ImageOutput.WriteAnimation(frames, target, format, (int)OutputQuality);
+            return;
+        }
+
         using var image = new MagickImage(item.Path);
         image.AutoOrient();
         Paint(image, plan);
-
         // No EXIF, GPS, comments, colour profiles or embedded thumbnail survive a redaction.
         image.Strip();
-        image.Quality = OutputQuality;
-
-        var extension = Path.GetExtension(item.Path).TrimStart('.');
-        var target = OutputPaths.Unique(outputDirectory, $"{item.BaseName} {T("tool.redact.suffix")}", extension);
-        image.Write(target);
-        return target;
+        ImageOutput.Write(image, target, format, (int)OutputQuality);
     }
 
     /// <summary>Renders the same plan over the downsampled preview and returns a frozen bitmap.</summary>

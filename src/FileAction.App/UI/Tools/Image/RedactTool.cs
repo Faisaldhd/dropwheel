@@ -57,7 +57,7 @@ internal sealed class RedactTool : IToolWindowSpec
         items.Count == 1 && !items[0].IsDirectory && Formats.Contains(items[0].Format);
 
     public ToolContent Create(IReadOnlyList<FileItem> items, DropTargets? targets) =>
-        new RedactView(items[0]).Build();
+        new RedactView(items[0], targets).Build();
 }
 
 /// <summary>

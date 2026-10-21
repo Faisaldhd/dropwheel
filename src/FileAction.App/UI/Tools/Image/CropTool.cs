@@ -467,23 +467,52 @@ internal sealed class CropView
     }
 }
 
-/// <summary>Writes the cropped copy with Magick.NET; the original file is only read.</summary>
+/// <summary>
+/// Writes the cropped copy with Magick.NET; the original file is only read. The crop is applied to every
+/// frame of an animated GIF (so the animation survives) and the write is atomic, so a failure never leaves
+/// a partial file behind.
+/// </summary>
 internal static class CropRunner
 {
     public static string Apply(FileItem item, CropRect rect, string outputDirectory)
     {
+        var format = ImageOutput.FormatFor(Formats.Normalize(item.Format));
+        return ImageOutput.WriteAtomic(outputDirectory, $"{item.BaseName} {Loc.T("tool.crop.suffix")}", format,
+            temporary => Write(item, rect, temporary, format));
+    }
+
+    private static void Write(FileItem item, CropRect rect, string target, string format)
+    {
+        if (format == "gif")
+        {
+            using var frames = new MagickImageCollection(item.Path);
+            if (frames.Count > 1)
+                frames.Coalesce();
+
+            foreach (var element in frames)
+            {
+                var frame = (MagickImage)element;
+                frame.AutoOrient();
+                CropOne(frame, rect);
+            }
+
+            ImageOutput.WriteAnimation(frames, target, format);
+            return;
+        }
+
         using var image = new MagickImage(item.Path);
         image.AutoOrient();
+        CropOne(image, rect);
+        ImageOutput.Write(image, target, format);
+    }
 
+    private static void CropOne(MagickImage image, CropRect rect)
+    {
         var x = Math.Clamp((int)Math.Round(rect.X), 0, Math.Max(0, (int)image.Width - 1));
         var y = Math.Clamp((int)Math.Round(rect.Y), 0, Math.Max(0, (int)image.Height - 1));
         var width = Math.Min(CropMath.Pixels(rect).Width, (int)image.Width - x);
         var height = Math.Min(CropMath.Pixels(rect).Height, (int)image.Height - y);
         image.Crop(new MagickGeometry(x, y, (uint)Math.Max(1, width), (uint)Math.Max(1, height)));
-
-        var extension = Path.GetExtension(item.Path).TrimStart('.');
-        var target = OutputPaths.Unique(outputDirectory, $"{item.BaseName} {Loc.T("tool.crop.suffix")}", extension);
-        image.Write(target);
-        return target;
+        image.ResetPage();
     }
 }

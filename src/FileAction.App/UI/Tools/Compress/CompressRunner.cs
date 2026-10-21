@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
+using FileAction.App.UI.Tools.Image;
 using FileAction.Core;
 using FileAction.Core.Backends;
 using ImageMagick;
@@ -17,7 +18,11 @@ internal static class CompressRunner
 {
     private static readonly Regex TimeRegex = new(@"\btime=\s*(\d+):(\d+):(\d+(?:\.\d+)?)", RegexOptions.Compiled);
 
-    /// <summary>Images: optional resize, then quality / palette decisions for the container.</summary>
+    /// <summary>
+    /// Images: optional resize, then quality / palette decisions for the container. HEIC input is written
+    /// as a JPEG copy (the bundled build has no HEVC encoder), and an animated GIF stays animated because
+    /// every frame goes through the same resize/quality pass.
+    /// </summary>
     public static async Task<string> ImageAsync(
         FileItem item,
         CompressionPlan plan,
@@ -25,10 +30,33 @@ internal static class CompressRunner
         CancellationToken ct,
         IProgress<double> progress)
     {
-        var format = ImageBackend.OutputFormatFor(Formats.Normalize(item.Format));
+        var input = Formats.Normalize(item.Format);
+        var format = ImageOutput.FormatFor(input);
         return await OutputPaths.ProduceAsync(directory, OutputName(item), format, tmp => Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
+
+            if (input == "gif")
+            {
+                using var frames = new MagickImageCollection(item.Path);
+                if (frames.Count > 1)
+                    frames.Coalesce();
+
+                foreach (var element in frames)
+                {
+                    var frame = (MagickImage)element;
+                    frame.AutoOrient();
+                    if (plan.Resized && plan.Width > 0 && plan.Height > 0)
+                        frame.Resize(new MagickGeometry((uint)plan.Width, (uint)plan.Height));
+                    ApplyQuality(frame, format, plan.Quality);
+                }
+
+                ct.ThrowIfCancellationRequested();
+                ImageOutput.WriteAnimation(frames, tmp, format, plan.Quality);
+                progress.Report(1);
+                return;
+            }
+
             using var image = new MagickImage(item.Path);
             image.AutoOrient();
 
@@ -37,7 +65,7 @@ internal static class CompressRunner
 
             ApplyQuality(image, format, plan.Quality);
             ct.ThrowIfCancellationRequested();
-            image.Write(tmp, ImageBackend.ToMagickFormat(format));
+            ImageOutput.Write(image, tmp, format, plan.Quality);
             progress.Report(1);
         }, ct)).ConfigureAwait(false);
     }

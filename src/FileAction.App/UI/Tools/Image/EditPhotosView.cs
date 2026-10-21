@@ -288,6 +288,16 @@ internal sealed class EditPhotosView
         hint.Margin = new Thickness(2, 10, 2, 0);
         panel.Children.Add(hint);
 
+        // HEIC is readable but cannot be encoded here; the saved copy is a JPEG, and the user is told
+        // before pressing Apply instead of getting a failed write.
+        if (ImageOutput.IsHeic(Formats.Normalize(_item.Format)))
+        {
+            var note = Controls.Text(T("tool.editphotos.heicNote"), 11.5, brush: Theme.Muted);
+            note.Margin = new Thickness(2, 6, 2, 0);
+            note.TextWrapping = TextWrapping.Wrap;
+            panel.Children.Add(note);
+        }
+
         ShowGroup();
         return panel;
     }
