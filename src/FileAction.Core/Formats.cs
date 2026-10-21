@@ -25,6 +25,13 @@ public static class Formats
     // Catalog.CanEncodeImage); the catalog hides that target instead of offering a failing conversion.
     public static readonly string[] ImageOutputs = ["jpg", "png", "webp", "avif", "tiff", "ico", "pdf", "bmp", "heic"];
 
+    /// <summary>The image outputs written with an alpha channel; JPEG and BMP flatten it.</summary>
+    public static readonly string[] AlphaImageOutputs = ["png", "webp", "avif", "tiff", "ico"];
+
+    /// <summary>True when this app writes an image output with transparency (aliases are normalized).</summary>
+    public static bool SupportsAlpha(string format) =>
+        AlphaImageOutputs.Contains(Normalize(format), StringComparer.OrdinalIgnoreCase);
+
     public static readonly HashSet<string> Audio = Set("mp3", "m4a", "aac", "wav", "flac", "ogg", "opus", "aiff", "wma");
     public static readonly string[] AudioOutputs = ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aiff", "wma"];
 
