@@ -238,6 +238,7 @@ internal sealed class VideoFramesView
         _image.Visibility = Visibility.Collapsed;
         _preview.Children.Add(_image);
         _preview.Children.Add(_placeholder);
+        MediaSurface.Round(_preview);
 
         _previewCard = new Border
         {

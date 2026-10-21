@@ -180,6 +180,7 @@ internal sealed class AddBackgroundView
         stageGrid.Children.Add(new Grid { Children = { _placeholder } });
         _stageHost.Children.Add(new Grid { Children = { stageGrid } });
         _stageHost.SizeChanged += (_, _) => Relayout();
+        MediaSurface.Round(_stageHost);
 
         return new Border
         {

@@ -159,6 +159,7 @@ internal sealed class EditPhotosView
         _previewHost.Children.Add(_originalBadge);
         _previewHost.Children.Add(_busy);
         _previewHost.Children.Add(compare);
+        MediaSurface.Round(_previewHost);
 
         // Hold anywhere on the preview to see the original while pressed.
         _previewHost.MouseLeftButtonDown += (_, e) =>

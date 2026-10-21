@@ -1110,5 +1110,17 @@
   "tool.lock.recovery.orphanTitle": "Orphaned unlock folders",
   "tool.lock.recovery.orphanBody": "DropWheel found {0} session folder(s) with no journal entry. Delete them? The protected files are unchanged.",
   "tool.lock.panel.changedSalvage": "Content changed since the last save. Retry was refused; the good protected file was kept. Open the item and salvage the copy.",
-  "wheel.group.resize": "Resize"
+  "wheel.group.resize": "Resize",
+  "wheel.group.archive": "Archive",
+  "wheel.group.metadata": "Metadata",
+  "wheel.category.transform": "Crop & rotate",
+  "wheel.category.optimize": "Optimize",
+  "wheel.category.annotate": "Annotate",
+  "wheel.category.metadata": "Metadata",
+  "wheel.category.video": "Video",
+  "wheel.category.audio": "Audio",
+  "wheel.category.pdf": "PDF",
+  "wheel.category.protect": "Protect",
+  "wheel.category.archive": "Archive",
+  "tool.window.loading": "Preparing…"
 }

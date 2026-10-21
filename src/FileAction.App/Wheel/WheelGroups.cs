@@ -22,9 +22,11 @@ internal static class WheelGroups
 {
     public static IReadOnlyList<WheelGroupDefinition> Default { get; } =
     [
-        new("image.crop", "tools.crop", ["tools.crop", "image.square"]),
+        // Group only batch conversions. Interactive tools stay one click away: grouping a ToolWindow
+        // behind a parent made the tool look like it did not open at all.
         new("image.rotate", "image.rotate.right", ["image.rotate.right", "image.rotate.left"]),
         new("image.resize", "image.half", ["image.half", "image.max1920"], "wheel.group.resize"),
+        new("tools.archive", "pack.zip", ["pack.zip", "pack.tar.gz"], "wheel.group.archive"),
     ];
 
     /// <summary>

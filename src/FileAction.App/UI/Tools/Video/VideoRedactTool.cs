@@ -284,6 +284,7 @@ internal sealed class VideoRedactView
         _preview.Children.Add(_canvas);
         _preview.Children.Add(_placeholder);
         _preview.SizeChanged += (_, _) => LayoutOverlay();
+        MediaSurface.Round(_preview);
 
         _previewCard = new Border
         {

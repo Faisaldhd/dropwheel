@@ -315,7 +315,7 @@ internal static class SelfTest
         // the wheel itself must not add another renderer assembly on top of that.
         var renderersBeforeWheel = RendererAssembliesLoaded();
         IReadOnlyList<Operation> Source(WheelKind wheel, IReadOnlyList<FileItem> items) =>
-            WheelGroups.Arrange(Catalog.For(wheel == WheelKind.Actions ? actions : core, wheel, items, tools));
+            WheelCategories.Arrange(Catalog.For(wheel == WheelKind.Actions ? actions : core, wheel, items, tools));
 
         var samples = new (string Name, WheelMode Mode, WheelKind Wheel, string[] Files, int Highlight)[]
         {
@@ -356,7 +356,10 @@ internal static class SelfTest
         }
         settingsWindow.SelectTab(0);
         settingsWindow.UpdateLayout();
-        SaveWindow(settingsWindow, Path.Combine(outDir, "settings.png"), 560);
+        // Render Settings at its real width, on the page colour, so the six tabs stay on one row and the
+        // dark halo is visible in the website capture. The live window itself stays transparent.
+        settingsWindow.Background = Theme.Page;
+        SaveWindow(settingsWindow, Path.Combine(outDir, "settings.png"), 700);
         log.Add($"ok {Path.GetFileName(outDir)}/settings");
 
         var shelf = ShelfWindow.CreateForPreview(

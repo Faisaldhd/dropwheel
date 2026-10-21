@@ -21,9 +21,10 @@ namespace FileAction.Tests;
 /// </summary>
 public class ToolDispatchTests
 {
-    /// <summary>The slices the wheels actually render, after hiding, favourites and grouping.</summary>
+    /// <summary>The slices the Tools wheel actually renders, after hiding, favourites and categories.</summary>
     private static IReadOnlyList<Operation> WheelSlices() =>
-        WheelGroups.Arrange(WheelLayout.Arrange(WheelController.BuildOperations(), [], []));
+        WheelCategories.Arrange(WheelLayout.Arrange(
+            WheelController.BuildOperations().Where(operation => operation.Wheel == WheelKind.Tools), [], []));
 
     [Fact]
     public void EveryRegisteredToolWindowIsReachableFromTheWheel()
@@ -73,8 +74,9 @@ public class ToolDispatchTests
     [Fact]
     public void GroupingKeepsEveryOperationReachableExactlyOnce()
     {
-        var operations = WheelLayout.Arrange(WheelController.BuildOperations(), [], []);
-        var flattened = WheelGroups.Flatten(WheelGroups.Arrange(operations));
+        var operations = WheelLayout.Arrange(
+            WheelController.BuildOperations().Where(operation => operation.Wheel == WheelKind.Tools), [], []);
+        var flattened = WheelGroups.Flatten(WheelCategories.Arrange(operations));
 
         Assert.Equal(
             operations.Select(operation => operation.Id).Order(StringComparer.Ordinal),
@@ -82,52 +84,40 @@ public class ToolDispatchTests
     }
 
     [Fact]
-    public void CropRotateAndResizeAreOneParentSliceWithAllTheirChoices()
+    public void ImageToolsAreSevenIntentCategoriesNotEighteenSlices()
     {
-        var groups = WheelSlices().OfType<WheelGroupOperation>().ToArray();
+        var slices = WheelSlices();
+        var groups = slices.OfType<WheelGroupOperation>().ToArray();
 
-        var crop = Assert.Single(groups, group => group.GroupId == "image.crop");
-        Assert.Equal("Crop", crop.Label);
-        Assert.Equal(new[] { "tools.crop", "image.square" }, crop.Children.Select(child => child.Id).ToArray());
-
-        var rotate = Assert.Single(groups, group => group.GroupId == "image.rotate");
-        Assert.Equal("Rotate", rotate.Label);
+        var transform = Assert.Single(groups, group => group.GroupId == "category.transform");
+        Assert.Equal("Crop & rotate", transform.Label);
         Assert.Equal(
-            new[] { "image.rotate.right", "image.rotate.left" },
-            rotate.Children.Select(child => child.Id).ToArray());
+            new[] { "tools.crop", "image.square", "image.rotate.right", "image.rotate.left", "image.flip" },
+            transform.Children.Select(child => child.Id).ToArray());
 
-        var resize = Assert.Single(groups, group => group.GroupId == "image.resize");
-        Assert.Equal("Resize", resize.Label);
-        Assert.Equal(
-            new[] { "image.half", "image.max1920" },
-            resize.Children.Select(child => child.Id).ToArray());
+        var optimize = Assert.Single(groups, group => group.GroupId == "category.optimize");
+        Assert.Equal("Optimize", optimize.Label);
+        Assert.Contains(optimize.Children, child => child.Id == "tools.compress");
+        Assert.Contains(optimize.Children, child => child.Id == "image.max1920");
+
+        var annotate = Assert.Single(groups, group => group.GroupId == "category.annotate");
+        Assert.Contains(annotate.Children, child => child.Id == "tools.annotate");
+        Assert.Contains(annotate.Children, child => child.Id == "tools.redact");
 
         Assert.All(groups, group => Assert.True(group.Children.Count >= 2));
-    }
-
-    [Fact]
-    public void HidingOneChildCollapsesTheGroupToTheRemainingOperation()
-    {
-        var operations = WheelLayout.Arrange(
-            WheelController.BuildOperations(), ["image.rotate.left"], []);
-        var slices = WheelGroups.Arrange(operations);
-
-        Assert.DoesNotContain(slices,
-            slice => slice is WheelGroupOperation group && group.GroupId == "image.rotate");
-        Assert.Contains(slices, slice => slice.Id == "image.rotate.right");
-        Assert.DoesNotContain(slices, slice => slice.Id == "image.rotate.left");
+        Assert.All(slices, slice => Assert.DoesNotContain("image.to.", slice.Id));
     }
 
     [Fact]
     public void GroupParentIsNeverDispatchedAsAJob()
     {
-        var crop = WheelSlices().OfType<WheelGroupOperation>().Single(group => group.GroupId == "image.crop");
+        var group = WheelSlices().OfType<WheelGroupOperation>().Single(g => g.GroupId == "category.transform");
         var settings = new AppSettings();
         var jobs = new JobRunner(settings, new ToolLocator());
 
         var error = Assert.Throws<InvalidOperationException>(() =>
             WheelController.Dispatch(
-                crop,
+                group,
                 [new FileItem(Path.Combine(Path.GetTempPath(), "group-parent.png"))],
                 null,
                 jobs));
