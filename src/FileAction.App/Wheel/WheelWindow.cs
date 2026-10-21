@@ -792,10 +792,13 @@ internal sealed class WheelWindow : Window
 
         var n = _ops.Count;
         var step = n == 0 ? 360 : 360.0 / n;
-        // Labels sit a little outside the middle of the ring, where slices are wider,
-        // and shrink to the slice's width instead of spilling into the neighbours.
-        var labelRadius = InnerRadius + (OuterRadius - InnerRadius) * 0.54;
-        var labelWidth = n <= 2 ? 120 : Math.Clamp(2 * labelRadius * Math.Sin(step / 2 * Math.PI / 180) * 0.84, 48, 110);
+        // A crowded wheel (25 tools was the worst case) cannot fit icon + title + subtitle at the old
+        // radius: the three lines reach back into the hub and the neighbours. Move the text outward and
+        // drop the secondary lines, keeping only the operation name.
+        var compact = n > 18;
+        var labelRadius = InnerRadius + (OuterRadius - InnerRadius) * (compact ? 0.66 : 0.54);
+        var labelWidth = n <= 2 ? 120 : Math.Clamp(
+            2 * labelRadius * Math.Sin(step / 2 * Math.PI / 180) * (compact ? 0.92 : 0.84), 44, 110);
         for (var i = 0; i < n; i++)
         {
             var a0 = i * step - step / 2;
@@ -806,14 +809,14 @@ internal sealed class WheelWindow : Window
                 Stroke = Theme.SliceEdge,
                 StrokeThickness = 1,
             };
-            var label = SliceLabel(_ops[i]);
+            var label = SliceLabel(_ops[i], compact);
             var fit = new Viewbox
             {
                 Child = label,
                 Stretch = Stretch.Uniform,
                 StretchDirection = StretchDirection.DownOnly,
                 MaxWidth = labelWidth,
-                MaxHeight = (OuterRadius - InnerRadius) * 0.8,
+                MaxHeight = (OuterRadius - InnerRadius) * (compact ? 0.58 : 0.8),
                 IsHitTestVisible = false,
             };
             var mid = n == 1 ? new Point(Size / 2, Size / 2 - labelRadius) : Polar(labelRadius, i * step);
@@ -876,19 +879,19 @@ internal sealed class WheelWindow : Window
         }
     }
 
-    private static StackPanel SliceLabel(Operation op)
+    private static StackPanel SliceLabel(Operation op, bool compact)
     {
         var isFormat = op.Wheel == WheelKind.Convert && op.Label.Length <= 6 && op.Label.ToUpperInvariant() == op.Label;
         // Slices that first download a tool are shown a little faded. Format names such as MP4 stay
         // left-to-right even in Arabic, because they are identifiers rather than prose.
         var panel = new StackPanel
         {
-            MaxWidth = 96,
+            MaxWidth = compact ? 74 : 96,
             IsHitTestVisible = false,
             Opacity = op is Shell.NeedsToolOperation ? 0.6 : 1,
             FlowDirection = isFormat ? System.Windows.FlowDirection.LeftToRight : LanguageManager.FlowDirection,
         };
-        if (!isFormat)
+        if (!isFormat && !compact)
         {
             panel.Children.Add(new TextBlock
             {
@@ -904,14 +907,14 @@ internal sealed class WheelWindow : Window
         {
             Text = op.Label,
             FontFamily = Theme.DisplayFont,
-            FontSize = isFormat ? 19 : 13,
+            FontSize = isFormat ? 19 : compact ? 11.5 : 13,
             FontWeight = FontWeights.SemiBold,
             Foreground = Theme.Text,
             TextAlignment = TextAlignment.Center,
             TextWrapping = TextWrapping.Wrap,
             HorizontalAlignment = HorizontalAlignment.Center,
         });
-        if (!string.IsNullOrEmpty(op.Subtitle))
+        if (!compact && !string.IsNullOrEmpty(op.Subtitle))
         {
             panel.Children.Add(new TextBlock
             {

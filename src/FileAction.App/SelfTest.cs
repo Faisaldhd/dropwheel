@@ -129,7 +129,7 @@ internal static class SelfTest
         // the wheel itself must not add another renderer assembly on top of that.
         var renderersBeforeWheel = RendererAssembliesLoaded();
         IReadOnlyList<Operation> Source(WheelKind wheel, IReadOnlyList<FileItem> items) =>
-            Catalog.For(wheel == WheelKind.Actions ? actions : core, wheel, items, tools);
+            WheelGroups.Arrange(Catalog.For(wheel == WheelKind.Actions ? actions : core, wheel, items, tools));
 
         var samples = new (string Name, WheelMode Mode, WheelKind Wheel, string[] Files, int Highlight)[]
         {
