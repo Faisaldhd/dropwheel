@@ -121,6 +121,21 @@ public static class Compression
     /// <summary>Highest audio bitrate the encode is allowed to ask for.</summary>
     public const int MaxAudioKbps = 512;
 
+    /// <summary>
+    /// How many times an image with a size goal is encoded. The first pass uses the estimate; later
+    /// passes measure the file that was just written and correct in either direction.
+    /// </summary>
+    public const int MaxImageAttempts = 3;
+
+    /// <summary>Lowest quality a shrinking retry may use, so a size goal cannot destroy the image.</summary>
+    public const int MinRetryQuality = 30;
+
+    /// <summary>Highest quality a growing retry may use, so it can spend a target it under-shot.</summary>
+    public const int MaxRetryQuality = 92;
+
+    /// <summary>A result below this share of the goal is treated as an under-shoot worth a retry.</summary>
+    public const double AcceptableImageShare = 0.75;
+
     /// <summary>Normalized media kind of a format key ("jpeg" is normalized first by <see cref="Formats"/>).</summary>
     public static MediaKind KindOf(string? format)
     {
@@ -472,6 +487,97 @@ public static class Compression
             quality, crf, audioKbps, videoKbps, twoPass, lossless, estimated);
     }
 
+    /// <summary>
+    /// The next image attempt after an encode measured <paramref name="actualBytes"/>. The first plan is
+    /// built from a bytes-per-pixel estimate, which can be far off for a source whose own quality is not
+    /// the assumed 90: a high-quality noisy JPEG landed at 18 % of its target in the real runner. This
+    /// measures the file that was written and moves quality and pixels in the needed direction, so
+    /// "Compress to target file size" and "Reduce by percentage" land near the goal instead of merely
+    /// under it. Returns null when the result is acceptable, the attempt budget is spent, or no legal
+    /// change is left (quality floor and the 64 px floor when shrinking; quality ceiling and the source /
+    /// chosen long side when growing).
+    /// </summary>
+    public static ImagePlan? RefineImagePlan(
+        ImagePlan plan,
+        string? format,
+        long actualBytes,
+        long goalBytes,
+        int attemptsMade,
+        int maxLongSide)
+    {
+        if (plan.Width <= 0 || plan.Height <= 0 || plan.SourceWidth <= 0 || plan.SourceHeight <= 0)
+            return null;
+        if (actualBytes <= 0 || goalBytes <= 0 || attemptsMade >= MaxImageAttempts)
+            return null;
+        if (actualBytes <= goalBytes && actualBytes >= goalBytes * AcceptableImageShare)
+            return null;
+
+        var quality = Math.Clamp(plan.Quality, 1, 100);
+        if (actualBytes > goalBytes)
+            return ShrinkImage(plan, format, quality, actualBytes, goalBytes);
+
+        return GrowImage(plan, format, quality, actualBytes, goalBytes, maxLongSide);
+    }
+
+    /// <summary>The next plan when the written file is too big: drop quality, then pixels.</summary>
+    private static ImagePlan? ShrinkImage(
+        ImagePlan plan, string? format, int quality, long actualBytes, long goalBytes)
+    {
+        var overshoot = (double)actualBytes / goalBytes;
+        var drop = Math.Clamp((int)Math.Ceiling(12 * Math.Log2(overshoot)), 4, 24);
+        var nextQuality = Math.Max(MinRetryQuality, quality - drop);
+        var qualityRatio = QualityStepRatio(format, quality, nextQuality);
+        var scale = Math.Clamp(Math.Sqrt(goalBytes / (double)actualBytes / qualityRatio) * 0.97, 0.1, 1.0);
+
+        var width = Math.Max(1, (int)Math.Round(plan.Width * scale));
+        var height = Math.Max(1, (int)Math.Round(plan.Height * scale));
+        var sourceLong = Math.Max(plan.SourceWidth, plan.SourceHeight);
+        var floor = Math.Min(MinLongSide, sourceLong);
+        if (Math.Max(width, height) < floor)
+        {
+            var factor = (double)floor / Math.Max(width, height);
+            width = Math.Max(1, (int)Math.Round(width * factor));
+            height = Math.Max(1, (int)Math.Round(height * factor));
+        }
+
+        if (width == plan.Width && height == plan.Height && nextQuality == quality)
+            return null;
+        return new ImagePlan(width, height, nextQuality, plan.SourceWidth, plan.SourceHeight);
+    }
+
+    /// <summary>The next plan when the written file is under the goal: raise quality, then pixels.</summary>
+    private static ImagePlan? GrowImage(
+        ImagePlan plan, string? format, int quality, long actualBytes, long goalBytes, int maxLongSide)
+    {
+        var nextQuality = Math.Min(MaxRetryQuality, quality + 10);
+        var qualityRatio = QualityStepRatio(format, quality, nextQuality);
+        var needed = goalBytes / (double)actualBytes;
+        // Raise the quality first; only the part it cannot cover becomes a pixel growth.
+        var scale = Math.Max(1.0, Math.Sqrt(needed / qualityRatio) * 0.97);
+
+        var sourceLong = Math.Max(plan.SourceWidth, plan.SourceHeight);
+        var capLong = maxLongSide > 0 ? Math.Min(sourceLong, ClampLongSide(maxLongSide)) : sourceLong;
+        var currentLong = Math.Max(plan.Width, plan.Height);
+        var nextLong = Math.Min(capLong, Math.Max(currentLong, (int)Math.Round(currentLong * scale)));
+
+        var factor = (double)nextLong / sourceLong;
+        var width = Math.Max(1, (int)Math.Round(plan.SourceWidth * factor));
+        var height = Math.Max(1, (int)Math.Round(plan.SourceHeight * factor));
+
+        if (width == plan.Width && height == plan.Height && nextQuality == quality)
+            return null;
+        return new ImagePlan(width, height, nextQuality, plan.SourceWidth, plan.SourceHeight);
+    }
+
+    /// <summary>The size change one quality step is expected to make, from the same table the plan uses.</summary>
+    private static double QualityStepRatio(string? format, int from, int to)
+    {
+        var before = ImageBytesRatio(format, from);
+        if (before <= 0)
+            return 1.0;
+        return Math.Max(0.05, ImageBytesRatio(format, to) / before);
+    }
+
     // ------------------------------------------------------------------ formatting
 
     /// <summary>"824 B", "12.4 KB", "1.8 MB", "2.25 GB" — Western digits in every language.</summary>
@@ -597,7 +703,7 @@ public static class Compression
     }
 
     /// <summary>The size the user asked for, in bytes (the target or the percentage of the source).</summary>
-    private static long GoalBytes(CompressionRequest request, long sourceBytes) => request.Mode switch
+    public static long GoalBytes(CompressionRequest request, long sourceBytes) => request.Mode switch
     {
         CompressionMode.TargetSize => BytesFromMegabytes(request.TargetMegabytes),
         CompressionMode.Percentage => EstimateFromPercentage(sourceBytes, request.Percentage),

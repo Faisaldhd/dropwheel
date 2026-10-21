@@ -21,7 +21,9 @@ internal static class CompressRunner
     /// <summary>
     /// Images: optional resize, then quality / palette decisions for the container. HEIC input is written
     /// as a JPEG copy (the bundled build has no HEVC encoder), and an animated GIF stays animated because
-    /// every frame goes through the same resize/quality pass.
+    /// every frame goes through the same resize/quality pass. A size goal is verified against the file that
+    /// was actually written: the estimate can be far off for a source whose own quality is not the assumed
+    /// one, so up to <see cref="Compression.MaxImageAttempts"/> passes move quality and pixels towards it.
     /// </summary>
     public static async Task<string> ImageAsync(
         FileItem item,
@@ -34,40 +36,129 @@ internal static class CompressRunner
         var format = ImageOutput.FormatFor(input);
         return await OutputPaths.ProduceAsync(directory, OutputName(item), format, tmp => Task.Run(() =>
         {
-            ct.ThrowIfCancellationRequested();
-
-            if (input == "gif")
+            long sourceBytes = 0;
+            try
             {
-                using var frames = new MagickImageCollection(item.Path);
-                if (frames.Count > 1)
-                    frames.Coalesce();
+                sourceBytes = new FileInfo(item.Path).Length;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                sourceBytes = 0;
+            }
 
-                foreach (var element in frames)
-                {
-                    var frame = (MagickImage)element;
-                    frame.AutoOrient();
-                    if (plan.Resized && plan.Width > 0 && plan.Height > 0)
-                        frame.Resize(new MagickGeometry((uint)plan.Width, (uint)plan.Height));
-                    ApplyQuality(frame, format, plan.Quality);
-                }
-
-                ct.ThrowIfCancellationRequested();
-                ImageOutput.WriteAnimation(frames, tmp, format, plan.Quality);
+            var goal = Compression.GoalBytes(plan.Request, sourceBytes);
+            if (goal <= 0)
+            {
+                // Preset mode has no size to verify: write once, exactly as before the measured retries.
+                WriteImage(item.Path, input, format, plan, tmp, ct);
                 progress.Report(1);
                 return;
             }
 
-            using var image = new MagickImage(item.Path);
-            image.AutoOrient();
+            var current = plan;
+            var attempts = new List<string>();
+            string? bestUnder = null;
+            var bestUnderBytes = 0L;
+            string? bestOver = null;
+            var bestOverBytes = long.MaxValue;
+            try
+            {
+                for (var attempt = 1; ; attempt++)
+                {
+                    var attemptPath = $"{tmp}.try{attempt}";
+                    attempts.Add(attemptPath);
+                    WriteImage(item.Path, input, format, current, attemptPath, ct);
+                    ct.ThrowIfCancellationRequested();
 
-            if (plan.Resized && plan.Width > 0 && plan.Height > 0)
-                image.Resize(new MagickGeometry((uint)plan.Width, (uint)plan.Height));
+                    var actual = new FileInfo(attemptPath).Length;
+                    // Keep the largest attempt at or below the goal; when every attempt overshoots, keep
+                    // the smallest one. A later pass can improve the estimate but never the chosen file.
+                    if (actual <= goal)
+                    {
+                        if (bestUnder is null || actual > bestUnderBytes)
+                        {
+                            bestUnder = attemptPath;
+                            bestUnderBytes = actual;
+                        }
 
-            ApplyQuality(image, format, plan.Quality);
-            ct.ThrowIfCancellationRequested();
-            ImageOutput.Write(image, tmp, format, plan.Quality);
+                        if (actual >= goal * Compression.AcceptableImageShare)
+                            break;
+                    }
+                    else if (actual < bestOverBytes)
+                    {
+                        bestOver = attemptPath;
+                        bestOverBytes = actual;
+                    }
+
+                    var next = Compression.RefineImagePlan(
+                        new ImagePlan(current.Width, current.Height, current.Quality, plan.SourceWidth, plan.SourceHeight),
+                        format,
+                        actual,
+                        goal,
+                        attempt,
+                        plan.Request.MaxLongSide);
+                    if (next is not { } refined)
+                        break;
+
+                    current = current with { Width = refined.Width, Height = refined.Height, Quality = refined.Quality };
+                    progress.Report(attempt / (double)Compression.MaxImageAttempts);
+                }
+
+                var best = bestUnder ?? bestOver;
+                if (best is null)
+                    throw new ConversionException(T("error.conversion.noOutput"));
+                File.Copy(best, tmp, overwrite: true);
+            }
+            finally
+            {
+                foreach (var attemptPath in attempts)
+                    OutputPaths.TryDelete(attemptPath);
+            }
+
             progress.Report(1);
         }, ct)).ConfigureAwait(false);
+    }
+
+    /// <summary>Writes one attempt: one still image, or every frame of an animated GIF.</summary>
+    private static void WriteImage(
+        string path,
+        string input,
+        string format,
+        CompressionPlan plan,
+        string tmp,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (input == "gif")
+        {
+            using var frames = new MagickImageCollection(path);
+            if (frames.Count > 1)
+                frames.Coalesce();
+
+            foreach (var element in frames)
+            {
+                var frame = (MagickImage)element;
+                frame.AutoOrient();
+                if (plan.Resized && plan.Width > 0 && plan.Height > 0)
+                    frame.Resize(new MagickGeometry((uint)plan.Width, (uint)plan.Height));
+                ApplyQuality(frame, format, plan.Quality);
+            }
+
+            ct.ThrowIfCancellationRequested();
+            ImageOutput.WriteAnimation(frames, tmp, format, plan.Quality);
+            return;
+        }
+
+        using var image = new MagickImage(path);
+        image.AutoOrient();
+
+        if (plan.Resized && plan.Width > 0 && plan.Height > 0)
+            image.Resize(new MagickGeometry((uint)plan.Width, (uint)plan.Height));
+
+        ApplyQuality(image, format, plan.Quality);
+        ct.ThrowIfCancellationRequested();
+        ImageOutput.Write(image, tmp, format, plan.Quality);
     }
 
     /// <summary>PDF: re-save with compressed content streams; the text stays selectable.</summary>
