@@ -526,7 +526,8 @@ internal sealed class ToolWindow : Window
             Background = Brushes.Transparent,
             Margin = new Thickness(Design.Gutter, Design.Space.Xl, Design.Gutter, Design.Space.Md),
         };
-        DockPanel.SetDock(close, Dock.Left);
+        // LTR puts Close at the top-right; FlowDirection.RightToLeft mirrors it to the top-left.
+        DockPanel.SetDock(close, Dock.Right);
         bar.Children.Add(close);
         bar.Children.Add(title);
         bar.MouseLeftButtonDown += (_, _) =>
