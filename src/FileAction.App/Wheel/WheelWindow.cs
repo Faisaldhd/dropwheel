@@ -792,13 +792,14 @@ internal sealed class WheelWindow : Window
 
         var n = _ops.Count;
         var step = n == 0 ? 360 : 360.0 / n;
-        // A crowded wheel (25 tools was the worst case) cannot fit icon + title + subtitle at the old
-        // radius: the three lines reach back into the hub and the neighbours. Move the text outward and
-        // drop the secondary lines, keeping only the operation name.
+        // A crowded wheel (19+ real tool slices) cannot fit icon + title + subtitle at the old radius:
+        // the three lines reach back into the hub and the neighbours. Move the text outward and drop the
+        // secondary lines, keeping only the operation name.
         var compact = n > 18;
         var labelRadius = InnerRadius + (OuterRadius - InnerRadius) * (compact ? 0.66 : 0.54);
         var labelWidth = n <= 2 ? 120 : Math.Clamp(
-            2 * labelRadius * Math.Sin(step / 2 * Math.PI / 180) * (compact ? 0.92 : 0.84), 44, 110);
+            2 * labelRadius * Math.Sin(step / 2 * Math.PI / 180) * (compact ? 0.92 : 0.84),
+            compact ? 44 : 48, 110);
         for (var i = 0; i < n; i++)
         {
             var a0 = i * step - step / 2;
