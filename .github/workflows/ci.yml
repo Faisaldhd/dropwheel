@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    # Every agent branch gets build + test feedback (the package and release jobs stay on main/tags).
-    branches: ['**']
+    # Agent branches get CI through their pull request, not a second push run. Main and tags keep
+    # their own runs; the package and release jobs stay on main/tags.
+    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -13,7 +14,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer PR commit cancels its own older run. Never cancel a tag (release) or main run.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') && github.ref != 'refs/heads/main' }}
 
 env:
   DOTNET_NOLOGO: "1"
@@ -31,7 +33,7 @@ jobs:
     name: Build + test
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Ensure .NET 10 SDK
         shell: pwsh
@@ -239,7 +241,7 @@ jobs:
 
       - name: Upload self-contained self-test
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: self-contained-self-test
           path: release/self-test/**
@@ -263,7 +265,7 @@ jobs:
 
       - name: Upload UI coverage (en + ar, every window)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-coverage
           path: |
@@ -369,7 +371,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: TestResults/*.trx
@@ -382,7 +384,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Ensure .NET 10 SDK
         shell: pwsh
@@ -467,7 +469,7 @@ jobs:
 
       - name: Upload shipped-publish self-test
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: shipped-self-test
           path: release/shipped-self-test/self-test.txt
@@ -624,7 +626,7 @@ jobs:
           $lines | Set-Content release/SHA256SUMS.txt -Encoding ascii
           Get-Content release/SHA256SUMS.txt
       - name: Upload setup
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: DropWheel-Setup-${{ steps.version.outputs.version }}
           path: |
@@ -661,7 +663,7 @@ jobs:
           if ($report -match 'settings\.title="settings\.title"') { throw "diagnose reports a raw settings.title" }
 
       - name: Upload diagnose
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: diagnose
           path: release/diagnose.txt
@@ -680,7 +682,7 @@ jobs:
       contents: write
     steps:
       - name: Download packaged artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
 
