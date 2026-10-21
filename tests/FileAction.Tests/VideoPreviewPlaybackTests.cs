@@ -12,13 +12,12 @@ namespace FileAction.Tests;
 public class VideoPreviewPlaybackTests
 {
     [Fact]
-    public void Playback_is_offered_only_for_media_foundation_containers()
+    public void Playback_is_offered_for_every_video_format()
     {
-        foreach (var format in new[] { "mp4", "MP4", "mov", "m4v", "wmv", "avi" })
+        foreach (var format in new[] { "mp4", "MP4", "mov", "m4v", "wmv", "avi", "mkv", "webm", "flv", "ts", "3gp" })
             Assert.True(VideoEditPreview.IsPlayableFormat(format), format);
 
-        foreach (var format in new[] { "mkv", "webm", "flv", "" })
-            Assert.False(VideoEditPreview.IsPlayableFormat(format), format);
+        Assert.False(VideoEditPreview.IsPlayableFormat(""));
         Assert.False(VideoEditPreview.IsPlayableFormat(null));
     }
 
