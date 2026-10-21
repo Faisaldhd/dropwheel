@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using FileAction.App.UI.Tools.Image;
 using FileAction.Core;
 using ImageMagick;
 using static FileAction.Core.Loc;
@@ -51,6 +52,7 @@ internal sealed class CollageView
     private readonly DropTargets? _targets;
     private readonly Task<LoadedImage[]> _loadTask;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly ImageGateGrid _root = new();
     private readonly CollageOrder _order;
 
     private readonly Grid _host = new() { ClipToBounds = true };
@@ -103,7 +105,7 @@ internal sealed class CollageView
 
     public ToolContent Build()
     {
-        var root = new Grid();
+        var root = _root;
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -132,6 +134,7 @@ internal sealed class CollageView
             _placeholder.Visibility = Visibility.Collapsed;
             RebuildStrip();
             Paint();
+            _root.Ready();
             _ready.TrySetResult(CollageTool.PreviewShape);
         }
         catch (Exception ex)

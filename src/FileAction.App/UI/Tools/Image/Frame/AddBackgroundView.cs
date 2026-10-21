@@ -7,6 +7,8 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using FileAction.App.Shell;
 using FileAction.App.UI;
+using FileAction.App.UI.Tools;
+using FileAction.App.UI.Tools.Image;
 using FileAction.Core;
 using ImageMagick;
 using static FileAction.Core.Loc;
@@ -30,6 +32,7 @@ internal sealed class AddBackgroundView
     private readonly DropTargets? _targets;
     private readonly Task<AddBackgroundSource> _load;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly ImageGateGrid _root = new();
 
     private readonly Grid _stageHost = new();
     private readonly Canvas _layer = new();
@@ -39,6 +42,7 @@ internal sealed class AddBackgroundView
     private readonly Border _placeholder;
     private readonly StackPanel _sliderHost = new();
     private readonly StackPanel _ratioHost = new();
+    private readonly List<(Border Pill, TextBlock Text, BackgroundRatio Value)> _ratioPills = [];
     private readonly List<(Border Swatch, GradientPreset Preset)> _gradientSwatches = [];
     private readonly List<(Border Swatch, BackgroundColor Color)> _solidSwatches = [];
     private Border? _customSwatch;
@@ -121,7 +125,7 @@ internal sealed class AddBackgroundView
 
     public ToolContent Build()
     {
-        var root = new Grid();
+        var root = _root;
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var preview = BuildPreview();
@@ -130,6 +134,13 @@ internal sealed class AddBackgroundView
         Grid.SetRow(controls, 1);
         root.Children.Add(preview);
         root.Children.Add(controls);
+
+        // Keep at least 120 DIP for the composition; the rest is the controls' scrollable height.
+        root.SizeChanged += (_, _) =>
+        {
+            if (root.ActualHeight > 0)
+                controls.MaxHeight = Math.Max(140, root.ActualHeight - 120);
+        };
         Paint();
         return new ToolContent(root, Reset, ApplyAsync, _ready.Task, ActivateAsync);
     }
@@ -155,6 +166,7 @@ internal sealed class AddBackgroundView
             Paint();
             Relayout();
             var composition = AddBackground.Compose(_previewWidth, _previewHeight, _padding, _corners, _shadow, _ratio);
+            _root.Ready();
             _ready.TrySetResult(new MediaSize(composition.CanvasWidth, composition.CanvasHeight));
         }
         catch (Exception ex)
@@ -192,7 +204,7 @@ internal sealed class AddBackgroundView
         };
     }
 
-    private FrameworkElement BuildControls()
+    private ScrollViewer BuildControls()
     {
         var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
 
@@ -242,24 +254,36 @@ internal sealed class AddBackgroundView
         solids.Children.Add(_customSwatch);
         stack.Children.Add(LabeledRow("tool.addbackground.colors", solids));
 
-        stack.Children.Add(BuildImageRow());
+        stack.Children.Add(StackedRow("tool.addbackground.image", BuildImageRow()));
         stack.Children.Add(_sliderHost);
         BuildSliders();
-        stack.Children.Add(LabeledRow("tool.addbackground.ratio", _ratioHost));
+        stack.Children.Add(StackedRow("tool.addbackground.ratio", _ratioHost));
         BuildRatios();
-        return stack;
+
+        // A narrow portrait/square window leaves less room than the rows' natural width. Every row now
+        // wraps inside the viewport, and the scroll viewer adds the one guarantee: an unusually short
+        // window scrolls the controls instead of clipping them against the rounded content card.
+        return new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Focusable = false,
+            Content = stack,
+        };
     }
 
     private FrameworkElement BuildImageRow()
     {
-        var inner = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        // A wrap panel: on a portrait/square window the choose button, name, blur toggle and clear button
+        // reflow onto a second line instead of running past the content card's right edge.
+        var inner = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
         inner.Children.Add(Controls.Button(T("tool.addbackground.image.choose"), PickImage));
 
         _imageName = new TextBlock
         {
             FontSize = 11.5,
             Foreground = Theme.Muted,
-            MaxWidth = 104,
+            MaxWidth = 96,
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(8, 0, 0, 0),
@@ -273,10 +297,16 @@ internal sealed class AddBackgroundView
             FontSize = 11.5,
             Foreground = Theme.Muted,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(14, 0, 6, 0),
+            Margin = new Thickness(0, 0, 6, 0),
             Opacity = 0.45,
         };
-        inner.Children.Add(_blurLabel);
+        var blurRow = new StackPanel
+        {
+            Orientation = System.Windows.Controls.Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(12, 0, 0, 0),
+        };
+        blurRow.Children.Add(_blurLabel);
 
         _blurToggle = Controls.Toggle(_blur, value =>
         {
@@ -287,7 +317,8 @@ internal sealed class AddBackgroundView
             Relayout();
         });
         _blurToggle.IsEnabled = false;
-        inner.Children.Add(_blurToggle);
+        blurRow.Children.Add(_blurToggle);
+        inner.Children.Add(blurRow);
 
         _clearImage = new Border
         {
@@ -313,15 +344,19 @@ internal sealed class AddBackgroundView
         _clearImage.MouseLeftButtonUp += (_, _) => ClearImage();
         inner.Children.Add(_clearImage);
 
-        return LabeledRow("tool.addbackground.image", inner);
+        return inner;
     }
 
+    /// <summary>A label and its content on one line; the content column wraps inside the remaining width.</summary>
     private static Grid LabeledRow(string key, FrameworkElement content)
     {
         var grid = new Grid { Margin = new Thickness(0, 0, 0, 4) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var label = RowLabel(key);
+        label.Width = 86;
+        label.VerticalAlignment = VerticalAlignment.Center;
+        label.Margin = new Thickness(0, 0, 6, 0);
         Grid.SetColumn(label, 0);
         grid.Children.Add(label);
         Grid.SetColumn(content, 1);
@@ -329,15 +364,26 @@ internal sealed class AddBackgroundView
         return grid;
     }
 
+    /// <summary>
+    /// A full-width row: the caption sits above its content. Used where a fixed 86 DIP label column would
+    /// leave too little width for the image controls, sliders and ratio chips.
+    /// </summary>
+    private static FrameworkElement StackedRow(string key, FrameworkElement content, double bottom = 6)
+    {
+        var stack = new StackPanel { Margin = new Thickness(0, 0, 0, bottom) };
+        var label = RowLabel(key);
+        label.Margin = new Thickness(0, 0, 0, 3);
+        stack.Children.Add(label);
+        stack.Children.Add(content);
+        return stack;
+    }
+
     private static TextBlock RowLabel(string key) => new()
     {
         Text = T(key),
-        Width = 86,
         FontSize = 11.5,
         Foreground = Theme.Muted,
-        VerticalAlignment = VerticalAlignment.Center,
         TextTrimming = TextTrimming.CharacterEllipsis,
-        Margin = new Thickness(0, 0, 6, 0),
     };
 
     private Border CreateSwatch(Brush brush, Action click)
@@ -379,31 +425,77 @@ internal sealed class AddBackgroundView
 
     private static FrameworkElement SliderRow(string key, int max, int value, Action<int> changed)
     {
-        var row = new DockPanel { LastChildFill = false, Margin = new Thickness(0, 1, 0, 1) };
+        // Caption above its 240 DIP slider: the old label + slider line was 326 DIP and lost the value
+        // readout on the right in a narrow portrait window, where only ~314 DIP are available.
+        var row = new StackPanel { Margin = new Thickness(0, 0, 0, 2) };
         var label = RowLabel(key);
-        DockPanel.SetDock(label, Dock.Left);
-        var slider = Controls.Slider(0, max, value, changed, committed: () => { });
-        DockPanel.SetDock(slider, Dock.Right);
+        label.Margin = new Thickness(0, 0, 0, 1);
         row.Children.Add(label);
-        row.Children.Add(slider);
+        row.Children.Add(Controls.Slider(0, max, value, changed, committed: () => { }));
         return row;
     }
 
     private void BuildRatios()
     {
         _ratioHost.Children.Clear();
-        var options = new List<(string Label, BackgroundRatio Value)>
+        _ratioPills.Clear();
+
+        // Same look as Controls.Segmented, but a wrap panel: four ratio pills (longer in Arabic) plus the
+        // 24 DIP padding do not fit the narrow portrait content column on one line.
+        var wrap = new WrapPanel();
+        foreach (var (label, value) in new (string Label, BackgroundRatio Value)[]
+                 {
+                     (T("tool.addbackground.ratio.auto"), BackgroundRatio.Auto),
+                     (T("tool.addbackground.ratio.1x1"), BackgroundRatio.Square),
+                     (T("tool.addbackground.ratio.16x9"), BackgroundRatio.Wide),
+                     (T("tool.addbackground.ratio.4x5"), BackgroundRatio.Portrait),
+                 })
         {
-            (T("tool.addbackground.ratio.auto"), BackgroundRatio.Auto),
-            (T("tool.addbackground.ratio.1x1"), BackgroundRatio.Square),
-            (T("tool.addbackground.ratio.16x9"), BackgroundRatio.Wide),
-            (T("tool.addbackground.ratio.4x5"), BackgroundRatio.Portrait),
-        };
-        _ratioHost.Children.Add(Controls.Segmented(options, _ratio, value =>
+            var text = new TextBlock
+            {
+                Text = label,
+                FontSize = 12.5,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            var pill = new Border
+            {
+                CornerRadius = new CornerRadius(7),
+                Padding = new Thickness(12, 5, 12, 6),
+                Margin = new Thickness(0, 0, 3, 3),
+                Background = Brushes.Transparent,
+                Cursor = Cursors.Hand,
+                Child = text,
+            };
+            var captured = value;
+            pill.MouseLeftButtonUp += (_, _) =>
+            {
+                _ratio = captured;
+                Relayout();
+                PaintRatioPills();
+            };
+            _ratioPills.Add((pill, text, value));
+            wrap.Children.Add(pill);
+        }
+
+        _ratioHost.Children.Add(new Border
         {
-            _ratio = value;
-            Relayout();
-        }));
+            Background = Theme.Track,
+            CornerRadius = new CornerRadius(9),
+            Padding = new Thickness(2),
+            Child = wrap,
+        });
+        PaintRatioPills();
+    }
+
+    private void PaintRatioPills()
+    {
+        foreach (var (pill, text, value) in _ratioPills)
+        {
+            var selected = value == _ratio;
+            pill.Background = selected ? Theme.AccentGradient : Brushes.Transparent;
+            text.Foreground = selected ? Theme.TextOnAccent : Theme.Text;
+            text.FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal;
+        }
     }
 
     // ------------------------------------------------------------------ painting

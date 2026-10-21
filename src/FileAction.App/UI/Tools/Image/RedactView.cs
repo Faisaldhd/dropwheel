@@ -48,6 +48,7 @@ internal sealed class RedactView
     private readonly FileItem _item;
     private readonly Task<(BitmapSource Bitmap, byte[] Png, int Width, int Height)> _load;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly ImageGateGrid _root = new();
 
     private readonly Grid _preview = new() { Margin = new Thickness(0, 4, 0, 10), ClipToBounds = true };
     private readonly Canvas _overlay = new() { Background = Brushes.Transparent, ClipToBounds = true };
@@ -121,7 +122,7 @@ internal sealed class RedactView
 
     public ToolContent Build()
     {
-        var root = new Grid();
+        var root = _root;
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -166,6 +167,7 @@ internal sealed class RedactView
             _imageView.Visibility = Visibility.Visible;
             _placeholder.Visibility = Visibility.Collapsed;
             Layout();
+            _root.Ready();
             _ready.TrySetResult(new MediaSize(width, height));
         }
         catch (Exception ex)
