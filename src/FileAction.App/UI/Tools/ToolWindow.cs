@@ -497,8 +497,9 @@ internal sealed class ToolWindow : Window
             if (!GetMonitorInfo(monitor, ref info))
                 return false;
 
-            var handle = new WindowInteropHelper(this).Handle;
-            var scale = handle != IntPtr.Zero ? Math.Max(1.0, GetDpiForWindow(handle) / 96.0) : 1.0;
+            // Use WPF's own DPI for the window. GetDpiForWindow returns 96 before per-monitor awareness
+            // is applied on some systems, which put the near-cursor window at the wrong offset.
+            var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
             if (scale <= 0)
                 scale = 1.0;
 
