@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using FileAction.App.UI;
 using FileAction.Core;
 using FileAction.Core.Lock;
@@ -25,6 +26,7 @@ internal sealed class UnlockedPanel : Window
     private readonly TextBlock _status;
     private readonly TextBlock _badge;
     private readonly Border _retry;
+    private readonly DispatcherTimer _hide;
 
     public UnlockedPanel(string name)
     {
@@ -117,7 +119,18 @@ internal sealed class UnlockedPanel : Window
                 }
             }
         };
-        Loaded += (_, _) => PlaceBottomRight();
+        // A short confirmation only: the session keeps locking in the background, the panel does not
+        // need to sit on top of every window for the whole editing session.
+        _hide = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Normal, (_, _) =>
+        {
+            _hide.Stop();
+            Hide();
+        }, Dispatcher);
+        Loaded += (_, _) =>
+        {
+            PlaceBottomRight();
+            _hide.Start();
+        };
     }
 
     public event Action? Retry;
