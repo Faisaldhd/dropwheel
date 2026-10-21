@@ -310,7 +310,13 @@ public sealed record RescuerSecrets(string Key, string? Password, bool KeyUsed =
 public interface IRescuerVault
 {
     RescuerSecrets? Load();
-    void Save(RescuerSecrets secrets);
+
+    /// <summary>
+    /// Stores the pair. Returns false when it was not durably persisted (DPAPI unavailable, write denied,
+    /// or the read-back check failed); the caller must not report success or set the configured marker.
+    /// </summary>
+    bool Save(RescuerSecrets secrets);
+
     void Clear();
 }
 
@@ -320,7 +326,13 @@ public sealed class InMemoryRescuerVault : IRescuerVault
     private RescuerSecrets? _secrets;
 
     public RescuerSecrets? Load() => _secrets;
-    public void Save(RescuerSecrets secrets) => _secrets = secrets;
+
+    public bool Save(RescuerSecrets secrets)
+    {
+        _secrets = secrets;
+        return true;
+    }
+
     public void Clear() => _secrets = null;
 }
 
@@ -355,6 +367,22 @@ public sealed class ProtectionSettings
     /// A moved or deleted file simply removes that proof and the prompt falls back to other candidates.
     /// </summary>
     public string? LastContainerPath { get; set; }
+
+    /// <summary>
+    /// Every container this install has written, newest last. Key rotation uses this list to rewrap the
+    /// existing files before the vault adopts the new key; it is a path list, never a secret. The list is
+    /// bounded so a long-lived install cannot grow the settings file without limit.
+    /// </summary>
+    public List<string> KnownContainerPaths { get; set; } = [];
+
+    /// <summary>
+    /// Containers written by the first Lock whose real Rescuer has not been adopted yet. Persisted before
+    /// the setup dialog opens so a crash cannot silently leave a configured vault whose first files still
+    /// carry the provisional pair. Cleared only after every path was rewrapped and the vault was saved.
+    /// </summary>
+    public List<string> PendingAdoptionContainers { get; set; } = [];
+
+    public const int MaximumRememberedContainers = 512;
 
     public static string DefaultPath => ProtectionPaths.SettingsFile;
 
@@ -400,6 +428,13 @@ public sealed class ProtectionSettings
                     case "LastContainerPath" when property.Value.ValueKind is System.Text.Json.JsonValueKind.String:
                         settings.LastContainerPath = property.Value.GetString();
                         break;
+                    case "KnownContainerPaths" when property.Value.ValueKind is System.Text.Json.JsonValueKind.Array:
+                        settings.KnownContainerPaths = ReadPaths(property.Value);
+                        break;
+                    case "PendingAdoptionContainers"
+                        when property.Value.ValueKind is System.Text.Json.JsonValueKind.Array:
+                        settings.PendingAdoptionContainers = ReadPaths(property.Value);
+                        break;
                 }
             }
         }
@@ -409,6 +444,23 @@ public sealed class ProtectionSettings
             return new ProtectionSettings();
         }
         return settings;
+    }
+
+    private static List<string> ReadPaths(System.Text.Json.JsonElement array)
+    {
+        var paths = new List<string>();
+        foreach (var item in array.EnumerateArray())
+        {
+            if (item.ValueKind != System.Text.Json.JsonValueKind.String)
+                continue;
+            var value = item.GetString();
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+            paths.Add(value);
+            if (paths.Count >= MaximumRememberedContainers)
+                break;
+        }
+        return paths;
     }
 
     public void Save() => SaveTo(DefaultPath);
@@ -435,11 +487,28 @@ public sealed class ProtectionSettings
             writer.WriteBoolean("RescuerConfigured", RescuerConfigured);
             if (!string.IsNullOrWhiteSpace(LastContainerPath))
                 writer.WriteString("LastContainerPath", LastContainerPath);
+            WritePaths(writer, "KnownContainerPaths", KnownContainerPaths);
+            WritePaths(writer, "PendingAdoptionContainers", PendingAdoptionContainers);
             writer.WriteEndObject();
             writer.Flush();
             stream.Flush(flushToDisk: true);
         }
         File.Move(temp, path, overwrite: true);
+    }
+
+    private static void WritePaths(System.Text.Json.Utf8JsonWriter writer, string name, List<string> paths)
+    {
+        var written = 0;
+        writer.WriteStartArray(name);
+        foreach (var path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+            writer.WriteStringValue(path);
+            if (++written >= MaximumRememberedContainers)
+                break;
+        }
+        writer.WriteEndArray();
     }
 
     /// <summary>Creates a random key without ever deriving it from a password.</summary>

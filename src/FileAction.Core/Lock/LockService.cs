@@ -692,6 +692,88 @@ public sealed class LockService(
         return results;
     }
 
+    /// <summary>
+    /// Re-wraps the Rescuer key slot on many containers and proves the replacement on every file: the new
+    /// key must open the rewritten header and the old key must no longer open it. If any file fails, every
+    /// file already changed is rewrapped back to <paramref name="oldKey"/> before returning, so the caller
+    /// can keep the old vault key valid for all of them.
+    /// </summary>
+    public IReadOnlyList<(string Path, Exception? Error)> RotateRescuerKey(
+        IEnumerable<string> containers,
+        string currentSecret,
+        string oldKey,
+        string newKey,
+        IProgress<(int Done, int Total, string Path)>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(containers);
+        if (string.IsNullOrEmpty(currentSecret))
+            throw new ArgumentException("The current secret is empty.", nameof(currentSecret));
+        if (!global::FileAction.Core.Lock.RescuerKey.TryParse(oldKey, out var canonicalOld))
+            throw new ArgumentException("The old Rescuer key is not valid.", nameof(oldKey));
+        if (!global::FileAction.Core.Lock.RescuerKey.TryParse(newKey, out var canonicalNew))
+            throw new ArgumentException("The new Rescuer key is not valid.", nameof(newKey));
+
+        var list = containers
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(LockPaths.Normalize)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var results = new List<(string Path, Exception? Error)>();
+        var changed = new List<string>();
+        var index = 0;
+        foreach (var path in list)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report((index, list.Count, path));
+            try
+            {
+                SetRescuerKey(path, currentSecret, canonicalNew);
+                // The rewriter verified the new slot and the payload; prove the old door is gone too.
+                if (!LockVerification.OpensWithRescuerKey(path, canonicalNew))
+                    throw new LockDamagedException("rotated Rescuer key does not open the file");
+                if (!LockSecrets.SameSecret(canonicalOld, canonicalNew) &&
+                    LockVerification.OpensWithRescuerKey(path, canonicalOld))
+                {
+                    throw new LockDamagedException("the old Rescuer key still opens the file");
+                }
+                changed.Add(path);
+                results.Add((path, null));
+            }
+            catch (Exception ex) when (ex is LockException or IOException or UnauthorizedAccessException
+                                           or LockPolicyException or ArgumentException)
+            {
+                results.Add((path, ex));
+            }
+            index++;
+        }
+        progress?.Report((index, list.Count, string.Empty));
+
+        if (results.Any(result => result.Error is not null) && changed.Count > 0)
+        {
+            // All-or-nothing: a partial rotation would leave some files on the new key while the vault
+            // still advertises the old one. Put every successful rewrite back before reporting failure.
+            foreach (var path in changed)
+            {
+                try
+                {
+                    SetRescuerKey(path, currentSecret, canonicalOld);
+                    if (!LockVerification.OpensWithRescuerKey(path, canonicalOld))
+                        throw new LockDamagedException("rollback did not restore the old Rescuer key");
+                }
+                catch (Exception ex) when (ex is LockException or IOException or UnauthorizedAccessException
+                                               or LockPolicyException or ArgumentException)
+                {
+                    var at = results.FindIndex(result => string.Equals(result.Path, path,
+                        StringComparison.OrdinalIgnoreCase));
+                    if (at >= 0)
+                        results[at] = (path, ex);
+                }
+            }
+        }
+        return results;
+    }
+
     /// <summary>Verify a protected file and return its metadata without leaving a plaintext copy.</summary>
     public LockReadResult Verify(string containerPath, string secret)
     {

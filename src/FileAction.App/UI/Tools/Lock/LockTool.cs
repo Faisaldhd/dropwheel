@@ -382,9 +382,10 @@ internal sealed class LockProtectView
             }
         }
 
-        // Keep one real container as the next session's proof for the re-entered Rescuer secret.
+        // Remember every container: the newest one proves a re-entered Rescuer secret, and the full list
+        // lets a later key rotation rewrap all of them instead of only future files.
         if (outputs.Count > 0)
-            LockRuntime.RememberContainer(outputs[^1]);
+            LockRuntime.RememberContainers(outputs);
         LockRuntime.EnsureAssociation();
 
         if (firstLock && outputs.Count > 0)

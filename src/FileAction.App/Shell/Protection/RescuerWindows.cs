@@ -49,27 +49,34 @@ internal sealed class RescuerSetupWindow : Window
     private readonly StackPanel _firstPage;
     private readonly StackPanel _keyPage;
     private readonly TextBox _keyBox;
-    private readonly CheckBox _saved;
     private readonly Border _finish;
     private readonly Border _next;
     private readonly TextBlock _match;
-    private readonly TextBox _typedLast4;
-    private bool _confirmed;
+    private bool _copied;
     private bool _allowClose;
+    private bool _committing;
     private string _key = string.Empty;
     private string _keyPassword = string.Empty;
     private bool _keyUsed;
     private readonly string? _knownKey;
+    private Func<RescuerSecrets, string?>? _commit;
 
     /// <param name="knownKey">The key a reset keeps, when no vault key is available.</param>
     /// <param name="verifiedPassword">
     /// A password Protection settings already proved. Supplying it for <see cref="RescuerSetupMode.NewKey"/>
     /// skips the proof page and goes straight to the freshly generated key.
     /// </param>
-    public RescuerSetupWindow(RescuerSetupMode mode, string? knownKey = null, string? verifiedPassword = null)
+    /// <param name="commit">
+    /// Optional transactional save used by Protection settings: it runs before the window may close and
+    /// returns null on success or a user-facing warning. The first-lock adoption and key rotation use this
+    /// to persist containers first; when it fails the dialog stays open and nothing is reported as saved.
+    /// </param>
+    public RescuerSetupWindow(RescuerSetupMode mode, string? knownKey = null, string? verifiedPassword = null,
+        Func<RescuerSecrets, string?>? commit = null)
     {
         _mode = mode;
         _knownKey = knownKey;
+        _commit = commit;
         var title = mode switch
         {
             RescuerSetupMode.FirstTime => T("tool.lock.rescuer.title"),
@@ -207,50 +214,8 @@ internal sealed class RescuerSetupWindow : Window
         keyActions.Children.Add(Controls.Button(T("tool.lock.rescuer.print"), PrintKey, glyph: "\uE749"));
         _keyPage.Children.Add(keyActions);
 
-        _saved = new CheckBox
-        {
-            Content = new TextBlock
-            {
-                Text = T("tool.lock.rescuer.iSaved"),
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 12.5,
-                Foreground = Theme.Text,
-                MaxWidth = 380,
-            },
-            IsChecked = false,
-            Margin = new Thickness(0, 2, 0, 14),
-        };
-        _keyPage.Children.Add(_saved);
-
-        _keyPage.Children.Add(new TextBlock
-        {
-            Text = T("tool.lock.rescuer.typeLast4"),
-            FontSize = 12.5,
-            Foreground = Theme.Text,
-            Margin = new Thickness(0, 0, 0, 5),
-        });
-        _typedLast4 = new TextBox
-        {
-            MaxLength = 8,
-            Padding = new Thickness(10, 7, 10, 7),
-            Background = Theme.Card,
-            Foreground = Theme.Text,
-            BorderBrush = Theme.PanelBorder,
-            BorderThickness = new Thickness(1),
-            FontFamily = new FontFamily("Consolas, Segoe UI"),
-            FontSize = 14,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Width = 120,
-            Margin = new Thickness(0, 0, 0, 12),
-        };
-        _typedLast4.TextChanged += (_, _) => UpdateConfirmation();
-        _keyPage.Children.Add(_typedLast4);
-
-        var keyButtons = new DockPanel();
+        var keyButtons = new DockPanel { Margin = new Thickness(0, 4, 0, 0) };
         _finish = Controls.Button(T("tool.lock.rescuer.finish"), Finish, primary: true);
-        _finish.IsEnabled = false;
-        _saved.Checked += (_, _) => UpdateConfirmation();
-        _saved.Unchecked += (_, _) => UpdateConfirmation();
         var keyCancel = Controls.Button(T("tool.lock.cancel"), () =>
         {
             _allowClose = true;
@@ -280,16 +245,21 @@ internal sealed class RescuerSetupWindow : Window
             _password.HideReveal();
             _confirm.HideReveal();
             _current.HideReveal();
-            if (_keyPage.Visibility != Visibility.Visible || _confirmed || _allowClose)
-            {
-                _allowClose = true;
+            if (_allowClose || _keyPage.Visibility != Visibility.Visible)
                 return;
-            }
-            if (_confirmed && Result is null && _key.Length > 0)
+            // Copying is an intentional hand-off, so closing afterwards saves the pair like Done does.
+            // Before Copy/Done the key is one click from being lost; make the user choose explicitly.
+            if (_copied)
             {
-                // The user confirmed the key, so closing keeps it instead of silently losing it.
-                Result = new RescuerSecrets(_key, _keyPassword, _keyUsed);
-                LockRuntime.SaveRescuer(Result);
+                var pair = new RescuerSecrets(_key, _keyPassword, _keyUsed);
+                var problem = Commit(pair);
+                if (problem is not null)
+                {
+                    Dialogs.Show(this, problem, Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+                    e.Cancel = true;
+                    return;
+                }
+                Result = pair;
                 _allowClose = true;
                 return;
             }
@@ -313,20 +283,15 @@ internal sealed class RescuerSetupWindow : Window
             {
                 e.Handled = true;
                 if (_keyPage.Visibility == Visibility.Visible)
-                {
-                    if (_finish.IsEnabled)
-                        Finish();
-                }
+                    Finish();
                 else if (_next.IsEnabled)
-                {
                     OnNext();
-                }
             }
         };
         Loaded += (_, _) =>
         {
             if (_keyPage.Visibility == Visibility.Visible)
-                _typedLast4.Focus();
+                _keyBox.Focus();
             else if (mode != RescuerSetupMode.NewKey)
                 _password.FocusInput();
             else
@@ -357,14 +322,14 @@ internal sealed class RescuerSetupWindow : Window
         _next.IsEnabled = status == LockSecrets.PairStatus.Match;
     }
 
-    private void UpdateConfirmation()
-    {
-        _confirmed = LockSecrets.IsRecoveryKeyConfirmed(_saved.IsChecked.GetValueOrDefault(),
-            _typedLast4.Text, _key);
-        _finish.IsEnabled = _confirmed;
-    }
-
     public RescuerSecrets? Result { get; private set; }
+
+    /// <summary>Transactional save installed by the caller before <see cref="Window.ShowDialog"/>.</summary>
+    public Func<RescuerSecrets, string?>? CommitHandler
+    {
+        get => _commit;
+        set => _commit = value;
+    }
 
     private void OnNext()
     {
@@ -431,9 +396,16 @@ internal sealed class RescuerSetupWindow : Window
         _keyPassword = password;
         if (_mode == RescuerSetupMode.ResetPassword)
         {
-            // No key to show: save immediately.
-            Result = new RescuerSecrets(key, password, _keyUsed);
-            LockRuntime.SaveRescuer(Result);
+            // No key to show: save immediately. A failed transactional save keeps this dialog open with
+            // its fields intact; nothing is marked configured and no reset dialog has changed the vault.
+            var pair = new RescuerSecrets(key, password, _keyUsed);
+            var problem = Commit(pair);
+            if (problem is not null)
+            {
+                Dialogs.Show(this, problem, Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            Result = pair;
             DialogResult = true;
             Close();
             return;
@@ -449,29 +421,51 @@ internal sealed class RescuerSetupWindow : Window
         Title = T("tool.lock.rescuer.keyTitle");
         _password.Clear();
         _confirm.Clear();
-        _typedLast4.Clear();
-        UpdateConfirmation();
-        _typedLast4.Focus();
+        _copied = false;
+        _keyBox.Focus();
+    }
+
+    /// <summary>
+    /// Runs the transactional save, or the normal vault save. Returning a message means the window must
+    /// stay open: nothing was persisted and no caller may treat the Result as active.
+    /// </summary>
+    private string? Commit(RescuerSecrets pair)
+    {
+        if (_committing)
+            return T("tool.lock.settings.saveFailed");
+        _committing = true;
+        try
+        {
+            if (_commit is not null)
+                return _commit(pair);
+            return LockRuntime.SaveRescuer(pair) ? null : T("tool.lock.settings.saveFailed");
+        }
+        finally
+        {
+            _committing = false;
+        }
     }
 
     private void Finish()
     {
-        _confirmed = LockSecrets.IsRecoveryKeyConfirmed(_saved.IsChecked.GetValueOrDefault(),
-            _typedLast4.Text, _key);
-        if (!_confirmed)
+        var pair = new RescuerSecrets(_key, _keyPassword, _keyUsed);
+        var problem = Commit(pair);
+        if (problem is not null)
         {
-            Dialogs.Show(this, T("tool.lock.rescuer.confirmRequired"), Title, MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            Dialogs.Show(this, problem, Title, MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
+        Result = pair;
         _allowClose = true;
-        Result = new RescuerSecrets(_key, _keyPassword, _keyUsed);
-        LockRuntime.SaveRescuer(Result);
         DialogResult = true;
         Close();
     }
 
-    private void CopyKey() => ClipboardGuard.Copy(RescuerKey.Format(_key));
+    private void CopyKey()
+    {
+        ClipboardGuard.Copy(RescuerKey.Format(_key));
+        _copied = true;
+    }
 
     private void SaveKey()
     {
@@ -489,6 +483,7 @@ internal sealed class RescuerSetupWindow : Window
                    RescuerKey.Format(_key) + Environment.NewLine + Environment.NewLine +
                    T("tool.lock.rescuer.fileWarning") + Environment.NewLine;
         File.WriteAllText(dialog.FileName, text, System.Text.Encoding.UTF8);
+        _copied = true;
         Dialogs.Show(this, T("tool.lock.rescuer.savedFile", Bidi.Value(dialog.FileName)), Title,
             MessageBoxButton.OK, MessageBoxImage.Information);
     }
@@ -510,6 +505,7 @@ internal sealed class RescuerSetupWindow : Window
             document.Blocks.Add(new Paragraph(new Run(RescuerKey.Format(_key))) { FontSize = 26 });
             document.Blocks.Add(new Paragraph(new Run(T("tool.lock.rescuer.fileWarning"))));
             dialog.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator, Title);
+            _copied = true;
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.Printing.PrintQueueException)
         {
@@ -518,6 +514,120 @@ internal sealed class RescuerSetupWindow : Window
     }
 }
 
+
+/// <summary>
+/// Re-authentication for a destructive Rescuer change: one current Rescuer password <em>or</em> key, proved
+/// against a real container before the caller may open a reset dialog. The dialog cannot be completed by a
+/// format-valid typo, and a cancel returns no secret and changes nothing.
+/// </summary>
+internal sealed class RescuerProofWindow : Window
+{
+    private readonly SecretField _secret;
+    private readonly TextBlock _status;
+    private readonly Border _ok;
+    private readonly IReadOnlyList<string> _verifiers;
+    private bool _checking;
+
+    public RescuerProofWindow(IReadOnlyList<string> verifiers)
+    {
+        _verifiers = verifiers ?? throw new ArgumentNullException(nameof(verifiers));
+        var body = LockUi.Configure(this, T("tool.lock.settings.updateFiles"), 450, 320);
+        body.Children.Add(new TextBlock
+        {
+            Text = T("tool.lock.settings.currentSecretHint"),
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12.5,
+            Foreground = Theme.LockMuted,
+            Margin = new Thickness(0, 0, 0, 10),
+        });
+        _secret = new SecretField(T("tool.lock.settings.currentSecret"));
+        body.Children.Add(_secret);
+        _status = new TextBlock
+        {
+            FontSize = 11.5,
+            Foreground = Theme.BadgeErrorText,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        body.Children.Add(_status);
+        var buttons = new DockPanel { Margin = new Thickness(0, 16, 0, 0) };
+        var cancel = Controls.Button(T("tool.lock.cancel"), Close);
+        _ok = Controls.Button(T("tool.lock.rescuer.next"), Continue, primary: true);
+        DockPanel.SetDock(cancel, Dock.Left);
+        DockPanel.SetDock(_ok, Dock.Right);
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(_ok);
+        body.Children.Add(buttons);
+        _secret.Changed += () => _status.Text = string.Empty;
+        Closing += (_, _) => _secret.HideReveal();
+        PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape)
+            {
+                Close();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter)
+            {
+                Continue();
+                e.Handled = true;
+            }
+        };
+        Loaded += (_, _) => _secret.FocusInput();
+    }
+
+    /// <summary>The verified secret; meaningful only after <see cref="Window.DialogResult"/> is true.</summary>
+    public string Secret { get; private set; } = string.Empty;
+
+    /// <summary>The slot kind that proved the secret (Rescuer password or Rescuer key).</summary>
+    public LockSecretKind Kind { get; private set; }
+
+    /// <summary>The container that provided the proof, or null when none could be read.</summary>
+    public string? ProofContainer { get; private set; }
+
+    private async void Continue()
+    {
+        if (_checking)
+            return;
+        var typed = _secret.Text;
+        if (string.IsNullOrWhiteSpace(typed))
+            return;
+        _checking = true;
+        _ok.IsEnabled = false;
+        _status.Foreground = Theme.LockMuted;
+        _status.Text = T("tool.lock.rescuer.sessionVerifying");
+        (string Path, LockSecretKind Kind)? proof;
+        try
+        {
+            // The unwrap is PBKDF2 and must not freeze the dialog.
+            proof = await Task.Run(() => LockVerification.FindOpeningContainerWithRescuerSecret(_verifiers, typed));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or LockException
+                                       or ArgumentException)
+        {
+            proof = null;
+        }
+        finally
+        {
+            _checking = false;
+            _ok.IsEnabled = true;
+        }
+        if (!IsVisible)
+            return;
+        if (proof is null)
+        {
+            _status.Foreground = Theme.BadgeErrorText;
+            _status.Text = T("tool.lock.rescuer.sessionVerifyFailed",
+                Bidi.Value(Path.GetFileName(_verifiers[0])));
+            return;
+        }
+        Secret = typed;
+        Kind = proof.Value.Kind;
+        ProofContainer = proof.Value.Path;
+        DialogResult = true;
+        Close();
+    }
+}
 
 /// <summary>
 /// The manual fallback shown when a Rescuer marker exists but the DPAPI vault cannot be read (a new Windows
@@ -531,6 +641,7 @@ internal sealed class RescuerSessionWindow : Window
     private readonly TextBlock _error;
     private readonly Border _ok;
     private readonly IReadOnlyList<string> _verifiers;
+    private readonly CheckBox? _noFilesAck;
     private bool _checking;
 
     /// <param name="verifiers">
@@ -540,7 +651,8 @@ internal sealed class RescuerSessionWindow : Window
     public RescuerSessionWindow(IReadOnlyList<string>? verifiers = null)
     {
         _verifiers = verifiers ?? Array.Empty<string>();
-        var body = LockUi.Configure(this, T("tool.lock.rescuer.sessionTitle"), 450, 390);
+        var body = LockUi.Configure(this, T("tool.lock.rescuer.sessionTitle"), 450,
+            _verifiers.Count == 0 ? 460 : 390);
         body.Children.Add(new TextBlock
         {
             Text = T("tool.lock.rescuer.sessionIntro"),
@@ -583,6 +695,25 @@ internal sealed class RescuerSessionWindow : Window
             Foreground = Theme.LockMuted,
             Margin = new Thickness(0, 10, 0, 0),
         });
+        if (_verifiers.Count == 0)
+        {
+            // There is no real container to prove the pair against. Never save an unverified pair without
+            // this explicit acknowledgement that this is a new installation.
+            _noFilesAck = new CheckBox
+            {
+                Content = new TextBlock
+                {
+                    Text = T("tool.lock.rescuer.noFilesAck"),
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 12,
+                    Foreground = Theme.Text,
+                    MaxWidth = 380,
+                },
+                IsChecked = false,
+                Margin = new Thickness(0, 10, 0, 0),
+            };
+            body.Children.Add(_noFilesAck);
+        }
 
         var buttons = new DockPanel { Margin = new Thickness(0, 16, 0, 0) };
         var cancel = Controls.Button(T("tool.lock.cancel"), Close);
@@ -630,6 +761,11 @@ internal sealed class RescuerSessionWindow : Window
         if (!RescuerKey.TryParse(_key.Text, out var canonical))
         {
             _error.Text = T("tool.lock.rescuer.sessionInvalid");
+            return;
+        }
+        if (_verifiers.Count == 0 && _noFilesAck?.IsChecked != true)
+        {
+            _error.Text = T("tool.lock.rescuer.noFilesAck");
             return;
         }
 

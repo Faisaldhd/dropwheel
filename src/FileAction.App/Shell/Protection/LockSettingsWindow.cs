@@ -215,9 +215,10 @@ internal sealed class LockSettingsWindow : Window
     {
         var stored = LockRuntime.Vault.Load();
         var ready = stored is not null && stored.IsComplete;
-        if (ready && !LockRuntime.Settings.RescuerConfigured)
+        if (ready && LockRuntime.RescuerPersists && !LockRuntime.Settings.RescuerConfigured)
         {
-            // A DPAPI vault from an earlier build already proves the Rescuer exists.
+            // A durably saved DPAPI vault from an earlier build already proves the Rescuer exists. A
+            // session-only pair (failed save) must never flip the configured marker.
             LockRuntime.Settings.RescuerConfigured = true;
             try
             {
@@ -265,64 +266,103 @@ internal sealed class LockSettingsWindow : Window
     {
         if (LockRuntime.Settings.RescuerConfigured && LockRuntime.TryGetRescuerCredentials() is not null)
             return;
-        var setup = new RescuerSetupWindow(RescuerSetupMode.FirstTime) { Owner = this };
+        var pending = _pendingContainers.Count > 0 && _provisional is { IsComplete: true };
+        var setup = new RescuerSetupWindow(RescuerSetupMode.FirstTime,
+            commit: pending ? CommitFirstRescuer : null) { Owner = this };
         if (setup.ShowDialog() != true || setup.Result is null)
         {
             _status.Text = T("tool.lock.settings.setupSkipped");
             return;
         }
         RefreshState();
-        if (_pendingContainers.Count > 0 && _provisional is not null && _provisional.IsComplete)
-            AdoptPendingContainers(setup.Result);
-        else
+        if (!pending)
             _status.Text = T("tool.lock.settings.setupDone");
     }
 
     /// <summary>
-    /// Rewrites both Rescuer slots of the files written by the first Lock. The payload and the file password
-    /// never change, and a failure leaves that file exactly as it was.
+    /// Transactional first-lock adoption: every provisional-pair container is rewrapped, then the vault
+    /// is saved, and only then is the pending list cleared. Any failure rolls the containers back to the
+    /// provisional pair and returns a warning, so the setup dialog stays open and no configured vault can
+    /// be left pointing at provisional-pair files after a crash.
     /// </summary>
-    private void AdoptPendingContainers(RescuerSecrets created)
+    private string? CommitFirstRescuer(RescuerSecrets created)
     {
         var containers = _pendingContainers.ToArray();
         var provisional = _provisional!;
         _busy.Text = T("tool.lock.settings.setupWorking", 0, containers.Length);
-        var progress = new Progress<(int Done, int Total)>(value =>
-            _busy.Text = T("tool.lock.settings.setupWorking", value.Done, value.Total));
-        _ = Task.Run(() =>
+        var adopted = new List<string>();
+        var failures = 0;
+        var done = 0;
+        foreach (var container in containers)
         {
-            var failures = 0;
-            var done = 0;
-            foreach (var container in containers)
+            if (AdoptContainer(container, provisional.Password!, created))
+                adopted.Add(container);
+            else
+                failures++;
+            _busy.Text = T("tool.lock.settings.setupWorking", ++done, containers.Length);
+        }
+
+        if (failures > 0)
+        {
+            RollBackAdoption(adopted, created, provisional);
+            _busy.Text = string.Empty;
+            _status.Text = T("tool.lock.settings.setupPartial", containers.Length - failures, containers.Length);
+            _status.Foreground = Theme.BadgeErrorText;
+            return T("tool.lock.settings.setupPartial", containers.Length - failures, containers.Length);
+        }
+
+        if (!LockRuntime.SaveRescuer(created))
+        {
+            RollBackAdoption(adopted, created, provisional);
+            _busy.Text = string.Empty;
+            _status.Text = T("tool.lock.settings.saveFailed");
+            _status.Foreground = Theme.BadgeErrorText;
+            return T("tool.lock.settings.saveFailed");
+        }
+
+        LockRuntime.ClearPendingAdoption(containers);
+        _pendingContainers.Clear();
+        _busy.Text = string.Empty;
+        _status.Text = T("tool.lock.settings.setupApplied");
+        _status.Foreground = Theme.BadgeSuccessText;
+        return null;
+    }
+
+    /// <summary>Adopts one file, accepting an already-adopted file when a retry follows a partial attempt.</summary>
+    private static bool AdoptContainer(string container, string provisionalPassword, RescuerSecrets created)
+    {
+        try
+        {
+            LockRuntime.Service.AdoptRescuer(container, provisionalPassword, created);
+            return true;
+        }
+        catch (LockWrongSecretException)
+        {
+            return LockVerification.OpensWithRescuer(container, created.Password!, created.Key);
+        }
+        catch (Exception ex) when (ex is LockException or IOException or UnauthorizedAccessException
+                                       or LockPolicyException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Puts newly adopted files back on the provisional pair; best effort, failures are reported.</summary>
+    private static void RollBackAdoption(IEnumerable<string> adopted, RescuerSecrets created,
+        RescuerSecrets provisional)
+    {
+        foreach (var container in adopted)
+        {
+            try
             {
-                try
-                {
-                    LockRuntime.Service.AdoptRescuer(container, provisional.Password!, created);
-                }
-                catch (Exception ex) when (ex is LockException or IOException or UnauthorizedAccessException
-                                               or LockPolicyException or ArgumentException)
-                {
-                    failures++;
-                }
-                ((IProgress<(int, int)>)progress).Report((++done, containers.Length));
+                LockRuntime.Service.AdoptRescuer(container, created.Password!, provisional);
             }
-            Dispatcher.BeginInvoke((Action)(() =>
+            catch (Exception ex) when (ex is LockException or IOException or UnauthorizedAccessException
+                                           or LockPolicyException or ArgumentException)
             {
-                _busy.Text = string.Empty;
-                if (failures == 0)
-                {
-                    _status.Text = T("tool.lock.settings.setupApplied");
-                    _status.Foreground = Theme.BadgeSuccessText;
-                    _pendingContainers.Clear();
-                }
-                else
-                {
-                    _status.Text = T("tool.lock.settings.setupPartial", containers.Length - failures,
-                        containers.Length);
-                    _status.Foreground = Theme.BadgeErrorText;
-                }
-            }));
-        });
+                // The setup dialog stays open; a retry treats an already-adopted file as success.
+            }
+        }
     }
 
     /// <summary>The stored pair, or the manual "Rescuer credentials" fallback when DPAPI has nothing.</summary>
@@ -392,6 +432,9 @@ internal sealed class LockSettingsWindow : Window
         {
             Owner = this,
         };
+        // The new key is not committed to the vault until every known container has been rewrapped and
+        // verified; a failure leaves the old key valid and the setup dialog open.
+        window.CommitHandler = rotated => LockRuntime.CommitNewRescuerKey(stored, rotated);
         if (window.ShowDialog() != true || window.Result is null)
             return;
         RefreshState();
@@ -413,15 +456,20 @@ internal sealed class LockSettingsWindow : Window
             return;
         }
 
-        var setup = new RescuerSetupWindow(RescuerSetupMode.ResetPassword, stored.Key) { Owner = this };
+        // Re-authenticate against one of the real containers BEFORE the reset dialog can touch the vault:
+        // the old flow opened the reset dialog first, which saved a new password with no proof at all.
+        var proof = new RescuerProofWindow(files) { Owner = this };
+        if (proof.ShowDialog() != true || string.IsNullOrEmpty(proof.Secret))
+            return;
+        var current = proof.Secret;
+        var knownKey = proof.Kind == LockSecretKind.RescuerKey &&
+                       RescuerKey.TryParse(current, out var canonical)
+            ? canonical
+            : stored.Key;
+        var setup = new RescuerSetupWindow(RescuerSetupMode.ResetPassword, knownKey) { Owner = this };
         if (setup.ShowDialog() != true || setup.Result is null)
             return;
         var newPassword = setup.Result.Password!;
-        var prompt = new SecretPromptWindow(T("tool.lock.settings.currentSecret"),
-            T("tool.lock.settings.currentSecretHint")) { Owner = this };
-        if (prompt.ShowDialog() != true || string.IsNullOrEmpty(prompt.Secret))
-            return;
-        var current = prompt.Secret;
         RefreshState();
         RunUpdate(files, path => LockRuntime.Service.SetRescuerPassword(path, current, newPassword),
             T("tool.lock.settings.updated"));

@@ -1,6 +1,8 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text;
 using FileAction.Core.Lock;
 
@@ -17,8 +19,11 @@ internal interface ISecretProtector
 }
 
 /// <summary>
-/// Current-user DPAPI: the blob can only be read on this Windows account on this machine. No prompt is
-/// ever shown, and the description never contains a secret.
+/// Current-user DPAPI. It protects the blob at rest against another Windows account, an offline disk or a
+/// copied file. It is deliberately NOT a security boundary against code running as the same Windows user:
+/// such code can call <c>CryptUnprotectData</c> with exactly the same rights as DropWheel. Do not describe
+/// this as protection from same-user malware; the Rescuer key kept outside the PC is the recovery boundary.
+/// No prompt is ever shown, and the description never contains a secret.
 /// </summary>
 internal sealed class DpapiSecretProtector : ISecretProtector
 {
@@ -44,12 +49,14 @@ internal sealed class DpapiSecretProtector : ISecretProtector
             }
             finally
             {
-                LocalFree(output.Data);
+                ZeroAndLocalFree(ref output);
             }
         }
         finally
         {
-            Marshal.FreeHGlobal(input.Data);
+            // The buffer holds the plaintext Rescuer password and key. Clear it with the non-elidable
+            // kernel primitive before the allocator can reuse it.
+            ZeroAndFreeHGlobal(ref input, plaintext.Length);
         }
     }
 
@@ -73,13 +80,36 @@ internal sealed class DpapiSecretProtector : ISecretProtector
             }
             finally
             {
-                LocalFree(output.Data);
+                // DPAPI just produced plaintext in this unmanaged block; wipe it before LocalFree.
+                ZeroAndLocalFree(ref output);
             }
         }
         finally
         {
-            Marshal.FreeHGlobal(input.Data);
+            ZeroAndFreeHGlobal(ref input, protectedBytes.Length);
         }
+    }
+
+    private static void ZeroAndFreeHGlobal(ref DataBlob blob, int length)
+    {
+        if (blob.Data == IntPtr.Zero)
+            return;
+        if (length > 0)
+            RtlZeroMemory(blob.Data, (UIntPtr)(uint)length);
+        Marshal.FreeHGlobal(blob.Data);
+        blob.Data = IntPtr.Zero;
+        blob.Size = 0;
+    }
+
+    private static void ZeroAndLocalFree(ref DataBlob blob)
+    {
+        if (blob.Data == IntPtr.Zero)
+            return;
+        if (blob.Size > 0)
+            RtlZeroMemory(blob.Data, (UIntPtr)(uint)blob.Size);
+        LocalFree(blob.Data);
+        blob.Data = IntPtr.Zero;
+        blob.Size = 0;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -96,6 +126,11 @@ internal sealed class DpapiSecretProtector : ISecretProtector
     [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool CryptUnprotectData(ref DataBlob dataIn, IntPtr description, IntPtr optionalEntropy,
         IntPtr reserved, IntPtr promptStruct, int flags, out DataBlob dataOut);
+
+    // Windows does not export the SecureZeroMemory macro; its non-elidable kernel primitive is
+    // RtlZeroMemory, which is what this call reaches. It cannot be optimized away like a managed loop.
+    [DllImport("ntdll.dll", EntryPoint = "RtlZeroMemory")]
+    private static extern void RtlZeroMemory(IntPtr memory, UIntPtr length);
 
     [DllImport("kernel32.dll")]
     private static extern IntPtr LocalFree(IntPtr memory);
@@ -185,8 +220,11 @@ internal static class RescuerVaultCodec
 
 /// <summary>
 /// Where the Rescuer password, key and KeyUsed flag live between starts. Windows DPAPI seals the blob for
-/// the current user, so another account or a copied file reveals nothing. A missing or unreadable vault
-/// never throws: the app keeps the material in memory for this session and asks again next start.
+/// the current user, so another account or a copied file reveals nothing. This is a data-at-rest measure,
+/// not a boundary against code running as this same user (see <see cref="DpapiSecretProtector"/>). A
+/// missing or unreadable vault never throws: the app asks again next start. A failed Save is reported to
+/// the caller instead of being hidden, and a save only reports success after the sealed blob was reloaded
+/// and compared with the requested pair.
 /// </summary>
 internal sealed class DpapiRescuerVault : IRescuerVault
 {
@@ -215,25 +253,12 @@ internal sealed class DpapiRescuerVault : IRescuerVault
             return _session;
         try
         {
-            if (!File.Exists(_path))
-                return null;
-            var protectedBytes = File.ReadAllBytes(_path);
-            var plain = _protector.Unprotect(protectedBytes);
-            if (plain is null)
-                return null;
-            try
-            {
-                var secrets = RescuerVaultCodec.TryDecode(plain);
-                if (secrets is null)
-                    return null;
-                _session = secrets;
-                Persistent = true;
-                return secrets;
-            }
-            finally
-            {
-                CryptographicOperations.ZeroMemory(plain);
-            }
+            var secrets = ReadPersisted();
+            if (secrets is null)
+                return _fallback.Load();
+            _session = secrets;
+            Persistent = true;
+            return secrets;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException
                                        or DllNotFoundException or EntryPointNotFoundException
@@ -247,34 +272,70 @@ internal sealed class DpapiRescuerVault : IRescuerVault
         }
     }
 
-    public void Save(RescuerSecrets secrets)
+    /// <summary>
+    /// Saves the pair and returns true only when the new blob was written durably, atomically installed,
+    /// given an explicit current-user + SYSTEM DACL, and read back with exactly the same values. On any
+    /// failure the previous blob is restored (when one existed), the session copy is left untouched, and
+    /// false is returned so the caller can keep its dialog open and warn instead of claiming success.
+    /// </summary>
+    public bool Save(RescuerSecrets secrets)
     {
         ArgumentNullException.ThrowIfNull(secrets);
         if (!RescuerKey.TryParse(secrets.Key, out var canonical))
             throw new ArgumentException("The Rescuer key is not valid.", nameof(secrets));
-        var normalized = new RescuerSecrets(canonical, secrets.Password, secrets.KeyUsed);
-        _session = normalized;
-        _fallback.Save(normalized);
+        var normalized = new RescuerSecrets(canonical,
+            string.IsNullOrEmpty(secrets.Password) ? null : secrets.Password, secrets.KeyUsed);
+        var temp = _path + ".tmp";
+        var backup = _path + ".bak";
         byte[]? plain = null;
+        var hadExisting = false;
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+            hadExisting = File.Exists(_path);
+            RecoverOrClearStale(temp, backup);
+            hadExisting = File.Exists(_path);
             plain = RescuerVaultCodec.Encode(normalized);
             var protectedBytes = _protector.Protect(plain);
-            var temp = _path + ".tmp";
-            File.WriteAllBytes(temp, protectedBytes);
-            File.Move(temp, _path, overwrite: true);
+            WriteProtectedBlob(temp, protectedBytes);
+            if (hadExisting)
+            {
+                File.Replace(temp, _path, backup, ignoreMetadataErrors: false);
+            }
+            else
+            {
+                File.Move(temp, _path);
+            }
+            ApplyVaultAcl(_path);
+            if (!Matches(ReadPersisted(), normalized))
+            {
+                RestorePrevious(backup, hadExisting);
+                TryDelete(temp);
+                return false;
+            }
+            TryDelete(temp);
+            TryDelete(backup);
+            _session = normalized;
+            _fallback.Save(normalized);
             Persistent = true;
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException
                                        or DllNotFoundException or EntryPointNotFoundException
                                        or PlatformNotSupportedException or NotSupportedException
                                        or PathTooLongException or System.Security.SecurityException
-                                       or ArgumentException)
+                                       or ArgumentException or PrivilegeNotHeldException)
         {
-            // The session copy still works; the next start behaves like a first run. Never degrade to a
-            // plaintext file and never log the failure: the app must not write a secret to disk or a log.
-            Persistent = false;
+            // Never degrade to a plaintext file and never log the failure: a secret must not reach a log.
+            // Put the previous sealed blob back so a caller that keeps the old session copy still matches
+            // what is on disk.
+            // Keep the pair for this process only; the configured marker is NOT set by the caller unless
+            // Save returned true. This preserves same-session operation while never claiming persistence.
+            _session = normalized;
+            _fallback.Save(normalized);
+            RestorePrevious(backup, hadExisting);
+            TryDelete(temp);
+            return false;
         }
         finally
         {
@@ -288,12 +349,137 @@ internal sealed class DpapiRescuerVault : IRescuerVault
         _session = null;
         _fallback.Clear();
         Persistent = false;
+        TryDelete(_path + ".tmp");
+        TryDelete(_path + ".bak");
+        TryDelete(_path);
+    }
+
+    private RescuerSecrets? ReadPersisted()
+    {
+        if (!File.Exists(_path))
+            return null;
+        var protectedBytes = File.ReadAllBytes(_path);
+        var plain = _protector.Unprotect(protectedBytes);
+        if (plain is null)
+            return null;
         try
         {
-            if (File.Exists(_path))
-                File.Delete(_path);
+            return RescuerVaultCodec.TryDecode(plain);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        finally
+        {
+            CryptographicOperations.ZeroMemory(plain);
+        }
+    }
+
+    private static bool Matches(RescuerSecrets? loaded, RescuerSecrets expected)
+    {
+        if (loaded is null)
+            return false;
+        if (!LockSecrets.SameSecret(loaded.Key, expected.Key))
+            return false;
+        if (!string.Equals(loaded.Password, expected.Password, StringComparison.Ordinal))
+            return false;
+        return loaded.KeyUsed == expected.KeyUsed;
+    }
+
+    /// <summary>Writes the sealed bytes with write-through and an explicit DACL from the first byte.</summary>
+    private static void WriteProtectedBlob(string path, byte[] protectedBytes)
+    {
+        using var stream = FileSystemAclExtensions.Create(new FileInfo(path), FileMode.CreateNew,
+            FileSystemRights.FullControl, FileShare.None, 4096, FileOptions.WriteThrough, VaultSecurity());
+        stream.Write(protectedBytes, 0, protectedBytes.Length);
+        stream.Flush(flushToDisk: true);
+    }
+
+    /// <summary>Current user plus SYSTEM only, inheritance removed: the smallest set that can read it.</summary>
+    private static FileSecurity VaultSecurity()
+    {
+        var security = new FileSecurity();
+        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        var user = WindowsIdentity.GetCurrent().User;
+        if (user is not null)
+        {
+            security.AddAccessRule(new FileSystemAccessRule(user, FileSystemRights.FullControl,
+                AccessControlType.Allow));
+        }
+        security.AddAccessRule(new FileSystemAccessRule(
+            new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), FileSystemRights.FullControl,
+            AccessControlType.Allow));
+        return security;
+    }
+
+    private static void ApplyVaultAcl(string path) =>
+        new FileInfo(path).SetAccessControl(VaultSecurity());
+
+    /// <summary>
+    /// Deals with temp/backup files from an interrupted earlier save. A stale backup is restored when the
+    /// destination is missing; otherwise both artifacts are ours and safe to remove. Only the exact
+    /// sibling names are touched, never a pattern or a caller-supplied path.
+    /// </summary>
+    private void RecoverOrClearStale(string temp, string backup)
+    {
+        if (File.Exists(_path))
+        {
+            TryDelete(temp);
+            TryDelete(backup);
+            return;
+        }
+        if (File.Exists(backup))
+        {
+            // The previous save installed the new blob but crashed before deleting the backup and the
+            // destination later disappeared. The backup is the only sealed copy; put it back.
+            File.Move(backup, _path);
+            try
+            {
+                ApplyVaultAcl(_path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                           or System.Security.SecurityException or ArgumentException
+                                           or PrivilegeNotHeldException)
+            {
+                // The caller's next Save will install a fresh blob and set the DACL again.
+            }
+        }
+        TryDelete(temp);
+    }
+
+    /// <summary>Puts the previous blob back after a failed install; best effort, never throws.</summary>
+    private void RestorePrevious(string backup, bool hadExisting)
+    {
+        try
+        {
+            if (hadExisting && File.Exists(backup))
+            {
+                if (File.Exists(_path))
+                    File.Replace(backup, _path, null, ignoreMetadataErrors: true);
+                else
+                    File.Move(backup, _path);
+                ApplyVaultAcl(_path);
+                TryDelete(backup);
+            }
+            else if (!hadExisting)
+            {
+                TryDelete(_path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException
+                                       or System.Security.SecurityException or ArgumentException
+                                       or PrivilegeNotHeldException)
+        {
+            // A sealed backup left behind is still protected by DPAPI; the next Save clears it.
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                       or System.Security.SecurityException)
         {
         }
     }

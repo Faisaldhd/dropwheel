@@ -55,11 +55,16 @@ internal static class LockRuntime
         return stored is not null && stored.IsComplete ? stored : null;
     }
 
-    /// <summary>Stores a Rescuer pair and marks the Rescuer as configured. Never throws.</summary>
-    public static void SaveRescuer(RescuerSecrets secrets)
+    /// <summary>
+    /// Stores a Rescuer pair and marks the Rescuer as configured, but only after the vault reported that
+    /// the sealed blob was durably written and read back. A failed save changes neither the disk nor the
+    /// configured marker; the caller keeps its dialog open and warns instead of claiming success.
+    /// </summary>
+    public static bool SaveRescuer(RescuerSecrets secrets)
     {
         Initialize();
-        Vault.Save(secrets);
+        if (!Vault.Save(secrets))
+            return false;
         Settings.RescuerConfigured = true;
         try
         {
@@ -69,6 +74,7 @@ internal static class LockRuntime
         {
             // The vault is the important copy; the marker can be repaired on the next start.
         }
+        return true;
     }
 
     /// <summary>The random pair a first-ever Lock uses until Protection settings replaces it.</summary>
@@ -93,6 +99,9 @@ internal static class LockRuntime
         Initialize();
         if (containers.Count == 0 || provisional.Password is null)
             return;
+        // Persist the paths before the dialog opens: a crash between saving the real pair and adopting
+        // these files must leave evidence of the provisional-pair containers.
+        RememberPendingAdoption(containers);
         LockSettingsWindow.ShowFirstTime(containers, provisional);
     }
 
@@ -125,14 +134,18 @@ internal static class LockRuntime
             return null;
 
         // Re-entry: the prompt proves both slots against a real header before these values are baked into
-        // new containers. With no existing container there is nothing to compare against, so it accepts
-        // the format-valid pair and the post-write slot verification still fails closed.
+        // new containers. When no container exists at all the user must explicitly acknowledge that this
+        // is a new installation; a format-valid pair alone is never saved silently.
         var prompt = new RescuerSessionWindow(FindVerifierContainers(nearbyPath)) { Owner = owner };
         if (prompt.ShowDialog() != true || string.IsNullOrEmpty(prompt.Password))
             return null;
         var keyUsed = stored?.KeyUsed == true && LockSecrets.SameSecret(stored.Key, prompt.RecoveryKey);
         var secrets = new RescuerSecrets(prompt.RecoveryKey, prompt.Password, keyUsed);
-        SaveRescuer(secrets);
+        if (!SaveRescuer(secrets))
+        {
+            Dialogs.Show(owner, T("tool.lock.settings.saveFailed"), T("tool.lock.rescuer.sessionTitle"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
         return secrets;
     }
 
@@ -169,6 +182,8 @@ internal static class LockRuntime
             }
         }
         Add(Settings.LastContainerPath);
+        foreach (var known in Settings.KnownContainerPaths)
+            Add(known);
         try
         {
             foreach (var record in Journal.List())
@@ -181,12 +196,44 @@ internal static class LockRuntime
     }
 
     /// <summary>Remembers the newest container so the next session can verify its Rescuer secrets.</summary>
-    public static void RememberContainer(string containerPath)
+    public static void RememberContainer(string containerPath) => RememberContainers([containerPath]);
+
+    /// <summary>
+    /// Remembers every container this install wrote. The list lets key rotation find the existing files
+    /// that must be rewrapped before the vault advertises a new key; it is a path list, never a secret.
+    /// </summary>
+    public static void RememberContainers(IEnumerable<string> containerPaths)
     {
-        if (string.IsNullOrWhiteSpace(containerPath))
+        ArgumentNullException.ThrowIfNull(containerPaths);
+        var normalized = new List<string>();
+        foreach (var path in containerPaths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+            try
+            {
+                var full = LockPaths.Normalize(path);
+                if (!normalized.Contains(full, StringComparer.OrdinalIgnoreCase))
+                    normalized.Add(full);
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException
+                                           or PathTooLongException)
+            {
+            }
+        }
+        if (normalized.Count == 0)
             return;
         Initialize();
-        Settings.LastContainerPath = LockPaths.Normalize(containerPath);
+        Settings.LastContainerPath = normalized[^1];
+        foreach (var path in normalized)
+        {
+            Settings.KnownContainerPaths.RemoveAll(existing =>
+                string.Equals(existing, path, StringComparison.OrdinalIgnoreCase));
+            Settings.KnownContainerPaths.Add(path);
+        }
+        var overflow = Settings.KnownContainerPaths.Count - ProtectionSettings.MaximumRememberedContainers;
+        if (overflow > 0)
+            Settings.KnownContainerPaths.RemoveRange(0, overflow);
         try
         {
             Settings.Save();
@@ -195,6 +242,124 @@ internal static class LockRuntime
         {
             // A path hint is a convenience; losing it only removes one verification candidate.
         }
+    }
+
+    /// <summary>Records the containers a first Lock wrote before the Rescuer setup dialog can run.</summary>
+    public static void RememberPendingAdoption(IReadOnlyList<string> containerPaths)
+    {
+        ArgumentNullException.ThrowIfNull(containerPaths);
+        Initialize();
+        foreach (var path in containerPaths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                continue;
+            try
+            {
+                var full = LockPaths.Normalize(path);
+                if (!Settings.PendingAdoptionContainers.Contains(full, StringComparer.OrdinalIgnoreCase))
+                    Settings.PendingAdoptionContainers.Add(full);
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException
+                                           or PathTooLongException)
+            {
+            }
+        }
+        var overflow = Settings.PendingAdoptionContainers.Count - ProtectionSettings.MaximumRememberedContainers;
+        if (overflow > 0)
+            Settings.PendingAdoptionContainers.RemoveRange(0, overflow);
+        SaveSettingsQuietly();
+    }
+
+    /// <summary>Clears adopted paths; with a list, removes only those entries.</summary>
+    public static void ClearPendingAdoption(IEnumerable<string>? completed = null)
+    {
+        Initialize();
+        if (completed is null)
+        {
+            Settings.PendingAdoptionContainers.Clear();
+        }
+        else
+        {
+            foreach (var path in completed)
+            {
+                Settings.PendingAdoptionContainers.RemoveAll(existing =>
+                    string.Equals(existing, path, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+        SaveSettingsQuietly();
+    }
+
+    private static void SaveSettingsQuietly()
+    {
+        try
+        {
+            Settings.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    /// <summary>
+    /// The containers key rotation must rewrap: every path this install remembers, the last container and
+    /// the crash-recovery journal, restricted to files that still exist. Unknown files outside this set
+    /// cannot be reached automatically; the Protection settings text says so.
+    /// </summary>
+    public static IReadOnlyList<string> KnownRescuerContainers()
+    {
+        Initialize();
+        var candidates = new List<string>();
+        void Add(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+            try
+            {
+                var full = LockPaths.Normalize(path);
+                if (File.Exists(full) && !candidates.Contains(full, StringComparer.OrdinalIgnoreCase))
+                    candidates.Add(full);
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException
+                                           or PathTooLongException)
+            {
+            }
+        }
+
+        foreach (var path in Settings.KnownContainerPaths)
+            Add(path);
+        Add(Settings.LastContainerPath);
+        foreach (var path in FindVerifierContainers(Settings.LastContainerPath))
+            Add(path);
+        return candidates.Take(ProtectionSettings.MaximumRememberedContainers).ToList();
+    }
+
+    /// <summary>
+    /// Rotates the Rescuer key for every known container, then commits the new pair to the vault. Any
+    /// per-file failure rolls the already-rewrapped files back and keeps the old vault key; a vault save
+    /// failure rolls every file back too. Returns null on success or a user-facing warning on failure.
+    /// </summary>
+    public static string? CommitNewRescuerKey(RescuerSecrets current, RescuerSecrets rotated)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        ArgumentNullException.ThrowIfNull(rotated);
+        Initialize();
+        if (string.IsNullOrEmpty(current.Password))
+            return T("tool.lock.settings.rotationNeedsPassword");
+        var containers = KnownRescuerContainers();
+        var results = Service.RotateRescuerKey(containers, current.Password!, current.Key, rotated.Key);
+        var failures = results.Count(result => result.Error is not null);
+        if (failures > 0)
+            return T("tool.lock.settings.rotationFailed", failures);
+        if (SaveRescuer(rotated))
+            return null;
+        var rollback = Service.RotateRescuerKey(containers, current.Password!, rotated.Key, current.Key);
+        var rollbackFailures = rollback.Count(result => result.Error is not null);
+        // The failed save kept the new pair in the process-lifetime fallback; put the session back on the
+        // key the files were rolled back to so this run cannot advertise an uncommitted key.
+        Vault.Save(current);
+        return rollbackFailures == 0
+            ? T("tool.lock.settings.saveFailed")
+            : T("tool.lock.settings.rotationRollbackFailed", rollbackFailures);
     }
 
     /// <summary>True once the runtime has created its journal/service; used by the exit hook.</summary>
