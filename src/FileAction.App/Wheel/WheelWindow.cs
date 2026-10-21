@@ -360,6 +360,7 @@ internal sealed class WheelWindow : Window
         MouseLeave += (_, _) =>
         {
             CancelDwell();
+            CancelSwapDwell();
             SetHighlight(-1);
             SetInnerHighlight(-1);
             // In Click mode leaving the window means leaving the disc: the ring goes with it. During a
@@ -373,7 +374,11 @@ internal sealed class WheelWindow : Window
         PreviewMouseLeftButtonDown += (_, _) => PressHighlight(true);
         PreviewMouseLeftButtonUp += (_, _) => PressHighlight(false);
         KeyDown += OnKeyDown;
-        Closed += (_, _) => CancelDwell();
+        Closed += (_, _) =>
+        {
+            CancelDwell();
+            CancelSwapDwell();
+        };
         Deactivated += (_, _) =>
         {
             if (Mode == WheelMode.Click)
@@ -598,6 +603,7 @@ internal sealed class WheelWindow : Window
     private void ApplyView(Action mutate, Action? after = null, bool selectFirst = true)
     {
         CancelDwell();
+        CancelSwapDwell();
         if (Motion.Enabled && IsVisible && !_finished)
         {
             if (_switching)
@@ -689,6 +695,7 @@ internal sealed class WheelWindow : Window
         // dwell must not open an inner ring behind the close timer. Dropping on the wheel goes through
         // OnDrop, which finishes the window first, so this only cancels a drop that is already leaving.
         CancelDwell();
+        CancelSwapDwell();
         _closeTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Normal, (_, _) => Finish(), Dispatcher);
         _closeTimer.Start();
     }
@@ -1067,6 +1074,7 @@ internal sealed class WheelWindow : Window
         if (_finished || _switching || index < 0 || index >= _ops.Count || _ops[index] is not WheelGroupOperation group)
             return;
         CancelDwell();
+        CancelSwapDwell();
         SetHighlight(index);
         _innerGroupId = group.GroupId;
         _innerPage = 0;
@@ -1262,6 +1270,7 @@ internal sealed class WheelWindow : Window
         if (_innerGroupId is null)
             return;
         CancelDwell();
+        CancelSwapDwell();
         _suppressIndex = _highlight;
         ClearInnerState();
         UpdateHubText();
@@ -1549,12 +1558,16 @@ internal sealed class WheelWindow : Window
         e.Handled = true;
         var point = e.GetPosition(_canvas);
         var hit = HitAt(point);
-        var target = DropTargetAt(hit.Zone, hit.Index, _ops, _innerChoices);
+        // The visible hover is sticky for 8 degrees; activate exactly what is highlighted.
+        var index = hit.Zone == WheelZone.Inner && _innerHighlight >= 0 && _innerHighlight < _innerChoices.Count
+            ? _innerHighlight
+            : hit.Index;
+        var target = DropTargetAt(hit.Zone, index, _ops, _innerChoices);
         var op = target.Operation;
         e.Effects = target.Action == DropAction.Nothing ? DragDropEffects.None : SafeEffect(e.AllowedEffects);
         // Virtual files and images can only be read while the drop is in progress.
         var content = target.Action == DropAction.Nothing ? null : DropContent.Read(e.Data, materialize: true);
-        var parentAngle = SliceAngle(Math.Max(0, hit.Index), hit.Zone == WheelZone.Inner ? _innerChoices.Count : _ops.Count);
+        var parentAngle = SliceAngle(Math.Max(0, index), hit.Zone == WheelZone.Inner ? _innerChoices.Count : _ops.Count);
         Finish();
         if (op is not null && content is { Items.Count: > 0 })
         {
@@ -1594,7 +1607,10 @@ internal sealed class WheelWindow : Window
                 // click outside the wheel is the way out.
                 break;
             case WheelZone.Inner when hit.Index >= 0 && hit.Index < _innerChoices.Count:
-                RunInner(hit.Index);
+                // Match the sticky hover: the child the user sees highlighted is the child that runs.
+                RunInner(_innerHighlight >= 0 && _innerHighlight < _innerChoices.Count
+                    ? _innerHighlight
+                    : hit.Index);
                 break;
             case WheelZone.Outer when hit.Index >= 0 && hit.Index < _ops.Count:
                 Run(hit.Index);
@@ -1779,11 +1795,10 @@ internal sealed class WheelWindow : Window
                 CancelDwell();
                 CancelSwapDwell();
                 // Crossing the hub is how the pointer reaches the far side of the small inner ring.
-                // Keep following the nearest child there instead of blanking the ring or freezing the
-                // old child; a click on the hub is inert.
-                SetInnerHighlight(_innerGroupId is null
-                    ? -1
-                    : InnerHoverIndex(AngleAt(point), _innerChoices.Count, _innerHighlight));
+                // Follow the nearest child only inside the hub; the shadow pad outside the disc clears.
+                SetInnerHighlight(hit.Zone == WheelZone.Hub && _innerGroupId is not null
+                    ? InnerHoverIndex(AngleAt(point), _innerChoices.Count, _innerHighlight)
+                    : -1);
                 SetHighlight(-1);
                 break;
         }
