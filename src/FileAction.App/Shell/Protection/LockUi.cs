@@ -334,6 +334,10 @@ internal static class LockUi
         };
         titleBar.MouseLeftButtonDown += (_, e) =>
         {
+            // Never start a window drag from the close button: DragMove captures the mouse and the
+            // button's MouseLeftButtonUp never fires, which made X dead in Protection settings.
+            if (close.IsMouseOver)
+                return;
             if (e.ButtonState != MouseButtonState.Pressed)
                 return;
             try
