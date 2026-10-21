@@ -324,8 +324,23 @@ internal sealed class ToolWindow : Window
         // One shared gutter now lines up every tool, including the seven media views.
         _contentHost = new Border
         {
-            Padding = new Thickness(Design.Gutter, 0, Design.Gutter, 0),
+            // A visible rounded content card: without it a dark tool view (Lock) blended into the chrome
+            // and read as a square window even though the outer frame was rounded.
+            Background = Theme.Card,
+            BorderBrush = Theme.PanelBorder,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(Design.Radius.Card),
+            Padding = new Thickness(Design.Gutter, Design.Space.Md, Design.Gutter, Design.Space.Md),
+            Margin = new Thickness(Design.Space.Md, 0, Design.Space.Md, 0),
             Child = _content.View,
+        };
+        _contentHost.SizeChanged += (_, _) =>
+        {
+            if (_contentHost.ActualWidth <= 0 || _contentHost.ActualHeight <= 0)
+                return;
+            _contentHost.Clip = new RectangleGeometry(
+                new Rect(0, 0, _contentHost.ActualWidth, _contentHost.ActualHeight),
+                Design.Radius.Card, Design.Radius.Card);
         };
 
         var grid = new Grid { ClipToBounds = true };
