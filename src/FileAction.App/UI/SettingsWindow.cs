@@ -152,7 +152,7 @@ internal sealed class SettingsWindow : Window
     private void ShowBuildFailure(Exception ex)
     {
         Title = "DropWheel – settings";
-        Background = Theme.Page;
+        Background = Brushes.Transparent;
         FlowDirection = LanguageManager.FlowDirection;
         var panel = new StackPanel { Margin = new Thickness(32, 28, 32, 32), MaxWidth = 720 };
         panel.Children.Add(Text("DropWheel settings could not be drawn.", 20, FontWeights.SemiBold));
@@ -213,7 +213,13 @@ internal sealed class SettingsWindow : Window
         title.HorizontalAlignment = HorizontalAlignment.Center;
         title.VerticalAlignment = VerticalAlignment.Center;
 
-        var bar = new DockPanel { Margin = new Thickness(Design.Gutter, Design.Space.Xl, Design.Gutter, Design.Space.Md) };
+        var bar = new DockPanel
+        {
+            // WPF only hit-tests a panel where it paints; transparent is required for the empty title
+            // space to start DragMove, not just the title glyphs.
+            Background = Brushes.Transparent,
+            Margin = new Thickness(Design.Gutter, Design.Space.Xl, Design.Gutter, Design.Space.Md),
+        };
         DockPanel.SetDock(close, Dock.Left);
         bar.Children.Add(close);
         bar.Children.Add(title);
@@ -249,7 +255,8 @@ internal sealed class SettingsWindow : Window
             Background = Theme.Panel,
             BorderBrush = Theme.PanelBorder,
             BorderThickness = new Thickness(1),
-            Margin = new Thickness(Design.Space.Lg),
+            // 24 DIP leaves room for the 38 DIP dark halo inside the transparent window bounds.
+            Margin = new Thickness(24),
             Effect = WindowShadow(),
             Child = grid,
         };
@@ -279,7 +286,7 @@ internal sealed class SettingsWindow : Window
     {
         Title = T("settings.title");
         FlowDirection = LanguageManager.FlowDirection;
-        Background = Theme.Page;
+        Background = Brushes.Transparent;
 
         var itemStyle = TabItemStyle();
         var tabs = new TabControl
