@@ -493,7 +493,6 @@ internal sealed class LockSessionManager
     private void ShowPanel(LockSession session)
     {
         var panel = new UnlockedPanel(session.Record.OriginalName);
-        panel.LockNow += () => LockNow(session.Record.Id);
         panel.Retry += () => LockNow(session.Record.Id);
         session.Panel = panel;
         panel.Show();

@@ -83,12 +83,9 @@ internal sealed class UnlockedPanel : Window
         };
         _retry = Controls.Button(T("tool.lock.panel.retry"), () => Retry?.Invoke());
         _retry.Visibility = Visibility.Collapsed;
-        var lockNow = Controls.Button(T("tool.lock.panel.lockNow"), () => LockNow?.Invoke(), primary: true);
 
         var statusRow = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
-        DockPanel.SetDock(lockNow, Dock.Right);
         DockPanel.SetDock(_retry, Dock.Right);
-        statusRow.Children.Add(lockNow);
         statusRow.Children.Add(_retry);
         statusRow.Children.Add(_status);
 
@@ -123,7 +120,6 @@ internal sealed class UnlockedPanel : Window
         Loaded += (_, _) => PlaceBottomRight();
     }
 
-    public event Action? LockNow;
     public event Action? Retry;
 
     public void SetStatus(UnlockedStatus status)
