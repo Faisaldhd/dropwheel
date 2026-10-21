@@ -332,14 +332,27 @@ internal sealed class VideoJoinView
             Margin = new Thickness(0, 1, 0, 0),
         };
 
-        var content = new StackPanel();
+        var content = new StackPanel { Width = 120 };
         content.Children.Add(frameHost);
         content.Children.Add(name);
         content.Children.Add(meta);
 
+        // Visible move buttons next to the drag gesture: a reorder that needs no precise drag, and the
+        // labels are the same generic "Move up/down" strings Merge PDFs already uses.
+        var moves = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
+        moves.Children.Add(BuildMoveButton("\uE70E", T("tool.pdfmerge.moveUp"), index > 0, () => MoveClip(index, -1)));
+        moves.Children.Add(BuildMoveButton("\uE70D", T("tool.pdfmerge.moveDown"), index < _clips.Count - 1, () => MoveClip(index, +1)));
+
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.Children.Add(content);
+        row.Children.Add(moves);
+        Grid.SetColumn(moves, 1);
+
         var card = new Border
         {
-            Width = 136,
+            Width = 170,
             Margin = new Thickness(0, 0, 8, 8),
             Padding = new Thickness(7),
             CornerRadius = new CornerRadius(11),
@@ -349,11 +362,63 @@ internal sealed class VideoJoinView
             Cursor = Cursors.Hand,
             Tag = index,
             ToolTip = T("tool.videojoin.clip", Bidi.Number(index + 1)) + Environment.NewLine + Bidi.Value(clip.Path),
-            Child = content,
+            Child = row,
         };
         card.MouseLeftButtonDown += CardDown;
         return card;
     }
+
+    /// <summary>A chevron button on the card's right edge; disabled at the ends of the playback order.</summary>
+    private static Border BuildMoveButton(string glyph, string tooltip, bool enabled, Action click)
+    {
+        var button = new Border
+        {
+            Width = 28,
+            Height = 24,
+            CornerRadius = new CornerRadius(6),
+            Background = Theme.Track,
+            Margin = new Thickness(0, 0, 0, 4),
+            Cursor = enabled ? Cursors.Hand : Cursors.Arrow,
+            Opacity = enabled ? 1 : 0.35,
+            ToolTip = UiSetup.Tip(tooltip),
+            Child = new TextBlock
+            {
+                Text = glyph,
+                FontFamily = Theme.Icons,
+                FontSize = 9,
+                Foreground = Theme.Text,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+        // A card press starts a drag; the arrow must never start one too.
+        button.MouseLeftButtonDown += (_, e) => e.Handled = true;
+        button.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            if (enabled)
+                click();
+        };
+        return button;
+    }
+
+    /// <summary>Moves a clip one slot through the same list operation the drag gesture uses.</summary>
+    internal void MoveClip(int index, int delta)
+    {
+        if (_busy || _loading || delta == 0)
+            return;
+        var target = index + delta;
+        if (index < 0 || index >= _clips.Count || target < 0 || target >= _clips.Count)
+            return;
+
+        _clips = [.. VideoSplitJoin.Move(_clips, index, target)];
+        RebuildStrip();
+        UpdateSummary();
+    }
+
+    /// <summary>The current playback order, by file name; the tests use it to assert a move.</summary>
+    internal IReadOnlyList<string> ClipNames =>
+        [.. _clips.Select(clip => Path.GetFileName(clip.Path))];
 
     private void CardDown(object sender, MouseButtonEventArgs e)
     {

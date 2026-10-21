@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using FileAction.Core;
 using static FileAction.Core.Loc;
 using WpfImage = System.Windows.Controls.Image;
@@ -82,6 +83,7 @@ internal sealed class VideoFramesView
     private readonly ToolLocator _tools = new();
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CaptureList _captures = new();
+    private readonly Dictionary<int, BitmapSource> _thumbs = [];
 
     private readonly Grid _preview = new() { ClipToBounds = true };
     private readonly WpfImage _image = new() { Stretch = Stretch.Uniform, IsHitTestVisible = false };
@@ -108,6 +110,7 @@ internal sealed class VideoFramesView
     private VideoInfo? _info;
     private int _total = 1;
     private int _frame;
+    private int _displayed = -1;
     private CancellationTokenSource? _seek;
     private CancellationTokenSource? _apply;
 
@@ -375,49 +378,99 @@ internal sealed class VideoFramesView
         }
 
         foreach (var frame in _captures.Frames)
-        {
-            var number = new TextBlock
-            {
-                Text = FrameMath.FrameNumber(frame),
-                FontSize = 11.5,
-                Foreground = Theme.Text,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            var remove = new TextBlock
-            {
-                Text = "\uE711",
-                FontFamily = Theme.Icons,
-                FontSize = 9,
-                Foreground = Theme.Muted,
-                Margin = new Thickness(7, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                Cursor = System.Windows.Input.Cursors.Hand,
-                ToolTip = T("tool.videoframes.remove"),
-            };
-            var content = new StackPanel { Orientation = Orientation.Horizontal };
-            content.Children.Add(number);
-            content.Children.Add(remove);
+            _chips.Children.Add(BuildCaptureChip(frame));
+    }
 
-            var chip = new Border
+    /// <summary>
+    /// One captured frame as a thumbnail chip with its own timecode, the shape Tangerine uses. The image
+    /// is the preview frame the user was looking at when they pressed Capture; a small frozen copy keeps
+    /// the tray cheap even after many captures, and a late preview fills a chip that was captured early.
+    /// </summary>
+    private FrameworkElement BuildCaptureChip(int frame)
+    {
+        var image = new WpfImage { Width = 96, Height = 60, Stretch = Stretch.UniformToFill };
+        if (_thumbs.TryGetValue(frame, out var thumb))
+            image.Source = thumb;
+
+        var timecode = _info is null
+            ? FrameMath.FrameNumber(frame)
+            : FrameMath.Timecode(frame, _info.Fps);
+        var badge = new Border
+        {
+            Background = VideoPalette.Black,
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(5, 1, 5, 2),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(4),
+            Child = new TextBlock
             {
-                Background = Theme.Track,
-                CornerRadius = new CornerRadius(7),
-                Padding = new Thickness(8, 3, 8, 4),
-                Margin = new Thickness(0, 0, 6, 6),
-                Cursor = System.Windows.Input.Cursors.Hand,
-                Child = content,
-            };
-            var capturedFrame = frame;
-            chip.MouseLeftButtonUp += (_, _) => SeekTo(capturedFrame);
-            remove.MouseLeftButtonUp += (_, e) =>
-            {
-                e.Handled = true;
-                _captures.Remove(capturedFrame);
-                PaintCaptures();
-                UpdateHeader();
-            };
-            _chips.Children.Add(chip);
-        }
+                Text = Bidi.Value(timecode),
+                FontFamily = new FontFamily("Consolas, Cascadia Mono, Segoe UI"),
+                FontSize = 9,
+                Foreground = VideoPalette.White,
+            },
+        };
+
+        var remove = new TextBlock
+        {
+            Text = "\uE711",
+            FontFamily = Theme.Icons,
+            FontSize = 9,
+            Foreground = VideoPalette.White,
+            Background = VideoPalette.Black,
+            Padding = new Thickness(4, 2, 4, 2),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(4),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            ToolTip = T("tool.videoframes.remove"),
+        };
+
+        var host = new Grid();
+        host.Children.Add(image);
+        host.Children.Add(badge);
+        host.Children.Add(remove);
+
+        var chip = new Border
+        {
+            Width = 96,
+            Height = 60,
+            Background = Theme.Track,
+            CornerRadius = new CornerRadius(7),
+            ClipToBounds = true,
+            Margin = new Thickness(0, 0, 6, 6),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            ToolTip = UiSetup.Tip(_info is null
+                ? FrameMath.FrameNumber(frame)
+                : T("tool.videoframes.position", FrameMath.FrameNumber(frame), Bidi.Value(FrameMath.Timecode(frame, _info.Fps)))),
+            Child = host,
+        };
+        chip.MouseLeftButtonUp += (_, _) => SeekTo(frame);
+        remove.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            _captures.Remove(frame);
+            _thumbs.Remove(frame);
+            PaintCaptures();
+            UpdateHeader();
+        };
+        return chip;
+    }
+
+    /// <summary>Keeps a small frozen copy of the frame on screen, so the tray stays cheap with many captures.</summary>
+    private void RememberThumbnail(int frame)
+    {
+        if (_displayed != frame || _thumbs.ContainsKey(frame) || _image.Source is not BitmapSource source)
+            return;
+        if (source.PixelWidth <= 0 || source.PixelHeight <= 0)
+            return;
+
+        var scaleX = 192.0 / source.PixelWidth;
+        var scaleY = 120.0 / source.PixelHeight;
+        var copy = new TransformedBitmap(source, new ScaleTransform(scaleX, scaleY));
+        copy.Freeze();
+        _thumbs[frame] = copy;
     }
 
     private void SeekTo(int frame)
@@ -434,6 +487,7 @@ internal sealed class VideoFramesView
     {
         if (_info is null || !_captures.Add(_frame))
             return;
+        RememberThumbnail(_frame);
         PaintCaptures();
         UpdateHeader();
     }
@@ -463,10 +517,18 @@ internal sealed class VideoFramesView
                 return;
 
             _image.Source = bitmap;
+            _displayed = frame;
             _image.Visibility = Visibility.Visible;
             _placeholder.Visibility = Visibility.Collapsed;
             _spinner.Visibility = Visibility.Collapsed;
             _status.Text = string.Empty;
+
+            // A capture made while this frame was still decoding gets its thumbnail when it arrives.
+            if (_captures.Contains(frame) && !_thumbs.ContainsKey(frame))
+            {
+                RememberThumbnail(frame);
+                PaintCaptures();
+            }
         }
         catch (OperationCanceledException)
         {
@@ -491,6 +553,8 @@ internal sealed class VideoFramesView
     {
         _seek?.Cancel();
         _captures.Clear();
+        _thumbs.Clear();
+        _displayed = -1;
         _frame = 0;
         _status.Text = string.Empty;
         if (_info is not null)
