@@ -25,6 +25,7 @@ The app writes **nothing to `HKLM`**. It only reads the two policy values above 
 | Path | When | Notes |
 |---|---|---|
 | `%APPDATA%\DropWheel\settings.json` | when a setting changes and on exit | On a portable build (`portable.txt` next to `DropWheel.exe`) it is written to the exe folder instead. There is no further fallback: if the folder is read-only the save is silently skipped. |
+| `%LOCALAPPDATA%\DropWheel\protection\rescuer.dat` | when a Rescuer is created or its `KeyUsed` marker changes | A current-user DPAPI blob holding the Rescuer password, key and `KeyUsed`; it is never plaintext and never appears in a log. See [Lock](#lock-240-rescuer-vault-updated-in-249). |
 | `log.txt` | at every start | In the first writable folder of: the settings folder, `%LOCALAPPDATA%\DropWheel`, `%TEMP%\DropWheel`, the exe folder. Startup steps, hook result and errors are appended as text. |
 | `crash-<yyyyMMdd-HHmmss>.txt` | only after an unhandled exception | In the active log folder. Contains the exception, stack trace and the last 80 log lines; it does not contain converted files or their contents. |
 | `diagnose-<yyyyMMdd-HHmmss>.txt` | only when `--diagnose` is run | In the active log folder, or at the path given after `--diagnose`. Opened in the default text viewer. |
@@ -106,7 +107,7 @@ programs. The installer is separate: if the .NET 10 Desktop Runtime is missing, 
 `scripts/verify-authenticode.ps1` to check that its Authenticode signature is valid and the signer is
 Microsoft Corporation, and runs it elevated.
 
-## Lock (2.4.0)
+## Lock (2.4.0; Rescuer vault updated in 2.4.9)
 
 The Lock tool transforms one file or folder **in place** into one self-contained `.dwenc` / `.dwdir`
 container. It does not create a vault, a virtual drive or a stub file.
@@ -114,9 +115,26 @@ container. It does not create a vault, a virtual drive or a stub file.
 - **Crypto:** a random 256-bit data key per item, wrapped in three slots (file password, Rescuer password,
   one-time 24-character Rescuer key) with PBKDF2-SHA256 (at least 600,000 iterations in production). The
   fixed header is authenticated and has its own MAC; content is chunked AES-256-GCM with a trailing
-  length + SHA-256 footer. A folder is a tar-like stream with an encrypted name/size/time index. The
-  file password, Rescuer password and key are **never written to disk**; the Rescuer password and key are
-  held in memory for the current session only (a legacy DPAPI `rescuer.dat` is deleted on first use).
+  length + SHA-256 footer. A folder is a tar-like stream with an encrypted name/size/time index. The file
+  password is **never written to disk**. The Rescuer password and key are kept in a **current-user Windows
+  DPAPI vault** (`%LOCALAPPDATA%\DropWheel\protection\rescuer.dat`), together with the `KeyUsed` flag; the
+  vault never contains plaintext and no secret is written to the log. DPAPI binds the blob to this Windows
+  account on this machine, so another user or a copied profile cannot read it. It is **not** protection
+  against malware or any other process running as the same Windows user: such code can call DPAPI with the
+  user's token and decrypt the blob. It is protection against other users and profile theft, not against a
+  compromised account.
+- **First Lock (2.4.9):** when no Rescuer exists yet, Lock wraps a fresh random **provisional** Rescuer pair
+  into the container, opens Protection settings after the file is protected, and rewrites both Rescuer slots
+  in place when setup completes. The provisional pair is never shown and is not saved outside the container.
+  Cancelling setup leaves the file openable by its **file password only**: the provisional password is
+  unknown to the user and is not reused by later Locks.
+- **Rescuer use and rotation (2.4.9):** opening a container with the current Rescuer **key** marks
+  `KeyUsed`; opening with the Rescuer **password** does not. "Create new Rescuer key" stays disabled until
+  the current key has opened a file, then asks for the current Rescuer password and stores the replacement
+  key as unused. A key that only opens an older container does not enable rotation for the current key. If
+  the DPAPI vault is missing or unreadable, the manual "Rescuer credentials" prompt asks for both doors and
+  proves them against an existing container; a corrupt or foreign blob never crashes the app or unlocks
+  anything.
 - **No copies:** the plaintext is removed only after the sibling temp container is flushed, fully
   test-decrypted, compared by size/SHA-256, and atomically moved into place. A failure leaves the original
   untouched. `RecycleContainerAfterUnlock` defaults **off**; the Recycle Bin is used only when the user
@@ -125,7 +143,8 @@ container. It does not create a vault, a virtual drive or a stub file.
   multi-size icon and `--lock-open`. There is no shell extension, icon-overlay handler, HKLM write, admin
   requirement or security-software interaction. `Remove file association` deletes the keys and the
   composed icon cache.
-- **Files it writes while Lock is used:** `%LOCALAPPDATA%\DropWheel\protection.json` (non-secret
+- **Files it writes while Lock is used:** `%LOCALAPPDATA%\DropWheel\protection\rescuer.dat` (current-user
+  DPAPI blob; see Crypto), `%LOCALAPPDATA%\DropWheel\protection.json` (non-secret
   preferences), `%LOCALAPPDATA%\DropWheel\icons` (composed system-icon + padlock cache),
   `%LOCALAPPDATA%\DropWheel\sessions` (private unlocked session while auto-lock is active; journal and
   plaintext are kept until a verified relock), and `%TEMP%\DropWheel\restore` (staging only, deleted on

@@ -8,6 +8,11 @@
 | Method | Full source read + call-site tracing + test-source read. **No code was compiled or executed, no built exe was run, no network was used, no source was modified.** |
 | Evidence convention | `path:line` = current source. `test:Name` = a test in `tests/FileAction.Tests` that asserts the behaviour (test *source* was read, not run). |
 
+> **Status update (2.4.9).** This audit was taken against `main` @ `268a2d7`. The 2.4.0 statement that no
+> Rescuer secret is stored at rest is **superseded**: 2.4.9 keeps the Rescuer key, password and `KeyUsed`
+> flag in a current-user DPAPI vault. See §9 for the current storage, threat model and tests. The rest of
+> this document remains the audit of the older commit.
+
 ## 1. Verdict
 
 The **cryptographic container itself is well built** (per-file 256-bit data keys, AES-256-GCM with
@@ -246,7 +251,7 @@ any relock. Deleting the plaintext into a quarantined directory first also makes
 | Password slots: PBKDF2-HMAC-SHA256, 600,000 iterations (OWASP 2023), 16-byte random per-slot salt, iterations stored per slot and bound by the header MAC; service refuses low iteration counts on create | `LockFormat.cs:366-373`; `LockCrypto.cs:209-250`; `LockService.cs:746-754`; tests `Production_service_refuses_low_iteration_slots`, `Production_iterations_meet_the_required_floor` |
 | Key/password byte buffers and derived KEKs wiped in `finally` on every path I traced; data key wiped by every owner (`Encrypt`, `ProtectCore`, `ExtractTo`/`Unprotect`, rekey methods, `Probe`) | `LockSecrets.cs:20-32`; `LockCrypto.cs:150-172,203-206,225-227,368-371`; `LockService.cs:228-231,347-350,377-381,507-510,527-530,547-550` |
 | No secrets in the journal or settings; generic wrong-secret message; no Lock logging at all | `LockJournal.cs:43-71` + test `Journal_never_contains_a_secret`; `LockJournal.cs:304-401` + test `Settings_file_never_contains_a_secret`; `LockFormat.cs:37-38` + test `Wrong_secret_is_generic_and_reveals_nothing`; no `AppLog` usage in `Shell/Protection` |
-| No secret at rest between sessions: the legacy DPAPI vault is deleted; the Rescuer lives in memory only | `LockRuntime.cs:37-49,75-99`; test `No_secret_is_written_under_the_app_data_folder` |
+| No **plaintext** secret at rest; the Rescuer password, key and `KeyUsed` are sealed with current-user DPAPI (2.4.9, supersedes the 2.4.0 "memory only" row) | `RescuerVault.cs`; §9 below; tests `Dpapi_vault_roundtrips_the_pair_and_the_key_used_flag`, `Vault_falls_back_to_memory_and_never_writes_plaintext_when_dpapi_fails`, `No_secret_is_written_under_the_app_data_folder` |
 | Recycle default **OFF**; encrypting never recycles; only the container is ever recycled, after a verified unlock | `LockJournal.cs:315`; `LockCrypto`/`LockService` never call the host during protect; `ProtectionHost.cs:20-42`; test `Recycle_bin_is_off_by_default_and_protection_never_recycles` |
 | Header rewrite is atomic and verified (temp + fsync + full decrypt + secret test + replace + rollback), fault-injected at every file operation | `LockHeaderRewriter.cs:75-155`; test `Header_rewrite_is_atomic_under_a_failure_at_every_file_operation` |
 | Protect pipeline order: temp → fsync → full read-back verify (length + SHA-256) → non-overwriting move → only then delete source; failure keeps the source | `LockService.cs:155-232`; tests `Protect_leaves_exactly_one_container_and_no_plaintext`, `Protect_never_overwrites_an_existing_container`, `Cancel_mid_run_leaves_the_source_and_no_output` |
@@ -299,3 +304,35 @@ not cover the failure modes this audit ranks highest:
 
 **Release gate:** Lock must not ship as a protected-data feature until B-1…B-4 and M-1…M-3 are fixed and
 the missing tests in §6 exist. Protect (PDF/ZIP) may ship only after M-3, with M-4 disclosed.
+
+## 9. 2.4.9 update — current-user DPAPI Rescuer vault
+
+This section replaces the 2.4.0 "no secret at rest" statement; the rest of the audit describes the older
+commit.
+
+- **What is stored.** `%LOCALAPPDATA%\DropWheel\protection\rescuer.dat` is a DPAPI blob produced with
+  `CryptProtectData` (current user, `CRYPTPROTECT_UI_FORBIDDEN`) containing the Rescuer key, Rescuer
+  password and a `KeyUsed` flag. The plaintext is encoded only in memory and is wiped after the call. There
+  is no plaintext fallback file: if DPAPI cannot protect it, the app keeps the pair in memory for the
+  session and behaves as a first run at the next start.
+- **Threat model.** Any process running as the same Windows user on the same machine, including malware,
+  can call DPAPI and decrypt the blob. DPAPI is not a defence against a compromised account; it protects
+  against other Windows users and a copied profile. The non-secret `RescuerConfigured` marker in
+  `protection.json` remains readable and contains no secret.
+- **Logs/telemetry.** No secret is logged; the vault catches I/O and cryptographic failures without writing
+  details or plaintext. The `No_secret_is_written_under_the_app_data_folder` scan still covers the data
+  folder because the DPAPI blob contains no plaintext.
+- **First Lock.** A random provisional pair is wrapped into the first container, never shown and never
+  saved outside the container; Protection settings opens afterwards and adopts the real pair by rewriting
+  both Rescuer slots (`AdoptRescuer`) without changing the payload or file password. Cancelling leaves the
+  container openable by its file password; the provisional password is unknown and is not reused.
+- **Use and rotation.** `KeyUsed` is set only when the current key opens a file
+  (`LockSessions.OpenAsync` → `LockRuntime.NoteRescuerKeyUsed`); the Rescuer password never sets it.
+  Rotation is disabled until `KeyUsed`, then proves the current password and stores the new key as unused.
+  A key that opens an older container cannot enable rotation for the current key.
+- **Failure path.** A missing, corrupt or foreign blob makes `DpapiRescuerVault.Load` return null without
+  throwing; with the `RescuerConfigured` marker set, the app shows the manual "Rescuer credentials" prompt
+  and verifies the pair against an existing container.
+- **Tests.** `LockRescuerFlowTests` now covers the six flows above, including the DPAPI round-trip,
+  corrupt/foreign blob fallback, key-vs-password `KeyUsed`, old-key rotation refusal, cancel-first-setup
+  and silent reuse of a complete stored pair.

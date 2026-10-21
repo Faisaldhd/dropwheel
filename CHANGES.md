@@ -1,4 +1,24 @@
-# DropWheel 2.4.0 — CHANGES
+# DropWheel — CHANGES
+
+## 2.4.9
+
+### English
+
+**Lock — the final Rescuer flow.**
+
+- **Silent in Windows.** The Rescuer key, password and "key has been used" flag now live in a current-user
+  Windows DPAPI vault (`%LOCALAPPDATA%\DropWheel\protection\rescuer.dat`) instead of being forgotten at
+  exit. The blob is unreadable to other Windows users and to a copied profile, but malware or any process
+  running as the same Windows user can decrypt it; no plaintext secret or log entry is written.
+- **First Lock, then setup.** The very first Lock writes a random provisional Rescuer pair, protects the
+  file, and then opens Protection settings. Finishing setup rewrites both Rescuer slots in place; cancelling
+  leaves the file openable by its file password only. Later Locks reuse a complete stored pair silently.
+- **Use before rotation.** Opening a file with the current Rescuer key marks that key as used; opening with
+  the Rescuer password does not. "Create new Rescuer key" stays disabled until the key has opened a file,
+  then asks for the current Rescuer password and shows the replacement key once. An old key that opens an
+  older container does not unlock rotation.
+- **Safe recovery.** A missing, corrupt or foreign DPAPI blob is ignored without a crash; the app asks for
+  the Rescuer credentials and verifies them against an existing container before storing them again.
 
 ## 2.4.0
 

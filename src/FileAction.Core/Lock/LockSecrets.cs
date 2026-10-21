@@ -21,6 +21,25 @@ public static class LockSecrets
     public static bool SameHash(ReadOnlySpan<byte> left, ReadOnlySpan<byte> right) =>
         left.Length == right.Length && CryptographicOperations.FixedTimeEquals(left, right);
 
+    /// <summary>Fixed-time comparison of two secrets, so a wrong Rescuer proof does not leak a prefix.</summary>
+    public static bool SameSecret(string? left, string? right)
+    {
+        if (left is null || right is null)
+            return false;
+        var leftBytes = Encoding.UTF8.GetBytes(left);
+        var rightBytes = Encoding.UTF8.GetBytes(right);
+        try
+        {
+            return leftBytes.Length == rightBytes.Length &&
+                   CryptographicOperations.FixedTimeEquals(leftBytes, rightBytes);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(leftBytes);
+            CryptographicOperations.ZeroMemory(rightBytes);
+        }
+    }
+
     /// <summary>Wipes a buffer; null is fine so callers can use it unconditionally.</summary>
     public static void Wipe(byte[]? buffer)
     {
