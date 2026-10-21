@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -70,6 +71,7 @@ internal sealed class ToolWindow : Window
     private Border? _applyButton;
     private Border? _chrome;
     private Motion.Handle? _motion;
+    private NativePoint? _cursorAnchor;
     private bool _closeMotionRunning;
     private bool _prepared;
 
@@ -103,7 +105,7 @@ internal sealed class ToolWindow : Window
         // view (the content root) and the button bar, so one transform set animates all three together.
         _motion = Motion.Prepare(_chrome!);
         UiSetup.Configure(this, animate: false);
-        SourceInitialized += (_, _) => CenterOnCursorMonitor();
+        SourceInitialized += (_, _) => PlaceNearCursor();
         Loaded += (_, _) =>
         {
             StartOpenMotion();
@@ -163,10 +165,7 @@ internal sealed class ToolWindow : Window
         var size = ToolWindowSizer.Compute(_spec.Layout, media.Value.Width, media.Value.Height,
             work.WidthInPixels, work.HeightInPixels, work.Scale);
 
-        var left = work.Left + (work.Width - size.Width) / 2;
-        var top = work.Top + (work.Height - size.Height) / 2;
-        left = Math.Clamp(left, work.Left, Math.Max(work.Left, work.Left + work.Width - size.Width));
-        top = Math.Clamp(top, work.Top, Math.Max(work.Top, work.Top + work.Height - size.Height));
+        var (left, top) = Placement(size.Width, size.Height, work);
 
         if (animate)
         {
@@ -230,31 +229,52 @@ internal sealed class ToolWindow : Window
 
         var titleBar = BuildTitleBar();
         var bottom = BuildBottomBar();
+        // The content used to sit flush against the card edge while the title and actions were inset.
+        // One shared gutter now lines up every tool, including the seven media views.
+        var contentHost = new Border
+        {
+            Padding = new Thickness(Design.Gutter, 0, Design.Gutter, 0),
+            Child = _content.View,
+        };
 
-        var grid = new Grid();
+        var grid = new Grid { ClipToBounds = true };
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(titleBar, 0);
-        Grid.SetRow(_content.View, 1);
+        Grid.SetRow(contentHost, 1);
         Grid.SetRow(bottom, 2);
         grid.Children.Add(titleBar);
-        grid.Children.Add(_content.View);
+        grid.Children.Add(contentHost);
         grid.Children.Add(bottom);
 
+        // WPF does not clip a Border's children to its CornerRadius. Clip the real content to a slightly
+        // smaller radius so previews and action bars never paint over the rounded window corners, while
+        // the outer border and its shadow stay outside the clip.
+        grid.SizeChanged += (_, _) =>
+        {
+            if (grid.ActualWidth <= 0 || grid.ActualHeight <= 0)
+                return;
+            grid.Clip = new RectangleGeometry(
+                new Rect(0, 0, grid.ActualWidth, grid.ActualHeight),
+                Design.Radius.Window - 1, Design.Radius.Window - 1);
+        };
+
+        UseLayoutRounding = true;
+        SnapsToDevicePixels = true;
         return _chrome = new Border
         {
-            CornerRadius = new CornerRadius(20),
+            CornerRadius = new CornerRadius(Design.Radius.Window),
             Background = glass,
             BorderBrush = Theme.PanelBorder,
             BorderThickness = new Thickness(1),
             Child = grid,
-            Margin = new Thickness(12),
+            Margin = new Thickness(Design.Space.Lg),
             Effect = new System.Windows.Media.Effects.DropShadowEffect
             {
-                BlurRadius = 28,
+                BlurRadius = 30,
                 ShadowDepth = 6,
-                Opacity = 0.35,
+                Opacity = 0.38,
             },
         };
     }
@@ -316,25 +336,45 @@ internal sealed class ToolWindow : Window
             Cursor = Cursors.Hand,
             ToolTip = T("tool.window.close"),
         };
-        close.MouseLeftButtonUp += (_, _) => Close();
+        // Close on press, not release: the title bar starts DragMove on press, which captures the mouse
+        // and swallows the following ButtonUp (the old × therefore often did nothing).
+        close.Focusable = true;
+        KeyboardNavigation.SetIsTabStop(close, true);
+        AutomationProperties.SetName(close, T("tool.window.close"));
+        close.MouseLeftButtonDown += (_, e) =>
+        {
+            e.Handled = true;
+            Close();
+        };
+        close.KeyDown += (_, e) =>
+        {
+            if (e.Key is Key.Enter or Key.Space)
+            {
+                e.Handled = true;
+                Close();
+            }
+        };
         Motion.Interactive(close);
 
         var title = new TextBlock
         {
             Text = T(_spec.TitleKey),
-            FontSize = 15,
+            FontSize = Design.Type.Title,
             FontWeight = FontWeights.SemiBold,
             Foreground = Theme.Text,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        var bar = new DockPanel { Margin = new Thickness(18, 16, 18, 10) };
+        var bar = new DockPanel { Margin = new Thickness(Design.Gutter, Design.Space.Xl, Design.Gutter, Design.Space.Md) };
         DockPanel.SetDock(close, Dock.Left);
         bar.Children.Add(close);
         bar.Children.Add(title);
         bar.MouseLeftButtonDown += (_, _) =>
         {
+            // Never start a window drag from the close button.
+            if (close.IsMouseOver)
+                return;
             if (Mouse.LeftButton == MouseButtonState.Pressed)
                 DragMove();
         };
@@ -426,7 +466,9 @@ internal sealed class ToolWindow : Window
         try
         {
             var monitor = IntPtr.Zero;
-            if (GetCursorPos(out var cursor))
+            if (_cursorAnchor is { } anchor)
+                monitor = MonitorFromPoint(anchor, 2 /* MONITOR_DEFAULTTONEAREST */);
+            else if (GetCursorPos(out var cursor))
                 monitor = MonitorFromPoint(cursor, 2 /* MONITOR_DEFAULTTONEAREST */);
             if (monitor == IntPtr.Zero)
                 return false;
@@ -454,20 +496,49 @@ internal sealed class ToolWindow : Window
         }
     }
 
-    private void CenterOnCursorMonitor()
+    /// <summary>
+    /// Opens the tool next to the pointer, not in the middle of the monitor. The anchor is captured once,
+    /// so the card keeps its place while the media probe resizes it.
+    /// </summary>
+    private void PlaceNearCursor()
     {
         try
         {
+            if (_cursorAnchor is null && GetCursorPos(out var cursor))
+                _cursorAnchor = cursor;
             if (!TryGetWorkArea(out var work))
                 return;
-            Left = work.Left + (work.Width - ActualWidth) / 2;
-            Top = work.Top + (work.Height - ActualHeight) / 2;
+
+            var width = ActualWidth > 0 ? ActualWidth : Width;
+            var height = ActualHeight > 0 ? ActualHeight : Height;
+            var (left, top) = Placement(width, height, work);
+            Left = left;
+            Top = top;
             ApplyBackdrop();
         }
         catch
         {
-            // Centring is cosmetic; the default position is still usable.
+            // Placement is cosmetic; the default position is still usable.
         }
+    }
+
+    /// <summary>Near-cursor position in DIPs, clamped to the monitor's work area.</summary>
+    private (double Left, double Top) Placement(double width, double height, WorkArea work)
+    {
+        if (_cursorAnchor is { } anchor)
+        {
+            var cursor = new Point(anchor.X / work.Scale, anchor.Y / work.Scale);
+            var at = ToolPlacement.NearCursor(
+                cursor, width, height, new Rect(work.Left, work.Top, work.Width, work.Height));
+            return (at.X, at.Y);
+        }
+
+        // No pointer reading (rare session): keep the old centred fallback.
+        var fallbackLeft = work.Left + (work.Width - width) / 2;
+        var fallbackTop = work.Top + (work.Height - height) / 2;
+        return (
+            Math.Clamp(fallbackLeft, work.Left, Math.Max(work.Left, work.Left + work.Width - width)),
+            Math.Clamp(fallbackTop, work.Top, Math.Max(work.Top, work.Top + work.Height - height)));
     }
 
     private void ApplyBackdrop()

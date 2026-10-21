@@ -463,6 +463,10 @@ internal sealed class SettingsWindow : Window
         if (Updates is { } updates)
         {
             page.Children.Add(SectionDetail(T("settings.updates.detail")));
+            var version = typeof(SettingsWindow).Assembly.GetName().Version?.ToString(3) ?? "2.4.1";
+            var current = Text(T("settings.updates.current", Bidi.Value(version)), Design.Type.Caption, brush: Theme.Muted);
+            current.Margin = new Thickness(Design.Space.Xs, Design.Space.Md, 0, Design.Space.Lg);
+            page.Children.Add(current);
             page.Children.Add(UpdateBanner.Create(updates, _settings, Save));
         }
         else
