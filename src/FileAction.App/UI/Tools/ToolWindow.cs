@@ -25,6 +25,9 @@ internal sealed class ToolWindow : Window
     private const int DwmwaSystemBackdropType = 38;
     private const int DwmsbtMainWindow = 2;
 
+    /// <summary>Room inside the transparent window for the 38 DIP halo; the same inset Settings uses.</summary>
+    private const double FrameMargin = 24;
+
     [StructLayout(LayoutKind.Sequential)]
     private struct NativePoint
     {
@@ -133,11 +136,15 @@ internal sealed class ToolWindow : Window
         };
     }
 
-    /// <summary>Fade in, rise 8 px and settle from 0.97 → 1 (180 ms). Skipped in reduced-motion mode.</summary>
+    /// <summary>
+    /// The short open pop: fade in, rise 8 px and settle from 0.97 → 1 (180 ms), scaled from the
+    /// wheel/click anchor instead of the chrome's centre. Skipped in reduced-motion mode.
+    /// </summary>
     private void StartOpenMotion()
     {
         if (_chrome is null || _motion is null)
             return;
+        AnchorMotionOrigin();
         if (!Motion.Enabled)
         {
             Motion.Reset(_motion);
@@ -145,6 +152,35 @@ internal sealed class ToolWindow : Window
             return;
         }
         Motion.Play(Motion.Open(_chrome, _motion), _chrome);
+    }
+
+    /// <summary>
+    /// Puts the chrome's scale origin on the pointer that opened the wheel, so the pop grows out of the
+    /// clicked slice rather than fading from the window centre. The point can sit just outside the chrome:
+    /// the 18 DIP placement gap overlaps the 24 DIP halo margin.
+    /// </summary>
+    private void AnchorMotionOrigin()
+    {
+        if (_chrome is null || !IsVisible || PresentationSource.FromVisual(_chrome) is null ||
+            _chrome.ActualWidth <= 0 || _chrome.ActualHeight <= 0)
+            return;
+
+        if (_cursorAnchor is null && GetCursorPos(out var cursor))
+            _cursorAnchor = cursor;
+        if (_cursorAnchor is not { } anchor)
+            return;
+
+        try
+        {
+            // PointFromScreen takes the physical cursor pixels and returns chrome-local DIPs.
+            var local = _chrome.PointFromScreen(new Point(anchor.X, anchor.Y));
+            _chrome.RenderTransformOrigin = new Point(
+                local.X / _chrome.ActualWidth, local.Y / _chrome.ActualHeight);
+        }
+        catch (InvalidOperationException)
+        {
+            // The window can be disconnected during shutdown; the centred origin remains usable.
+        }
     }
 
     /// <summary>
@@ -281,19 +317,20 @@ internal sealed class ToolWindow : Window
     }
 
     /// <summary>
-    /// Applies the exact tool-window pose with no animation clocks: the 180 ms fade + 8 px rise +
-    /// 0.97 → 1 settle, optionally cross-faded by the 120 ms close.
+    /// Applies the exact anchored tool-window pose with no animation clocks: the 180 ms fade + 8 px rise +
+    /// 0.97 → 1 settle and its reverse, optionally cross-faded by the 120 ms close.
     /// </summary>
     internal void Pose(double openMs, double closeMs = 0)
     {
         if (_chrome is null || _motion is null)
             return;
+        AnchorMotionOrigin();
         var open = Math.Clamp(openMs / Motion.WindowOpenMs, 0, 1);
         var close = Math.Clamp(closeMs / Motion.WindowCloseMs, 0, 1);
         var closeEase = Motion.EaseIn.Ease(close);
         _chrome.Opacity = Motion.SoftOut.Ease(open) * (1 - closeEase);
         var scale = (Motion.WindowScaleFrom + (1 - Motion.WindowScaleFrom) * Motion.Settle.Ease(open)) *
-                    (1 - 0.015 * closeEase);
+                    (1 - (1 - Motion.WindowScaleFrom) * closeEase);
         _motion.Scale.ScaleX = scale;
         _motion.Scale.ScaleY = scale;
         if (_motion.Lift is { } lift)
@@ -302,9 +339,6 @@ internal sealed class ToolWindow : Window
 
     private Border Build()
     {
-        var panel = (Theme.Panel as SolidColorBrush)?.Color ?? Colors.Black;
-        var glass = new SolidColorBrush(Color.FromArgb(0xE6, panel.R, panel.G, panel.B));
-
         var titleBar = BuildTitleBar();
         var bottom = BuildBottomBar();
         // Hairline separators make the three zones read as one frame instead of a floating stack.
@@ -371,21 +405,37 @@ internal sealed class ToolWindow : Window
         return _chrome = new Border
         {
             CornerRadius = new CornerRadius(Design.Radius.Window),
-            Background = glass,
+            Background = Theme.Panel,
             BorderBrush = Theme.PanelBorder,
             BorderThickness = new Thickness(1),
             Child = grid,
-            Margin = new Thickness(Design.Space.Lg),
-            Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                BlurRadius = 30,
-                ShadowDepth = 6,
-                Opacity = 0.38,
-            },
+            // 24 DIP leaves room for the 38 DIP dark halo inside the transparent window bounds.
+            Margin = new Thickness(FrameMargin),
+            Effect = WindowShadow(),
         };
     }
 
-    /// <summary>Closes with a 120 ms fade, then releases every animation clock the window held.</summary>
+    /// <summary>
+    /// A black drop shadow disappears on the dark page, so dark mode gets the same soft violet halo as
+    /// Settings; light mode keeps the neutral shadow.
+    /// </summary>
+    private static System.Windows.Media.Effects.DropShadowEffect WindowShadow() => Theme.IsDark
+        ? new System.Windows.Media.Effects.DropShadowEffect
+        {
+            BlurRadius = 38,
+            ShadowDepth = 0,
+            Opacity = 0.55,
+            Color = Theme.AccentColor,
+        }
+        : new System.Windows.Media.Effects.DropShadowEffect
+        {
+            BlurRadius = 30,
+            ShadowDepth = 6,
+            Opacity = 0.28,
+            Color = Colors.Black,
+        };
+
+    /// <summary>Closes with the open pop reversed: a 120 ms anchored fade and 1 → 0.97 scale.</summary>
     protected override void OnClosing(CancelEventArgs e)
     {
         // RC-01: a close during Apply would orphan the running write and can leave a partial final file.
@@ -403,12 +453,13 @@ internal sealed class ToolWindow : Window
             e.Cancel = true;
             var chrome = _chrome;
             var motion = _motion;
+            AnchorMotionOrigin();
             Motion.Play(Motion.Close(chrome, motion, () =>
             {
                 Motion.Release(chrome, motion);
                 if (!Dispatcher.HasShutdownStarted)
                     Close();
-            }), chrome);
+            }, Motion.WindowScaleFrom), chrome);
             _closeMotionRunning = true;
             return;
         }
@@ -434,7 +485,7 @@ internal sealed class ToolWindow : Window
             {
                 Text = "\uE711",
                 FontFamily = Theme.Icons,
-                FontSize = 12,
+                FontSize = Design.Icon.Inline,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 Foreground = Theme.Text,
@@ -472,7 +523,12 @@ internal sealed class ToolWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        var bar = new DockPanel { Margin = new Thickness(Design.Gutter, Design.Space.Xl, Design.Gutter, Design.Space.Md) };
+        var bar = new DockPanel
+        {
+            // WPF only hit-tests a panel where it paints; transparent keeps the whole title bar draggable.
+            Background = Brushes.Transparent,
+            Margin = new Thickness(Design.Gutter, Design.Space.Xl, Design.Gutter, Design.Space.Md),
+        };
         DockPanel.SetDock(close, Dock.Left);
         bar.Children.Add(close);
         bar.Children.Add(title);
@@ -503,11 +559,16 @@ internal sealed class ToolWindow : Window
             };
         }
 
-        var bar = new DockPanel { Margin = new Thickness(18, 8, 18, 18), LastChildFill = false };
+        var bar = new DockPanel
+        {
+            Margin = new Thickness(Design.Gutter, Design.Space.Md, Design.Gutter, Design.Gutter),
+            LastChildFill = false,
+        };
         DockPanel.SetDock(reset, Dock.Left);
         DockPanel.SetDock(apply, Dock.Right);
         bar.Children.Add(reset);
-        bar.Children.Add(apply);        return bar;
+        bar.Children.Add(apply);
+        return bar;
     }
 
     /// <summary>Updates the action bar once the real tool view exists (the placeholder has no gate).</summary>
