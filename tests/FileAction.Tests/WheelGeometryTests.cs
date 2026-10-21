@@ -41,6 +41,13 @@ public class WheelGeometryTests
         Assert.Equal(WheelZone.Outer, WheelWindow.ZoneForRadius(WheelWindow.OuterInnerRadius));
         Assert.Equal(WheelZone.Outer, WheelWindow.ZoneForRadius(WheelWindow.OuterRadius + WheelWindow.Rim - 0.5));
         Assert.Equal(WheelZone.None, WheelWindow.ZoneForRadius(WheelWindow.OuterRadius + WheelWindow.Rim + 0.5));
+
+        // The inner ring belongs to the whole disc: the hub, the inner band and both outer-band edges
+        // keep it. Only a point past the rim is outside and may dismiss it.
+        Assert.True(WheelWindow.KeepsInnerRing(WheelZone.Hub));
+        Assert.True(WheelWindow.KeepsInnerRing(WheelZone.Inner));
+        Assert.True(WheelWindow.KeepsInnerRing(WheelZone.Outer));
+        Assert.False(WheelWindow.KeepsInnerRing(WheelZone.None));
     }
 
     [Fact]
@@ -72,8 +79,55 @@ public class WheelGeometryTests
             WheelWindow.InnerCapacity,
             WheelWindow.InnerLabelRadius - WheelWindow.InnerLabelMaxHeight / 2);
         Assert.True(WheelWindow.InnerLabelWidth < chord);
+        Assert.True(WheelWindow.InnerLabelTextWidth < WheelWindow.InnerLabelWidth);
+        // A left/right slice only has the radial thickness as horizontal room, so its text box is
+        // narrower there than at the top; a diagonal slice sits in between.
+        var thickness = WheelWindow.InnerOuterRadius - WheelWindow.InnerInnerRadius;
+        Assert.True(WheelWindow.InnerTextWidth(4, 1) <= thickness - 2);
+        Assert.Equal(WheelWindow.InnerLabelTextWidth, WheelWindow.InnerTextWidth(6, 0));
+        Assert.True(WheelWindow.InnerTextWidth(6, 1) > WheelWindow.InnerTextWidth(4, 1));
+        for (var count = 2; count <= WheelWindow.InnerCapacity; count++)
+            for (var index = 0; index < count; index++)
+            {
+                var width = WheelWindow.InnerTextWidth(count, index);
+                Assert.InRange(width, 40, WheelWindow.InnerLabelWidth);
+            }
         Assert.Equal(6, WheelWindow.InnerCapacity);
         Assert.Equal(5, WheelWindow.InnerPerPage);
+    }
+
+    [Fact]
+    public void Inner_labels_use_the_format_subtitle_and_the_short_form()
+    {
+        // pack.zip and pack.tar.gz share the "Archive" label; the subtitle tells the formats apart.
+        Assert.Equal("ZIP", WheelWindow.InnerLabelText(new FakeOperation("pack.zip", "Archive", "ZIP")));
+        Assert.Equal("TAR.GZ", WheelWindow.InnerLabelText(new FakeOperation("pack.tar.gz", "Archive", "TAR.GZ")));
+        // Long labels are shortened so the single line fits the inner band; the TextBlock ellipsizes the
+        // rest, but these two were explicitly unreadable before.
+        Assert.Equal("Metadata", WheelWindow.InnerLabelText(new FakeOperation("tools.metadata", "Edit metadata", "Tags and chapters")));
+        Assert.Equal("1920 px", WheelWindow.InnerLabelText(new FakeOperation("image.max1920", "Max 1920 px", "for web")));
+        Assert.Equal("QR code", WheelWindow.InnerLabelText(new FakeOperation("tools.qr", "Read QR code", "from an image")));
+        Assert.Equal("Rotate R", WheelWindow.InnerLabelText(new FakeOperation("image.rotate.right", "Rotate right", "clockwise")));
+        Assert.Equal("Rotate L", WheelWindow.InnerLabelText(new FakeOperation("image.rotate.left", "Rotate left", "counter-clockwise")));
+        // An ordinary short label is unchanged.
+        Assert.Equal("Compress", WheelWindow.InnerLabelText(new FakeOperation("tools.compress", "Compress", "smaller file")));
+    }
+
+    [Fact]
+    public void Hub_badge_names_the_selection_format_not_the_wheel_category()
+    {
+        var root = Path.GetTempPath();
+        Assert.Equal("FILES", WheelWindow.FormatBadgeText([]));
+        Assert.Equal("JPG", WheelWindow.FormatBadgeText([new FileItem(Path.Combine(root, "photo.JPEG"))]));
+        Assert.Equal("PNG", WheelWindow.FormatBadgeText([new FileItem(Path.Combine(root, "shot.png"))]));
+        Assert.Equal("PDF", WheelWindow.FormatBadgeText([new FileItem(Path.Combine(root, "paper.pdf"))]));
+        Assert.Equal("MP4", WheelWindow.FormatBadgeText([new FileItem(Path.Combine(root, "clip.m4v"))]));
+        Assert.Equal("TAR.GZ", WheelWindow.FormatBadgeText([new FileItem(Path.Combine(root, "bundle.tar.gz"))]));
+        Assert.Equal("DIR", WheelWindow.FormatBadgeText([new FileItem(root)]));
+        Assert.Equal("FILES", WheelWindow.FormatBadgeText([
+            new FileItem(Path.Combine(root, "one.jpg")),
+            new FileItem(Path.Combine(root, "two.pdf")),
+        ]));
     }
 
     [Fact]
@@ -140,7 +194,8 @@ public class WheelGeometryTests
         throw new InvalidOperationException("FileAction.sln not found above the test output");
     }
 
-    private sealed class FakeOperation(string id) : Operation(id, WheelKind.Tools, id, "x")
+    private sealed class FakeOperation(string id, string? label = null, string? subtitle = null)
+        : Operation(id, WheelKind.Tools, label ?? id, "x", subtitle)
     {
         public override bool AppliesTo(IReadOnlyList<FileItem> items) => true;
 
