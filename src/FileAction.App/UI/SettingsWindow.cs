@@ -250,15 +250,30 @@ internal sealed class SettingsWindow : Window
             BorderBrush = Theme.PanelBorder,
             BorderThickness = new Thickness(1),
             Margin = new Thickness(Design.Space.Lg),
-            Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                BlurRadius = 30,
-                ShadowDepth = 6,
-                Opacity = 0.38,
-            },
+            Effect = WindowShadow(),
             Child = grid,
         };
     }
+
+    /// <summary>
+    /// A black drop shadow disappears on the dark page, so dark mode gets a soft violet halo; light mode
+    /// keeps the neutral shadow.
+    /// </summary>
+    private static System.Windows.Media.Effects.DropShadowEffect WindowShadow() => Theme.IsDark
+        ? new System.Windows.Media.Effects.DropShadowEffect
+        {
+            BlurRadius = 38,
+            ShadowDepth = 0,
+            Opacity = 0.55,
+            Color = Theme.AccentColor,
+        }
+        : new System.Windows.Media.Effects.DropShadowEffect
+        {
+            BlurRadius = 30,
+            ShadowDepth = 6,
+            Opacity = 0.28,
+            Color = Colors.Black,
+        };
 
     private void BuildCore()
     {
