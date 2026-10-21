@@ -26,12 +26,13 @@ internal static class ToolSizes
     public static readonly ToolSpecLayout Crop = new(
         ChromeWidth: 36,
         ChromeHeight: 270,
-        PreviewMinWidth: 320,
+        // The ratio chips and W/H row need ~380 DIP; below that the window clipped its own Apply button.
+        PreviewMinWidth: 380,
         PreviewMinHeight: 240,
         PreviewMaxWidth: 640,
         PreviewMaxHeight: 640,
-        DefaultPreviewWidth: 520,
-        DefaultPreviewHeight: 390);
+        DefaultPreviewWidth: 560,
+        DefaultPreviewHeight: 420);
 
     public static ToolSpecLayout For(string toolId) => toolId switch
     {

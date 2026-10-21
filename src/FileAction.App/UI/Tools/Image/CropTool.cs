@@ -74,7 +74,7 @@ internal sealed class CropView
     private readonly Rectangle _dimBottom = new();
     private readonly Rectangle _dimLeft = new();
     private readonly Rectangle _dimRight = new();
-    private readonly StackPanel _chipRow = new() { Orientation = System.Windows.Controls.Orientation.Horizontal };
+    private readonly WrapPanel _chipRow = new() { Orientation = System.Windows.Controls.Orientation.Horizontal };
     private readonly TextBox _widthBox = new() { Width = 72 };
     private readonly TextBox _heightBox = new() { Width = 72 };
     private readonly WpfImage _imageView = new() { Stretch = Stretch.Uniform, IsHitTestVisible = false, Visibility = Visibility.Collapsed };
