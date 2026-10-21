@@ -16,15 +16,18 @@ public enum PhotoEditGroup
 public enum PhotoParameter
 {
     Exposure,
+    Brightness,
     Contrast,
     Highlights,
     Shadows,
     Whites,
     Blacks,
+    Gamma,
     Saturation,
     Vibrance,
     Temperature,
     Tint,
+    Hue,
     Sharpness,
     Clarity,
     Dehaze,
@@ -59,9 +62,12 @@ public enum PhotoEditOperation
     /// <summary>The tone curve built from highlights/shadows/whites/blacks (see <see cref="PhotoEdit.ToneCurve"/>).</summary>
     ToneCurve,
     Exposure,
+    Brightness,
     Contrast,
+    Gamma,
     WhiteBalance,
     Tint,
+    Hue,
     Saturation,
     Vibrance,
     Dehaze,
@@ -110,15 +116,18 @@ public static class PhotoEdit
     public static readonly IReadOnlyList<PhotoParameterSpec> Specs =
     [
         new(PhotoParameter.Exposure, PhotoEditGroup.Light, -100, 100),
+        new(PhotoParameter.Brightness, PhotoEditGroup.Light, -100, 100),
         new(PhotoParameter.Contrast, PhotoEditGroup.Light, -100, 100),
         new(PhotoParameter.Highlights, PhotoEditGroup.Light, -100, 100),
         new(PhotoParameter.Shadows, PhotoEditGroup.Light, -100, 100),
         new(PhotoParameter.Whites, PhotoEditGroup.Light, -100, 100),
         new(PhotoParameter.Blacks, PhotoEditGroup.Light, -100, 100),
+        new(PhotoParameter.Gamma, PhotoEditGroup.Light, -100, 100),
         new(PhotoParameter.Saturation, PhotoEditGroup.Color, -100, 100),
         new(PhotoParameter.Vibrance, PhotoEditGroup.Color, -100, 100),
         new(PhotoParameter.Temperature, PhotoEditGroup.Color, -100, 100),
         new(PhotoParameter.Tint, PhotoEditGroup.Color, -100, 100),
+        new(PhotoParameter.Hue, PhotoEditGroup.Color, -100, 100),
         new(PhotoParameter.Sharpness, PhotoEditGroup.Detail, 0, 100),
         new(PhotoParameter.Clarity, PhotoEditGroup.Detail, 0, 100),
         new(PhotoParameter.Dehaze, PhotoEditGroup.Detail, 0, 100),
@@ -173,8 +182,20 @@ public static class PhotoEdit
     /// <summary>Exposure as a multiplier: 2^(-1)=0.5 at -100, 1 at 0, 2 at +100 (one stop per 100).</summary>
     public static double ExposureFactor(int exposure) => Math.Pow(2, Clamp(exposure, -100, 100) / 100.0);
 
+    /// <summary>
+    /// Brightness as an additive percentage: -25 at -100, 0 at 0, +25 at +100. Unlike exposure this moves
+    /// every tone by the same amount, including the shadows, and it leaves the alpha channel alone.
+    /// </summary>
+    public static double BrightnessAmount(int brightness) => 0.25 * Clamp(brightness, -100, 100);
+
     /// <summary>Contrast as the slope of a straight line through 50% grey: 0 at -100, 1 at 0, 2 at +100.</summary>
     public static double ContrastFactor(int contrast) => 1 + Clamp(contrast, -100, 100) / 100.0;
+
+    /// <summary>
+    /// Gamma as the exponent applied to the midtones: 0.5 at -100, 1 at 0, 2 at +100. Above one lifts
+    /// the midtones without clipping the white point, which is what the tone-curve sliders cannot do.
+    /// </summary>
+    public static double GammaValue(int gamma) => Math.Pow(2, Clamp(gamma, -100, 100) / 100.0);
 
     /// <summary>Red and blue gains for the temperature slider: warm raises red, cools blue.</summary>
     public static (double Red, double Blue) WhiteBalance(int temperature)
@@ -185,6 +206,12 @@ public static class PhotoEdit
 
     /// <summary>Green gain for the tint slider: positive is magenta (less green).</summary>
     public static double TintGreen(int tint) => 1 - 0.25 * Clamp(tint, -100, 100) / 100.0;
+
+    /// <summary>
+    /// Hue as a rotation percentage for Magick's modulate: 100 is neutral, so -100 and +100 are the two
+    /// half turns (0 and 200) and every value in between rotates the colour wheel smoothly.
+    /// </summary>
+    public static double HuePercentage(int hue) => 100 + Clamp(hue, -100, 100);
 
     /// <summary>Saturation percentage for Magick's modulate: 0 at -100, 100 at 0, 200 at +100.</summary>
     public static double SaturationAmount(int saturation) => 100 + Clamp(saturation, -100, 100);
@@ -363,8 +390,12 @@ public static class PhotoEdit
             steps.Add(new PhotoEditStep(PhotoEditOperation.ToneCurve, 0));
         if (source.Exposure != 0)
             steps.Add(new PhotoEditStep(PhotoEditOperation.Exposure, ExposureFactor(source.Exposure)));
+        if (source.Brightness != 0)
+            steps.Add(new PhotoEditStep(PhotoEditOperation.Brightness, BrightnessAmount(source.Brightness)));
         if (source.Contrast != 0)
             steps.Add(new PhotoEditStep(PhotoEditOperation.Contrast, ContrastFactor(source.Contrast)));
+        if (source.Gamma != 0)
+            steps.Add(new PhotoEditStep(PhotoEditOperation.Gamma, GammaValue(source.Gamma)));
         if (source.Temperature != 0)
         {
             var (red, blue) = WhiteBalance(source.Temperature);
@@ -372,6 +403,8 @@ public static class PhotoEdit
         }
         if (source.Tint != 0)
             steps.Add(new PhotoEditStep(PhotoEditOperation.Tint, TintGreen(source.Tint)));
+        if (source.Hue != 0)
+            steps.Add(new PhotoEditStep(PhotoEditOperation.Hue, HuePercentage(source.Hue)));
         if (source.Saturation != 0)
             steps.Add(new PhotoEditStep(PhotoEditOperation.Saturation, SaturationAmount(source.Saturation)));
         if (source.Vibrance != 0)
@@ -416,6 +449,14 @@ public static class PhotoEdit
                 case PhotoEditOperation.Exposure:
                     image.Evaluate(Channels.RGB, EvaluateOperator.Multiply, step.Amount);
                     break;
+                case PhotoEditOperation.Brightness:
+                    // An additive lift in percent, unlike the exposure multiplier: +25 moves every tone
+                    // by a quarter of the quantum range, and the alpha channel is untouched.
+                    image.BrightnessContrast(new Percentage(step.Amount), new Percentage(0));
+                    break;
+                case PhotoEditOperation.Gamma:
+                    image.GammaCorrect(step.Amount, Channels.RGB);
+                    break;
                 case PhotoEditOperation.Contrast:
                     // A straight line through 50% grey: c0 + c1*x, so the slope is the contrast factor.
                     image.Evaluate(Channels.RGB, EvaluateFunction.Polynomial,
@@ -427,6 +468,10 @@ public static class PhotoEdit
                     break;
                 case PhotoEditOperation.Tint:
                     image.Evaluate(Channels.Green, EvaluateOperator.Multiply, step.Amount);
+                    break;
+                case PhotoEditOperation.Hue:
+                    // 100 is the neutral hue; the 0-200 range covers a half turn in either direction.
+                    image.Modulate(new Percentage(100), new Percentage(100), new Percentage(step.Amount));
                     break;
                 case PhotoEditOperation.Saturation:
                 case PhotoEditOperation.Vibrance:
@@ -554,15 +599,18 @@ public sealed class PhotoParameters
     }
 
     public int Exposure { get => this[PhotoParameter.Exposure]; set => this[PhotoParameter.Exposure] = value; }
+    public int Brightness { get => this[PhotoParameter.Brightness]; set => this[PhotoParameter.Brightness] = value; }
     public int Contrast { get => this[PhotoParameter.Contrast]; set => this[PhotoParameter.Contrast] = value; }
     public int Highlights { get => this[PhotoParameter.Highlights]; set => this[PhotoParameter.Highlights] = value; }
     public int Shadows { get => this[PhotoParameter.Shadows]; set => this[PhotoParameter.Shadows] = value; }
     public int Whites { get => this[PhotoParameter.Whites]; set => this[PhotoParameter.Whites] = value; }
     public int Blacks { get => this[PhotoParameter.Blacks]; set => this[PhotoParameter.Blacks] = value; }
+    public int Gamma { get => this[PhotoParameter.Gamma]; set => this[PhotoParameter.Gamma] = value; }
     public int Saturation { get => this[PhotoParameter.Saturation]; set => this[PhotoParameter.Saturation] = value; }
     public int Vibrance { get => this[PhotoParameter.Vibrance]; set => this[PhotoParameter.Vibrance] = value; }
     public int Temperature { get => this[PhotoParameter.Temperature]; set => this[PhotoParameter.Temperature] = value; }
     public int Tint { get => this[PhotoParameter.Tint]; set => this[PhotoParameter.Tint] = value; }
+    public int Hue { get => this[PhotoParameter.Hue]; set => this[PhotoParameter.Hue] = value; }
     public int Sharpness { get => this[PhotoParameter.Sharpness]; set => this[PhotoParameter.Sharpness] = value; }
     public int Clarity { get => this[PhotoParameter.Clarity]; set => this[PhotoParameter.Clarity] = value; }
     public int Dehaze { get => this[PhotoParameter.Dehaze]; set => this[PhotoParameter.Dehaze] = value; }

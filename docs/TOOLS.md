@@ -72,7 +72,7 @@ AVIF and BMP so animations and icon frames are never flattened.
 | **Accepts** | One still image: JPG, PNG, WebP, HEIC, TIFF, AVIF, BMP (no GIF/ICO/SVG). |
 | **Produces** | `<name> Edited.<ext>`. With every slider at its default the source bytes are copied verbatim, so a "no-op" save is byte-identical. |
 | **Primary button** | Save Edited Copy · حفظ نسخة معدّلة |
-| **How to** | Sixteen sliders in five groups (Light, Color, Detail, Effects, Noise); the preview is a downsampled copy and the save renders the original. |
+| **How to** | Nineteen sliders in five groups (Light, Color, Detail, Effects, Noise); the preview is a downsampled copy and the save renders the original. |
 | **Mouse / keyboard** | Drag a slider or use the arrow keys once it has focus; **hold the preview** to compare with the original ("Hold to compare" · «أبقِ الضغط للمقارنة»). |
 
 ### 4. Add BG — `tools.addbackground`
