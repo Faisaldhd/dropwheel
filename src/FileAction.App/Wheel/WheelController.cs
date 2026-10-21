@@ -143,7 +143,7 @@ internal sealed class WheelController
             else if (MissingDownloads(op, items, tools) is { } missing)
                 offered.Add(new NeedsToolOperation(op, missing));
         }
-        return WheelLayout.Arrange(offered, settings.HiddenOperations, settings.FavoriteOperations);
+        return WheelGroups.Arrange(WheelLayout.Arrange(offered, settings.HiddenOperations, settings.FavoriteOperations));
     }
 
     /// <summary>The smallest set of tools that would make <paramref name="op"/> work, or null.</summary>
@@ -280,6 +280,8 @@ internal sealed class WheelController
         JobRunner jobs,
         bool saveSettings = true)
     {
+        if (op is WheelGroupOperation)
+            throw new InvalidOperationException("A wheel group opens its chooser; it never runs as a job.");
         if (op is UI.Tools.IInteractiveTool tool)
         {
             jobs.Remember(op, null, saveSettings);
@@ -305,6 +307,42 @@ internal sealed class WheelController
             ? OutputTarget.SourceFolder(items[0].Path)
             : _dragOriginFolder;
         var window = new WheelWindow(mode, wheel, items, _settings, Operations,
+            (op, list, dropTargets) => RunOperation(op, list, dropTargets), targets)
+        {
+            LastOperation = LastFor,
+            OpenGroup = (group, groupItems) => ShowGroupChooser(group, groupItems, at, targets),
+            RunRepeat = repeatItems =>
+            {
+                if (LastFor(repeatItems) is { } last)
+                    RunOperation(last, repeatItems, targets);
+            },
+        };
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_wheel, window))
+                _wheel = null;
+        };
+        _wheel = window;
+        UpdateDestination(targets.UnderCursor);
+        window.ShowAt(at);
+    }
+
+    /// <summary>
+    /// Opens the compact chooser for one grouped parent. It is an ordinary click wheel restricted to the
+    /// group's children, so it inherits the same highlighting, keyboard handling and job/tool dispatch.
+    /// </summary>
+    private void ShowGroupChooser(
+        WheelGroupOperation group,
+        IReadOnlyList<FileItem> items,
+        Win32.POINT at,
+        DropTargets targets)
+    {
+        if (items.Count == 0)
+            return;
+        var window = new WheelWindow(WheelMode.Click, group.Wheel, items, _settings,
+            (_, groupItems) => Operations(group.Wheel, groupItems)
+                .OfType<WheelGroupOperation>()
+                .FirstOrDefault(candidate => candidate.GroupId == group.GroupId)?.Children ?? [],
             (op, list, dropTargets) => RunOperation(op, list, dropTargets), targets)
         {
             LastOperation = LastFor,
