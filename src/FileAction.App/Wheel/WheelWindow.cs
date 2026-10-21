@@ -1569,12 +1569,8 @@ internal sealed class WheelWindow : Window
         switch (hit.Zone)
         {
             case WheelZone.Hub:
-                // The hub is the way out of a category: the first click clears the inner ring, the
-                // next one closes the wheel. Escape does the same from the keyboard.
-                if (_innerGroupId is not null)
-                    ClearInner();
-                else
-                    Finish();
+                // The hub is a crossing pad, not a button. Clicking it does nothing; Escape or a
+                // click outside the wheel is the way out.
                 break;
             case WheelZone.Inner when hit.Index >= 0 && hit.Index < _innerChoices.Count:
                 RunInner(hit.Index);
