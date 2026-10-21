@@ -118,33 +118,50 @@ internal sealed class WheelController
     ];
 
     /// <summary>
-    /// What fits these items. Conversions that need FFmpeg or Pandoc stay on the wheel even before those are
-    /// downloaded; choosing one offers the download first.
+    /// What fits these items. A conversion whose backend is missing stays visible as a dimmed "get …"
+    /// slice, including backends installed outside the app (LibreOffice), so it never silently disappears;
+    /// choosing it explains what to install.
     /// </summary>
-    private IReadOnlyList<Operation> Operations(WheelKind wheel, IReadOnlyList<FileItem> items)
+    private IReadOnlyList<Operation> Operations(WheelKind wheel, IReadOnlyList<FileItem> items) =>
+        Offered(wheel, items, _tools, _settings, wheel == WheelKind.Actions ? _actions : _coreOperations);
+
+    /// <summary>The visible slices for a wheel, including the dimmed install/download variants.</summary>
+    internal static IReadOnlyList<Operation> Offered(
+        WheelKind wheel,
+        IReadOnlyList<FileItem> items,
+        ToolLocator tools,
+        AppSettings settings,
+        IReadOnlyList<Operation> operations)
     {
         var offered = new List<Operation>();
-        foreach (var op in wheel == WheelKind.Actions ? _actions : _coreOperations)
+        foreach (var op in operations)
         {
             if (op.Wheel != wheel || !op.AppliesTo(items))
                 continue;
-            if (op.IsAvailable(_tools, items))
+            if (op.IsAvailable(tools, items))
                 offered.Add(op);
-            else if (MissingDownloads(op, items) is { } missing)
+            else if (MissingDownloads(op, items, tools) is { } missing)
                 offered.Add(new NeedsToolOperation(op, missing));
         }
-        return WheelLayout.Arrange(offered, _settings.HiddenOperations, _settings.FavoriteOperations);
+        return WheelLayout.Arrange(offered, settings.HiddenOperations, settings.FavoriteOperations);
     }
 
-    /// <summary>The smallest set of downloadable tools that would make <paramref name="op"/> work, or null.</summary>
-    private IReadOnlyList<ExternalTool>? MissingDownloads(Operation op, IReadOnlyList<FileItem> items)
+    /// <summary>The smallest set of tools that would make <paramref name="op"/> work, or null.</summary>
+    internal static IReadOnlyList<ExternalTool>? MissingDownloads(Operation op, IReadOnlyList<FileItem> items, ToolLocator tools)
     {
-        var missing = ToolInstaller.Installable.Where(t => !_tools.Has(t)).ToList();
+        // LibreOffice is not downloaded by DropWheel, but it is still a backend an operation can need
+        // (documents to PDF). Including it keeps that slice visible and says what to install instead of
+        // silently dropping the conversion.
+        var missing = ToolInstaller.Installable
+            .Append(ExternalTool.LibreOffice)
+            .Distinct()
+            .Where(t => !tools.Has(t))
+            .ToList();
         if (missing.Count == 0)
             return null;
         foreach (var candidate in missing.Select(t => new[] { t }).Append(missing.ToArray()))
         {
-            if (op.IsAvailable(_tools.Assuming(candidate), items))
+            if (op.IsAvailable(tools.Assuming(candidate), items))
                 return candidate;
         }
         return null;
