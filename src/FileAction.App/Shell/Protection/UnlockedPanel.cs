@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using FileAction.App.UI;
 using FileAction.Core;
 using FileAction.Core.Lock;
@@ -25,6 +26,7 @@ internal sealed class UnlockedPanel : Window
     private readonly TextBlock _status;
     private readonly TextBlock _badge;
     private readonly Border _retry;
+    private readonly DispatcherTimer _hide;
 
     public UnlockedPanel(string name)
     {
@@ -83,12 +85,9 @@ internal sealed class UnlockedPanel : Window
         };
         _retry = Controls.Button(T("tool.lock.panel.retry"), () => Retry?.Invoke());
         _retry.Visibility = Visibility.Collapsed;
-        var lockNow = Controls.Button(T("tool.lock.panel.lockNow"), () => LockNow?.Invoke(), primary: true);
 
         var statusRow = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
-        DockPanel.SetDock(lockNow, Dock.Right);
         DockPanel.SetDock(_retry, Dock.Right);
-        statusRow.Children.Add(lockNow);
         statusRow.Children.Add(_retry);
         statusRow.Children.Add(_status);
 
@@ -120,10 +119,20 @@ internal sealed class UnlockedPanel : Window
                 }
             }
         };
-        Loaded += (_, _) => PlaceBottomRight();
+        // A short confirmation only: the session keeps locking in the background, the panel does not
+        // need to sit on top of every window for the whole editing session.
+        _hide = new DispatcherTimer(TimeSpan.FromSeconds(1.5), DispatcherPriority.Normal, (_, _) =>
+        {
+            _hide.Stop();
+            Hide();
+        }, Dispatcher);
+        Loaded += (_, _) =>
+        {
+            PlaceBottomRight();
+            _hide.Start();
+        };
     }
 
-    public event Action? LockNow;
     public event Action? Retry;
 
     public void SetStatus(UnlockedStatus status)
@@ -141,6 +150,8 @@ internal sealed class UnlockedPanel : Window
             _ => Theme.BadgeErrorText,
         };
         _retry.Visibility = status == UnlockedStatus.Error ? Visibility.Visible : Visibility.Collapsed;
+        if (status == UnlockedStatus.Error)
+            Reveal();
     }
 
     public void SetError(string detail)
@@ -148,6 +159,23 @@ internal sealed class UnlockedPanel : Window
         _status.Text = detail;
         _status.Foreground = Theme.BadgeErrorText;
         _retry.Visibility = Visibility.Visible;
+        Reveal();
+    }
+
+    /// <summary>An error after the 1.5 s toast must be visible, otherwise Retry is unreachable.</summary>
+    private void Reveal()
+    {
+        _hide.Stop();
+        if (IsVisible)
+            return;
+        try
+        {
+            Show();
+        }
+        catch (InvalidOperationException)
+        {
+            // The session is closing; the journal still keeps the error.
+        }
     }
 
     public void ClosePanel()

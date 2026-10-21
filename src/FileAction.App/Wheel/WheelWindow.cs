@@ -98,14 +98,51 @@ internal sealed class WheelWindow : Window
 
     // ------------------------------------------------------------------ label budgets
     internal const double OuterLabelRadius = (OuterInnerRadius + OuterRadius) / 2;
-    internal const double OuterLabelMaxHeight = (OuterRadius - OuterInnerRadius) * 0.78;
+    // 0.84 instead of 0.78: two lines at the 10 DIP floor plus an icon and a subtitle only just fit the
+    // 76 DIP outer band at the old budget, so long names had to be shrunk to unreadable type. The extra
+    // 4.5 DIP still leaves more than 5 DIP to either ring edge.
+    internal const double OuterLabelMaxHeight = (OuterRadius - OuterInnerRadius) * 0.84;
     internal const double InnerLabelRadius = (InnerInnerRadius + InnerOuterRadius) / 2;
     internal const double InnerLabelMaxHeight = (InnerOuterRadius - InnerInnerRadius) * 0.7;
+
+    /// <summary>Clearance between a label box and the ring circles, in DIP.</summary>
+    internal const double LabelEdgeInset = 2.5;
+
+    /// <summary>
+    /// Fitting reserve: labels are laid out this much shorter than the geometric ceiling. Attaching a
+    /// measured TextBlock to the visual tree can add a few tenths of a DIP through layout rounding; the
+    /// reserve keeps that growth from pushing the box past the ring edge.
+    /// </summary>
+    internal const double LabelBuildMargin = 1.0;
+
+    internal const int OuterLabelMaxLines = 3;
+    internal const int InnerLabelMaxLines = 2;
+
+    internal const double OuterTitleMaxFont = 13;
+    internal const double OuterTitleMinFont = 9.5;
+    internal const double OuterFormatMaxFont = 19;
+    internal const double OuterFormatMinFont = 12;
+    internal const double OuterCompactMaxFont = 11.5;
+    internal const double OuterCompactMinFont = 9.0;
+    internal const double OuterSubtitleMaxFont = 10.5;
+    internal const double OuterSubtitleMinFont = 8.5;
+    internal const double OuterIconMaxFont = 19;
+    internal const double OuterIconMinFont = 14;
+    internal const double InnerMaxFont = 10.5;
+    internal const double InnerMinFont = 8.5;
+    internal const double MoreMaxFont = 14;
+    internal const double MoreMinFont = 10;
 
     /// <summary>At most five children plus the "more" slice: six labels on a 60° step, never crowded.</summary>
     internal const int InnerCapacity = 6;
 
     internal const int InnerPerPage = 5;
+
+    /// <summary>
+    /// Keeps the current inner slice selected for this many degrees past its midpoint. Without it the
+    /// highlight flips on every pixel at a slice boundary and the small ring feels twitchy.
+    /// </summary>
+    internal const double InnerHysteresisDeg = 8;
 
     // ------------------------------------------------------------------ motion budget
     /// <summary>Hovering a category opens it only after the pointer rests on it this long.</summary>
@@ -323,6 +360,7 @@ internal sealed class WheelWindow : Window
         MouseLeave += (_, _) =>
         {
             CancelDwell();
+            CancelSwapDwell();
             SetHighlight(-1);
             SetInnerHighlight(-1);
             // In Click mode leaving the window means leaving the disc: the ring goes with it. During a
@@ -336,7 +374,11 @@ internal sealed class WheelWindow : Window
         PreviewMouseLeftButtonDown += (_, _) => PressHighlight(true);
         PreviewMouseLeftButtonUp += (_, _) => PressHighlight(false);
         KeyDown += OnKeyDown;
-        Closed += (_, _) => CancelDwell();
+        Closed += (_, _) =>
+        {
+            CancelDwell();
+            CancelSwapDwell();
+        };
         Deactivated += (_, _) =>
         {
             if (Mode == WheelMode.Click)
@@ -561,6 +603,7 @@ internal sealed class WheelWindow : Window
     private void ApplyView(Action mutate, Action? after = null, bool selectFirst = true)
     {
         CancelDwell();
+        CancelSwapDwell();
         if (Motion.Enabled && IsVisible && !_finished)
         {
             if (_switching)
@@ -652,6 +695,7 @@ internal sealed class WheelWindow : Window
         // dwell must not open an inner ring behind the close timer. Dropping on the wheel goes through
         // OnDrop, which finishes the window first, so this only cancels a drop that is already leaving.
         CancelDwell();
+        CancelSwapDwell();
         _closeTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Normal, (_, _) => Finish(), Dispatcher);
         _closeTimer.Start();
     }
@@ -1030,6 +1074,7 @@ internal sealed class WheelWindow : Window
         if (_finished || _switching || index < 0 || index >= _ops.Count || _ops[index] is not WheelGroupOperation group)
             return;
         CancelDwell();
+        CancelSwapDwell();
         SetHighlight(index);
         _innerGroupId = group.GroupId;
         _innerPage = 0;
@@ -1112,8 +1157,8 @@ internal sealed class WheelWindow : Window
 
     /// <summary>
     /// Builds the inner ring's visuals from <see cref="_innerChoices"/>. The labels are clipped to their
-    /// slice and use the smaller inner type scale; the boxes are sized for the worst case (six children),
-    /// so a swap between a five- and a six-child ring cannot make one label touch its neighbour.
+    /// slice and fitted per slice angle: the narrow diagonal slices get a smaller box than the top and
+    /// bottom ones, so no name is cut by the clip or runs into a neighbour gap.
     /// </summary>
     private void BuildInner()
     {
@@ -1130,7 +1175,6 @@ internal sealed class WheelWindow : Window
             return;
 
         var step = 360.0 / n;
-        var labelWidth = InnerLabelWidth;
         for (var i = 0; i < n; i++)
         {
             var a0 = i * step - step / 2;
@@ -1141,20 +1185,11 @@ internal sealed class WheelWindow : Window
                 Stroke = Theme.SliceEdge,
                 StrokeThickness = 1,
             };
-            var label = InnerLabel(_innerChoices[i], InnerTextWidth(n, i));
-            var fit = new Viewbox
-            {
-                Child = label,
-                Stretch = Stretch.Uniform,
-                StretchDirection = StretchDirection.DownOnly,
-                MaxWidth = labelWidth,
-                MaxHeight = InnerLabelMaxHeight,
-                IsHitTestVisible = false,
-            };
+            var label = BuildInnerLabel(_innerChoices[i], n, i);
+            label.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
             var mid = n == 1 ? new Point(Size / 2, Size / 2 - InnerLabelRadius) : Polar(InnerLabelRadius, i * step);
-            fit.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
-            Canvas.SetLeft(fit, mid.X - fit.DesiredSize.Width / 2);
-            Canvas.SetTop(fit, mid.Y - fit.DesiredSize.Height / 2);
+            Canvas.SetLeft(label, mid.X - label.DesiredSize.Width / 2);
+            Canvas.SetTop(label, mid.Y - label.DesiredSize.Height / 2);
 
             var inner = n == 1 ? new Point(Size / 2, Size / 2) : Polar(InnerInnerRadius, i * step);
             var group = new Canvas { Width = Size, Height = Size, IsHitTestVisible = false };
@@ -1164,7 +1199,7 @@ internal sealed class WheelWindow : Window
             group.RenderTransform = transforms;
             // Only the label is clipped: clipping the slice path would shave its own 1 px outline.
             var labelLayer = new Canvas { Width = Size, Height = Size, Clip = path.Data, IsHitTestVisible = false };
-            labelLayer.Children.Add(fit);
+            labelLayer.Children.Add(label);
             group.Children.Add(path);
             group.Children.Add(labelLayer);
             _innerSlices.Add(path);
@@ -1235,6 +1270,7 @@ internal sealed class WheelWindow : Window
         if (_innerGroupId is null)
             return;
         CancelDwell();
+        CancelSwapDwell();
         _suppressIndex = _highlight;
         ClearInnerState();
         UpdateHubText();
@@ -1522,12 +1558,16 @@ internal sealed class WheelWindow : Window
         e.Handled = true;
         var point = e.GetPosition(_canvas);
         var hit = HitAt(point);
-        var target = DropTargetAt(hit.Zone, hit.Index, _ops, _innerChoices);
+        // The visible hover is sticky for 8 degrees; activate exactly what is highlighted.
+        var index = hit.Zone == WheelZone.Inner && _innerHighlight >= 0 && _innerHighlight < _innerChoices.Count
+            ? _innerHighlight
+            : hit.Index;
+        var target = DropTargetAt(hit.Zone, index, _ops, _innerChoices);
         var op = target.Operation;
         e.Effects = target.Action == DropAction.Nothing ? DragDropEffects.None : SafeEffect(e.AllowedEffects);
         // Virtual files and images can only be read while the drop is in progress.
         var content = target.Action == DropAction.Nothing ? null : DropContent.Read(e.Data, materialize: true);
-        var parentAngle = SliceAngle(Math.Max(0, hit.Index), hit.Zone == WheelZone.Inner ? _innerChoices.Count : _ops.Count);
+        var parentAngle = SliceAngle(Math.Max(0, index), hit.Zone == WheelZone.Inner ? _innerChoices.Count : _ops.Count);
         Finish();
         if (op is not null && content is { Items.Count: > 0 })
         {
@@ -1563,15 +1603,14 @@ internal sealed class WheelWindow : Window
         switch (hit.Zone)
         {
             case WheelZone.Hub:
-                // The hub is the way out of a category: the first click clears the inner ring, the
-                // next one closes the wheel. Escape does the same from the keyboard.
-                if (_innerGroupId is not null)
-                    ClearInner();
-                else
-                    Finish();
+                // The hub is a crossing pad, not a button. Clicking it does nothing; Escape or a
+                // click outside the wheel is the way out.
                 break;
             case WheelZone.Inner when hit.Index >= 0 && hit.Index < _innerChoices.Count:
-                RunInner(hit.Index);
+                // Match the sticky hover: the child the user sees highlighted is the child that runs.
+                RunInner(_innerHighlight >= 0 && _innerHighlight < _innerChoices.Count
+                    ? _innerHighlight
+                    : hit.Index);
                 break;
             case WheelZone.Outer when hit.Index >= 0 && hit.Index < _ops.Count:
                 Run(hit.Index);
@@ -1687,6 +1726,27 @@ internal sealed class WheelWindow : Window
             _execute(op, items, _targets);
     }
 
+    private double AngleAt(Point point)
+    {
+        var dx = point.X - Size / 2;
+        var dy = point.Y - Size / 2;
+        return (Math.Atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+    }
+
+    /// <summary>
+    /// Nearest inner slice, but sticky: the current slice stays selected until the pointer is
+    /// <see cref="InnerHysteresisDeg"/> degrees past its midpoint. This removes the boundary flicker
+    /// without changing click/drop hit-testing, which still uses the exact slice.
+    /// </summary>
+    internal static int InnerHoverIndex(double angle, int count, int current)
+    {
+        if (count <= 1 || current < 0 || current >= count)
+            return SliceIndexAt(angle, count);
+        var step = 360.0 / count;
+        var delta = Math.Abs((angle - SliceAngle(current, count) + 540) % 360 - 180);
+        return delta <= step / 2 + InnerHysteresisDeg ? current : SliceIndexAt(angle, count);
+    }
+
     /// <summary>
     /// The single hover rule of the two-ring wheel, shared by Click and Drag mode: outer slices dwell
     /// for <see cref="DwellMs"/> when no ring is open; once it is open, moving to another category swaps
@@ -1704,7 +1764,7 @@ internal sealed class WheelWindow : Window
                 CancelDwell();
                 CancelSwapDwell();
                 _suppressIndex = -1;
-                SetInnerHighlight(hit.Index);
+                SetInnerHighlight(InnerHoverIndex(AngleAt(point), _innerChoices.Count, _innerHighlight));
                 break;
             case WheelZone.Outer:
                 SetInnerHighlight(-1);
@@ -1734,7 +1794,11 @@ internal sealed class WheelWindow : Window
             default:
                 CancelDwell();
                 CancelSwapDwell();
-                SetInnerHighlight(-1);
+                // Crossing the hub is how the pointer reaches the far side of the small inner ring.
+                // Follow the nearest child only inside the hub; the shadow pad outside the disc clears.
+                SetInnerHighlight(hit.Zone == WheelZone.Hub && _innerGroupId is not null
+                    ? InnerHoverIndex(AngleAt(point), _innerChoices.Count, _innerHighlight)
+                    : -1);
                 SetHighlight(-1);
                 break;
         }
@@ -1832,10 +1896,9 @@ internal sealed class WheelWindow : Window
     }
 
     /// <summary>
-    /// The width of a label box at its narrowest radius: the chord of the slice less an 8 % margin. Using
-    /// the actual slice count keeps the type as large as the slice allows, and the clip enforces the
-    /// boundary even if a translated label ever came close to it. For the inner ring the count is always
-    /// the six-child worst case, so a swap can never widen a label into its neighbour.
+    /// The style's width ceiling for an outer label: the chord of the slice at its narrowest radius less
+    /// an 8 % margin, never above 118 DIP. This is only a ceiling; <see cref="OuterSliceLabelWidth"/> takes
+    /// the smaller of it and the exact room the label's horizontal box has at its own angle.
     /// </summary>
     internal static double LabelWidth(int count, double centerRadius, double maxHeight)
     {
@@ -1854,27 +1917,95 @@ internal sealed class WheelWindow : Window
     internal static double InnerLabelWidth => LabelWidth(InnerCapacity, InnerLabelRadius, InnerLabelMaxHeight);
 
     /// <summary>
-    /// The widest inner text box, used by the top and bottom slices where the horizontal room is the
-    /// slice's chord. Text on the left/right of the disc is constrained by the ring's radial thickness
-    /// instead (see <see cref="InnerTextWidth"/>), or the slice clip would cut it.
+    /// The widest label box an outer slice can hold at <paramref name="height"/>: measured against the two
+    /// ring circles and the slice's own gap-shifted edges, not just the chord through the mid-angle. A
+    /// label on the left or right of the disc has only the ring's radial thickness as horizontal room, so
+    /// a chord-only box would either be cut by the outer circle or run into the neighbour gap.
     /// </summary>
-    internal static double InnerLabelTextWidth => InnerLabelWidth - 8;
+    internal static double OuterSliceLabelWidth(int count, int index) =>
+        Math.Min(
+            count <= 2 ? 120 : LabelWidth(count, OuterLabelRadius, OuterLabelMaxHeight),
+            MaxLabelWidth(count, index, OuterInnerRadius, OuterRadius, OuterLabelRadius, OuterLabelMaxHeight));
+
+    /// <summary>The same measured ceiling for one inner slice at the six-child worst case height.</summary>
+    internal static double InnerSliceLabelWidth(int count, int index) =>
+        Math.Min(
+            InnerLabelWidth,
+            MaxLabelWidth(count, index, InnerInnerRadius, InnerOuterRadius, InnerLabelRadius, InnerLabelMaxHeight));
 
     /// <summary>
-    /// The text width for one inner slice. On a slice at the side of the disc only the ring's radial
-    /// thickness is horizontal room (a chord there runs vertically); the 0.92 keeps the box clear of
-    /// the outline. Using the angle keeps the type as wide as its own slice allows: "Compress" fits at
-    /// 60°, while a long label at 90° is ellipsized instead of being cut by the clip.
+    /// True when a horizontal <paramref name="width"/> × <paramref name="height"/> label box centred on
+    /// the mid-angle of a slice lies completely inside the ring band. All four corners are checked against
+    /// the inner/outer circles and the two slice edges (shifted inward by the neighbour gap); because the
+    /// box is convex and the origin is outside it, those corners are the extremes of both radius and angle.
     /// </summary>
-    internal static double InnerTextWidth(int count, int index)
+    internal static bool LabelBoxFits(int count, int index, double innerRadius, double outerRadius,
+        double centerRadius, double width, double height)
     {
-        if (count <= 1)
-            return InnerLabelTextWidth;
-        var angle = SliceAngle(index, count) * Math.PI / 180;
-        var sideways = Math.Max(0.5, Math.Abs(Math.Sin(angle)));
-        var radial = (InnerOuterRadius - InnerInnerRadius) * 0.92 / sideways;
-        return Math.Min(InnerLabelTextWidth, radial);
+        if (count <= 0 || index < 0 || index >= count || width < 0 || height < 0)
+            return false;
+        // A third of a DIP of sub-pixel slack: the measured box and the binary-searched ceiling agree,
+        // but WPF's text measurement rounds to 1/300 DIP and an exact fit must not be rejected.
+        var innerLimit = innerRadius + LabelEdgeInset - 0.35;
+        var outerLimit = outerRadius - LabelEdgeInset + 0.35;
+        if (innerLimit >= outerLimit)
+            return false;
+
+        var angle = SliceAngle(index, count);
+        var radians = angle * Math.PI / 180;
+        var sin = Math.Sin(radians);
+        var cos = Math.Cos(radians);
+        var half = 180.0 / count;
+        var halfWidth = width / 2;
+        var halfHeight = height / 2;
+        foreach (var dx in new[] { -halfWidth, halfWidth })
+        foreach (var dy in new[] { -halfHeight, halfHeight })
+        {
+            var x = centerRadius * sin + dx;
+            var y = -centerRadius * cos + dy;
+            var radius = Math.Sqrt(x * x + y * y);
+            if (radius < innerLimit || radius > outerLimit)
+                return false;
+            if (count == 1)
+                continue;
+            // The Sector edge is moved sideways by Gap / 2 at every radius; keep the same angular
+            // clearance plus half a DIP so the 1 DIP outline never touches the label.
+            var clearance = Math.Asin(Math.Min(0.9, (Gap / 2 + 0.75) / Math.Max(radius, 1))) * 180 / Math.PI;
+            var delta = Math.Abs(SignedDegrees(Math.Atan2(x, -y) * 180 / Math.PI - angle));
+            if (delta > half - clearance)
+                return false;
+        }
+        return true;
     }
+
+    /// <summary>
+    /// The widest horizontal label box that fits at <paramref name="height"/>. The search is monotonic in
+    /// width (every corner only moves outwards or towards a slice edge), so a binary search gives the exact
+    /// chord-like room the slice offers at that angle.
+    /// </summary>
+    internal static double MaxLabelWidth(int count, int index, double innerRadius, double outerRadius,
+        double centerRadius, double height)
+    {
+        if (count <= 0 || index < 0 || index >= count || height < 0)
+            return 0;
+        if (!LabelBoxFits(count, index, innerRadius, outerRadius, centerRadius, 0, height))
+            return 0;
+        var low = 0.0;
+        var high = 2 * outerRadius;
+        if (LabelBoxFits(count, index, innerRadius, outerRadius, centerRadius, high, height))
+            return high;
+        for (var i = 0; i < 40; i++)
+        {
+            var middle = (low + high) / 2;
+            if (LabelBoxFits(count, index, innerRadius, outerRadius, centerRadius, middle, height))
+                low = middle;
+            else
+                high = middle;
+        }
+        return low;
+    }
+
+    private static double SignedDegrees(double degrees) => (degrees + 540) % 360 - 180;
 
     // ------------------------------------------------------------------ visuals
 
@@ -1928,7 +2059,6 @@ internal sealed class WheelWindow : Window
         // selection) never take this path.
         var compact = n > 15;
         var labelRadius = OuterLabelRadius;
-        var labelWidth = n <= 2 ? 120 : LabelWidth(n, labelRadius, OuterLabelMaxHeight);
         for (var i = 0; i < n; i++)
         {
             var a0 = i * step - step / 2;
@@ -1939,20 +2069,11 @@ internal sealed class WheelWindow : Window
                 Stroke = Theme.SliceEdge,
                 StrokeThickness = 1,
             };
-            var label = SliceLabel(_ops[i], compact);
-            var fit = new Viewbox
-            {
-                Child = label,
-                Stretch = Stretch.Uniform,
-                StretchDirection = StretchDirection.DownOnly,
-                MaxWidth = labelWidth,
-                MaxHeight = OuterLabelMaxHeight,
-                IsHitTestVisible = false,
-            };
+            var label = BuildOuterLabel(_ops[i], compact, n, i);
+            label.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
             var mid = n == 1 ? new Point(Size / 2, Size / 2 - labelRadius) : Polar(labelRadius, i * step);
-            fit.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
-            Canvas.SetLeft(fit, mid.X - fit.DesiredSize.Width / 2);
-            Canvas.SetTop(fit, mid.Y - fit.DesiredSize.Height / 2);
+            Canvas.SetLeft(label, mid.X - label.DesiredSize.Width / 2);
+            Canvas.SetTop(label, mid.Y - label.DesiredSize.Height / 2);
 
             // Slice and label move together when the slice pops out. The scale centre is the slice's
             // inner edge, so opening a slice grows it outwards across the ring instead of shrinking it
@@ -1966,7 +2087,7 @@ internal sealed class WheelWindow : Window
             // The label is clipped to its slice; the slice path itself is not, so its 1 px outline stays
             // whole. Text therefore cannot render outside its own slice, even mid-transition.
             var labelLayer = new Canvas { Width = Size, Height = Size, Clip = path.Data, IsHitTestVisible = false };
-            labelLayer.Children.Add(fit);
+            labelLayer.Children.Add(label);
             group.Children.Add(path);
             group.Children.Add(labelLayer);
             _slices.Add(path);
@@ -2062,20 +2183,377 @@ internal sealed class WheelWindow : Window
         storyboard.Children.Add(animation);
     }
 
-    private static StackPanel SliceLabel(Operation op, bool compact)
+    // ------------------------------------------------------------------ label fitting
+
+    /// <summary>
+    /// The result of fitting one text run into a box. <see cref="FontSize"/> is never below the caller's
+    /// readable floor; <see cref="Lines"/> is the number of visible lines (at most the caller's limit);
+    /// <see cref="Trimmed"/> says the last line is ellipsized; <see cref="MaxHeight"/> is the height the
+    /// TextBlock must be capped at in the visual tree (infinity when the whole run fits).
+    /// </summary>
+    internal readonly record struct LabelTextFit(
+        double FontSize,
+        int Lines,
+        bool Trimmed,
+        double Width,
+        double Height,
+        double LineHeight,
+        double MaxHeight);
+
+    /// <summary>
+    /// Fits <paramref name="text"/> into a box by first lowering the font size (within
+    /// [<paramref name="minFontSize"/>, <paramref name="maxFontSize"/>]) and only then capping the line
+    /// count and ellipsizing the last line. A candidate font is accepted only when no word is wider than
+    /// the box, so WPF never breaks a word in the middle. Arabic and English use the same path; the only
+    /// difference is the <see cref="FlowDirection"/> passed to the TextBlock.
+    /// </summary>
+    internal static LabelTextFit FitLabelText(string text, double maxWidth, double maxHeight,
+        double maxFontSize, double minFontSize, int maxLines, FontWeight weight, FlowDirection flow)
+    {
+        if (string.IsNullOrEmpty(text) || maxWidth <= 0 || maxHeight <= 0 || maxFontSize <= 0)
+            return new(Math.Max(0, minFontSize), 0, false, 0, 0, 0, double.PositiveInfinity);
+
+        var floor = Math.Max(0.5, minFontSize);
+        var lineCap = Math.Max(1, maxLines);
+        var steps = Math.Max(0, (int)Math.Floor((maxFontSize - floor) / 0.5 + 0.0001));
+        for (var i = 0; i <= steps; i++)
+        {
+            var size = maxFontSize - i * 0.5;
+            var lineHeight = MeasureLineHeight(text, size, weight, flow);
+            if (lineHeight <= 0)
+                continue;
+            var allowed = Math.Min(maxHeight, lineCap * lineHeight);
+            if (allowed + 0.01 < lineHeight)
+                continue;
+            var wraps = WordsFit(text, maxWidth, size, weight, flow);
+            if (!wraps && TextNaturalWidth(text, size, weight, flow) > maxWidth + 0.5)
+                continue;
+            var measured = MeasureText(text, maxWidth, size, weight, flow,
+                wraps ? TextWrapping.Wrap : TextWrapping.NoWrap, double.PositiveInfinity);
+            var lines = wraps ? CountLines(measured.Height, lineHeight) : 1;
+            // The line budget is exact: accepting even half a DIP more would put the whole stack over
+            // the slice height once the icon and subtitle are added.
+            if (lines <= lineCap && measured.Height <= allowed + 0.05)
+                return new(size, lines, false, measured.Width, measured.Height, lineHeight, double.PositiveInfinity);
+        }
+
+        // Even the floor cannot show the run whole: keep the floor, show as many complete lines as the
+        // height budget allows and let WPF ellipsize the last one.
+        var floorLineHeight = MeasureLineHeight(text, floor, weight, flow);
+        var floorAllowed = Math.Min(maxHeight, lineCap * floorLineHeight);
+        var floorLines = Math.Max(1, Math.Min(lineCap, (int)Math.Floor(floorAllowed / floorLineHeight + 0.01)));
+        var floorWraps = WordsFit(text, maxWidth, floor, weight, flow);
+        var floorText = MeasureText(text, maxWidth, floor, weight, flow,
+            floorWraps ? TextWrapping.Wrap : TextWrapping.NoWrap, double.PositiveInfinity);
+        var floorTrimmed = !floorWraps
+            || TextNaturalWidth(text, floor, weight, flow) > maxWidth + 0.5
+            || floorText.Height > floorAllowed + 0.05;
+        var visibleHeight = floorWraps ? Math.Min(floorText.Height, floorAllowed) : floorText.Height;
+        return new(floor, floorWraps ? floorLines : 1, floorTrimmed, floorText.Width, visibleHeight, floorLineHeight, floorAllowed);
+    }
+
+    /// <summary>
+    /// Right-to-left only when the UI is Arabic and the string actually contains Arabic letters. Format
+    /// names, measurements and "+n" stay left-to-right so the bidi algorithm cannot turn "1920 px" into
+    /// "px 1920" or "+7" into "7+".
+    /// </summary>
+    internal static FlowDirection LabelFlow(string? text) =>
+        LanguageManager.IsRtl && HasArabic(text)
+            ? FlowDirection.RightToLeft
+            : FlowDirection.LeftToRight;
+
+    private static bool HasArabic(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return false;
+        foreach (var c in text)
+            if (c is >= '\u0600' and <= '\u06FF')
+                return true;
+        return false;
+    }
+
+    private static TextBlock LabelText(string text, double fontSize, FontWeight weight, FlowDirection flow, TextWrapping wrapping) => new()
+    {
+        Text = text,
+        FontFamily = Theme.DisplayFont,
+        FontSize = fontSize,
+        FontWeight = weight,
+        FlowDirection = flow,
+        TextAlignment = TextAlignment.Center,
+        TextWrapping = wrapping,
+        TextTrimming = TextTrimming.CharacterEllipsis,
+    };
+
+    private readonly record struct TextMeasureKey(
+        string Text, double MaxWidth, double FontSize, FontWeight Weight, FlowDirection Flow,
+        TextWrapping Wrapping, double MaxHeight);
+
+    // The label fitter asks for the same word widths and line heights at many budgets; WPF measurement
+    // is the expensive part of building a wheel, so keep the results for the lifetime of the UI thread.
+    [ThreadStatic] private static Dictionary<TextMeasureKey, Size>? _measureCache;
+
+    private static Size MeasureText(string text, double maxWidth, double fontSize, FontWeight weight,
+        FlowDirection flow, TextWrapping wrapping, double maxHeight)
+    {
+        var key = new TextMeasureKey(text, maxWidth, fontSize, weight, flow, wrapping, maxHeight);
+        var cache = _measureCache ??= [];
+        if (cache.TryGetValue(key, out var cached))
+            return cached;
+        if (cache.Count > 20_000)
+            cache.Clear();
+
+        var block = LabelText(text, fontSize, weight, flow, wrapping);
+        if (!double.IsPositiveInfinity(maxWidth))
+            block.MaxWidth = maxWidth;
+        if (!double.IsPositiveInfinity(maxHeight))
+            block.MaxHeight = maxHeight;
+        block.Measure(new Size(maxWidth, maxHeight));
+        var size = block.DesiredSize;
+        cache[key] = size;
+        return size;
+    }
+
+    private static double MeasureLineHeight(string text, double fontSize, FontWeight weight, FlowDirection flow) =>
+        MeasureText(text, double.PositiveInfinity, fontSize, weight, flow, TextWrapping.NoWrap, double.PositiveInfinity).Height;
+
+    private static double TextNaturalWidth(string text, double fontSize, FontWeight weight, FlowDirection flow) =>
+        MeasureText(text, double.PositiveInfinity, fontSize, weight, flow, TextWrapping.NoWrap, double.PositiveInfinity).Width;
+
+    private static int CountLines(double height, double lineHeight) =>
+        lineHeight <= 0 ? 1 : Math.Max(1, (int)Math.Round(height / lineHeight, MidpointRounding.AwayFromZero));
+
+    /// <summary>
+    /// False when one whitespace-separated word is wider than the box. WPF's Wrap would break that word
+    /// at a character boundary; the caller then keeps the label on one line and ellipsizes it instead,
+    /// which is clearer than a split word. Arabic words are measured with the same RTL flow as the label.
+    /// </summary>
+    private static bool WordsFit(string text, double maxWidth, double fontSize, FontWeight weight, FlowDirection flow)
+    {
+        foreach (var word in text.Split([' ', '\u00A0', '\t'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            // Half a DIP of spare room: a word that exactly fills the box can make WPF wrap the last
+            // glyph onto a second line because of layout rounding.
+            if (TextNaturalWidth(word, fontSize, weight, flow) > maxWidth - 0.5)
+                return false;
+        }
+        return true;
+    }
+
+    [ThreadStatic] private static Dictionary<(string Glyph, double Size), Size>? _iconCache;
+
+    private static Size MeasureIcon(string glyph, double fontSize)
+    {
+        var cache = _iconCache ??= [];
+        if (cache.TryGetValue((glyph, fontSize), out var cached))
+            return cached;
+        var block = new TextBlock
+        {
+            Text = glyph,
+            FontFamily = Theme.Icons,
+            FontSize = fontSize,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        block.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var size = block.DesiredSize;
+        cache[(glyph, fontSize)] = size;
+        return size;
+    }
+
+    internal static Action<string>? LabelTrace;
+
+    /// <summary>One outer label whose font sizes, line count and whole box have been measured to fit.</summary>
+    private static StackPanel BuildOuterLabel(Operation op, bool compact, int count, int index)
+    {
+        StackPanel? best = null;
+        TextBlock? bestTitle = null;
+        // Explore a few height budgets instead of only the full ring band. A shorter budget gives the
+        // label a wider chord (a one-line layout) and can also drop the subtitle/icon, which is exactly
+        // what a long name on a narrow diagonal slice needs. Each panel is measured, and only a box that
+        // really fits the slice may win.
+        var top = OuterLabelMaxHeight - LabelBuildMargin;
+        for (var budget = top; budget >= 18; budget -= 5)
+        {
+            var width = OuterLabelWidthAt(count, index, Math.Min(OuterLabelMaxHeight, budget + LabelBuildMargin));
+            var panel = SliceLabel(op, compact, width, budget);
+            panel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            var title = panel.Children.OfType<TextBlock>().FirstOrDefault(block => block.FontWeight == FontWeights.SemiBold);
+            if (title is not null
+                && panel.DesiredSize.Height <= OuterLabelMaxHeight + 0.05
+                && LabelBoxFits(count, index, OuterInnerRadius, OuterRadius, OuterLabelRadius,
+                    panel.DesiredSize.Width, panel.DesiredSize.Height)
+                && BetterLabel(panel, title, ref best, ref bestTitle))
+            {
+                best = panel;
+                bestTitle = title;
+            }
+        }
+        if (best is not null)
+            return best;
+        return MinimalOuterLabel(op, count, index);
+    }
+
+    /// <summary>
+    /// Last-resort outer label: one line of the name at the floor, no icon or subtitle. Used only when
+    /// even the smallest measured stack cannot be squeezed into a very narrow slice.
+    /// </summary>
+    private static StackPanel MinimalOuterLabel(Operation op, int count, int index)
+    {
+        var width = Math.Max(1, OuterLabelWidthAt(count, index, OuterLabelMaxHeight));
+        var flow = LabelFlow(op.Label);
+        var fit = FitLabelText(op.Label, width, OuterLabelMaxHeight - LabelBuildMargin,
+            OuterTitleMinFont, OuterTitleMinFont, 1, FontWeights.SemiBold, flow);
+        var panel = new StackPanel
+        {
+            MaxWidth = width,
+            IsHitTestVisible = false,
+            Opacity = op is Shell.NeedsToolOperation ? 0.6 : 1,
+            FlowDirection = flow,
+        };
+        panel.Children.Add(TitleBlock(op.Label, fit, flow, width));
+        return panel;
+    }
+
+    /// <summary>
+    /// True when <paramref name="panel"/> is a better label than the best one so far: a complete label
+    /// beats a truncated one, then the larger font wins, then more visible lines, then a wider box.
+    /// </summary>
+    private static bool BetterLabel(StackPanel panel, TextBlock title, ref StackPanel? best, ref TextBlock? bestTitle)
+    {
+        if (best is null || bestTitle is null)
+            return true;
+        var trimmed = !double.IsPositiveInfinity(title.MaxHeight);
+        var bestTrimmed = !double.IsPositiveInfinity(bestTitle.MaxHeight);
+        if (trimmed != bestTrimmed)
+            return !trimmed;
+        if (title.FontSize != bestTitle.FontSize)
+            return title.FontSize > bestTitle.FontSize;
+        if (trimmed && title.DesiredSize.Height != bestTitle.DesiredSize.Height)
+            return title.DesiredSize.Height > bestTitle.DesiredSize.Height;
+        return panel.DesiredSize.Width > best.DesiredSize.Width + 0.5;
+    }
+
+    private static double OuterLabelWidthAt(int count, int index, double height) =>
+        Math.Min(
+            count <= 2 ? 120 : LabelWidth(count, OuterLabelRadius, OuterLabelMaxHeight),
+            MaxLabelWidth(count, index, OuterInnerRadius, OuterRadius, OuterLabelRadius, height));
+
+    /// <summary>
+    /// Builds one outer label. The icon, every text line and the optional subtitle are measured against
+    /// the width of the box; the title is fitted at the largest readable size that keeps the whole stack
+    /// inside the slice, and only then is the last line ellipsized. The subtitle drops out when keeping it
+    /// would force the name below the floor, so a long tool name stays readable.
+    /// </summary>
+    internal static StackPanel SliceLabel(Operation op, bool compact, double maxWidth, double maxHeight)
     {
         var isFormat = op.Wheel == WheelKind.Convert && op.Label.Length <= 6 && op.Label.ToUpperInvariant() == op.Label;
         var isCategory = op is WheelGroupOperation;
         // Slices that first download a tool are shown a little faded. Format names such as MP4 stay
-        // left-to-right even in Arabic, because they are identifiers rather than prose.
+        // left-to-right even in Arabic, because they are identifiers rather than prose. Pure Latin
+        // labels ("1920 px", "TAR.GZ", "+7") do the same so bidi cannot reorder them.
+        var flow = LabelFlow(op.Label);
+        var hasIcon = !isFormat && !compact;
+        var subtitleText = !compact && !isCategory && !string.IsNullOrEmpty(op.Subtitle) ? op.Subtitle : null;
+        var subtitleFlow = LabelFlow(subtitleText);
+        var subtitle = subtitleText is null
+            ? default
+            : FitLabelText(subtitleText, maxWidth, double.PositiveInfinity,
+                OuterSubtitleMaxFont, OuterSubtitleMinFont, 1, FontWeights.Normal, subtitleFlow);
+
+        var titleMax = isFormat ? OuterFormatMaxFont : compact ? OuterCompactMaxFont : OuterTitleMaxFont;
+        var titleMin = isFormat ? OuterFormatMinFont : compact ? OuterCompactMinFont : OuterTitleMinFont;
+        var iconMax = isCategory ? 16.0 : OuterIconMaxFont;
+        var iconMin = isCategory ? 14.0 : OuterIconMinFont;
+        var chevronHeight = isCategory ? MeasureIcon("\uE76C", 10).Height + 1 : 0;
+
+        LabelTextFit bestTitle = default;
+        var bestSubtitle = false;
+        var bestIcon = 0.0;
+        var bestHeight = double.MaxValue;
+        var haveBest = false;
+
+        bool Better(LabelTextFit title, bool showSubtitle, double iconSize, double totalHeight)
+        {
+            if (!haveBest)
+                return true;
+            // A complete label beats a truncated one, then the larger (more readable) type wins. When
+            // every candidate has to ellipsize, the one that shows more lines wins before the font size.
+            if (title.Trimmed != bestTitle.Trimmed)
+                return !title.Trimmed;
+            if (!title.Trimmed)
+            {
+                if (title.FontSize != bestTitle.FontSize)
+                    return title.FontSize > bestTitle.FontSize;
+            }
+            else
+            {
+                if (title.Lines != bestTitle.Lines)
+                    return title.Lines > bestTitle.Lines;
+                if (title.FontSize != bestTitle.FontSize)
+                    return title.FontSize > bestTitle.FontSize;
+            }
+            if (showSubtitle != bestSubtitle)
+                return showSubtitle;
+            if (iconSize != bestIcon)
+                return iconSize > bestIcon;
+            return totalHeight < bestHeight - 0.01;
+        }
+
+        foreach (var iconSize in IconSizes(hasIcon, iconMax, iconMin))
+        {
+            var iconChrome = iconSize > 0 ? MeasureIcon(op.Glyph, iconSize).Height + (isCategory ? 3 : 4) : 0;
+            foreach (var showSubtitle in subtitleText is null ? [false] : new[] { true, false })
+            {
+                var chrome = iconChrome + chevronHeight + (showSubtitle ? subtitle.Height + 1 : 0);
+                var titleBudget = maxHeight - chrome;
+                if (titleBudget < titleMin)
+                    continue;
+                for (var lines = OuterLabelMaxLines; lines >= 1; lines--)
+                {
+                    var title = FitLabelText(op.Label, maxWidth, titleBudget, titleMax, titleMin, lines,
+                        FontWeights.SemiBold, flow);
+                    if (title.Lines == 0)
+                        continue;
+                    var totalHeight = chrome + title.Height;
+                    if (totalHeight > maxHeight + 0.05)
+                        continue;
+                    if (!Better(title, showSubtitle, iconSize, totalHeight))
+                        continue;
+                    bestTitle = title;
+                    bestSubtitle = showSubtitle;
+                    bestIcon = iconSize;
+                    bestHeight = totalHeight;
+                    haveBest = true;
+                }
+            }
+        }
+
+        if (!haveBest)
+        {
+            // No combination of icon/subtitle/chevron fits; the name itself is the one thing that must
+            // stay. A single line at the readable floor always fits the remaining height.
+            var fit = FitLabelText(op.Label, maxWidth, maxHeight, titleMin, titleMin, 1,
+                FontWeights.SemiBold, flow);
+            var minimal = new StackPanel
+            {
+                MaxWidth = maxWidth,
+                IsHitTestVisible = false,
+                Opacity = op is Shell.NeedsToolOperation ? 0.6 : 1,
+                FlowDirection = flow,
+            };
+            minimal.Children.Add(TitleBlock(op.Label, fit, flow, maxWidth));
+            return minimal;
+        }
+
+        // The whole stack is centred by the Canvas just like the old Viewbox; only its font sizes are now
+        // chosen by measurement instead of a uniform scale-down.
         var panel = new StackPanel
         {
-            MaxWidth = compact ? 74 : 96,
+            MaxWidth = maxWidth,
             IsHitTestVisible = false,
             Opacity = op is Shell.NeedsToolOperation ? 0.6 : 1,
-            FlowDirection = isFormat ? System.Windows.FlowDirection.LeftToRight : LanguageManager.FlowDirection,
+            FlowDirection = flow,
         };
-        if (!isFormat && !compact)
+        if (hasIcon && bestIcon > 0)
         {
             // A category is an icon + name: its subtitle ("5 items") is replaced by the inner ring and the
             // hub count, and dropping it keeps the category type large enough for the narrower ring.
@@ -2083,36 +2561,24 @@ internal sealed class WheelWindow : Window
             {
                 Text = op.Glyph,
                 FontFamily = Theme.Icons,
-                FontSize = isCategory ? 16 : 19,
+                FontSize = bestIcon,
                 Foreground = Theme.Text,
                 HorizontalAlignment = HorizontalAlignment.Center,
+                FlowDirection = System.Windows.FlowDirection.LeftToRight,
                 Margin = new Thickness(0, 0, 0, isCategory ? 3 : 4),
             });
         }
-        panel.Children.Add(new TextBlock
+        panel.Children.Add(TitleBlock(op.Label, bestTitle, flow, maxWidth));
+        if (bestSubtitle && subtitleText is not null)
         {
-            Text = op.Label,
-            FontFamily = Theme.DisplayFont,
-            FontSize = isFormat ? 19 : compact ? 11.5 : 13,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Theme.Text,
-            TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
-            HorizontalAlignment = HorizontalAlignment.Center,
-        });
-        if (!compact && !isCategory && !string.IsNullOrEmpty(op.Subtitle))
-        {
-            panel.Children.Add(new TextBlock
-            {
-                Text = op.Subtitle,
-                Tag = "subtitle",
-                FontSize = 10.5,
-                Foreground = Theme.Muted,
-                TextAlignment = TextAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 1, 0, 0),
-            });
+            var block = LabelText(subtitleText, subtitle.FontSize, FontWeights.Normal, subtitleFlow, TextWrapping.NoWrap);
+            block.Tag = "subtitle";
+            block.Foreground = Theme.Muted;
+            block.HorizontalAlignment = HorizontalAlignment.Center;
+            block.MaxWidth = maxWidth;
+            block.MaxHeight = subtitle.MaxHeight;
+            block.Margin = new Thickness(0, 1, 0, 0);
+            panel.Children.Add(block);
         }
         if (isCategory)
         {
@@ -2124,52 +2590,93 @@ internal sealed class WheelWindow : Window
                 FontSize = 10,
                 Foreground = Theme.Muted,
                 HorizontalAlignment = HorizontalAlignment.Center,
+                FlowDirection = System.Windows.FlowDirection.LeftToRight,
                 Margin = new Thickness(0, 1, 0, 0),
             });
         }
         return panel;
     }
 
-    private static StackPanel InnerLabel(InnerChoice choice, double textWidth)
+    private static IEnumerable<double> IconSizes(bool hasIcon, double max, double min)
     {
+        if (!hasIcon)
+        {
+            yield return 0;
+            yield break;
+        }
+        yield return max;
+        var middle = (max + min) / 2;
+        if (middle > min + 0.001)
+            yield return middle;
+        yield return min;
+        // The icon is decoration; dropping it frees a whole line of height on a narrow slice and is
+        // always preferable to ellipsizing the tool name.
+        yield return 0;
+    }
+
+    private static TextBlock TitleBlock(string text, LabelTextFit fit, FlowDirection flow, double maxWidth)
+    {
+        var block = LabelText(text, fit.FontSize, FontWeights.SemiBold, flow,
+            fit.Lines > 1 ? TextWrapping.Wrap : TextWrapping.NoWrap);
+        block.Foreground = Theme.Text;
+        block.HorizontalAlignment = HorizontalAlignment.Center;
+        block.MaxWidth = maxWidth;
+        if (!double.IsPositiveInfinity(fit.MaxHeight))
+            block.MaxHeight = fit.MaxHeight;
+        return block;
+    }
+
+    /// <summary>One inner label: the same measurement/fitting path, with the inner ring's own type scale.</summary>
+    internal static StackPanel InnerLabel(InnerChoice choice, double maxWidth, double maxHeight)
+    {
+        // "+n" is language-neutral. LTR keeps the plus before the number in Arabic instead of mirroring it
+        // to "7+", which reads like subtraction; the same rule keeps "1920 px" and "TAR.GZ" intact.
+        var text = choice.IsMore ? "+" + choice.Hidden : InnerLabelText(choice.Operation!);
+        var flow = LabelFlow(text);
+        var fit = FitLabelText(text, maxWidth, maxHeight,
+            choice.IsMore ? MoreMaxFont : InnerMaxFont,
+            choice.IsMore ? MoreMinFont : InnerMinFont,
+            choice.IsMore ? 1 : InnerLabelMaxLines,
+            FontWeights.SemiBold, flow);
         var panel = new StackPanel
         {
-            MaxWidth = InnerLabelWidth,
+            MaxWidth = maxWidth,
             IsHitTestVisible = false,
-            FlowDirection = LanguageManager.FlowDirection,
+            FlowDirection = flow,
         };
-        if (choice.IsMore)
-        {
-            // "+n" is language-neutral and says exactly how many siblings the next page holds.
-            panel.Children.Add(new TextBlock
-            {
-                Text = "+" + choice.Hidden,
-                FontFamily = Theme.DisplayFont,
-                FontSize = 14,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Theme.Muted,
-                TextAlignment = TextAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center,
-            });
-            return panel;
-        }
-        var op = choice.Operation!;
-        panel.Children.Add(new TextBlock
-        {
-            Text = InnerLabelText(op),
-            Width = textWidth,
-            FontFamily = Theme.DisplayFont,
-            FontSize = 10.5,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Theme.Text,
-            TextAlignment = TextAlignment.Center,
-            // One line, trimmed with an ellipsis: the label layer clips to the slice, so a long name can
-            // never run into a neighbour or out of the ring.
-            TextWrapping = TextWrapping.NoWrap,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            HorizontalAlignment = HorizontalAlignment.Center,
-        });
+        var block = TitleBlock(text, fit, flow, maxWidth);
+        block.Foreground = choice.IsMore ? Theme.Muted : Theme.Text;
+        panel.Children.Add(block);
         return panel;
+    }
+
+    /// <summary>Builds one inner label, widening the box once its measured height is known.</summary>
+    private static StackPanel BuildInnerLabel(InnerChoice choice, int count, int index)
+    {
+        StackPanel? safe = null;
+        StackPanel? best = null;
+        TextBlock? bestTitle = null;
+        var top = InnerLabelMaxHeight - LabelBuildMargin;
+        for (var budget = top; budget >= 12; budget -= 4)
+        {
+            var width = Math.Min(InnerLabelWidth,
+                MaxLabelWidth(count, index, InnerInnerRadius, InnerOuterRadius, InnerLabelRadius,
+                    Math.Min(InnerLabelMaxHeight, budget + LabelBuildMargin)));
+            var panel = InnerLabel(choice, width, budget);
+            panel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            safe ??= panel;
+            var title = panel.Children.OfType<TextBlock>().FirstOrDefault();
+            if (title is not null
+                && panel.DesiredSize.Height <= InnerLabelMaxHeight + 0.05
+                && LabelBoxFits(count, index, InnerInnerRadius, InnerOuterRadius, InnerLabelRadius,
+                    panel.DesiredSize.Width, panel.DesiredSize.Height)
+                && BetterLabel(panel, title, ref best, ref bestTitle))
+            {
+                best = panel;
+                bestTitle = title;
+            }
+        }
+        return best ?? safe ?? InnerLabel(choice, InnerSliceLabelWidth(count, index), InnerLabelMaxHeight);
     }
 
     /// <summary>

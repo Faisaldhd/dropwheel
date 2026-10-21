@@ -22,8 +22,7 @@ internal sealed class VideoEditPreview : IDisposable
     /// <summary>Still frames are decoded to at most 960 px on the long side.</summary>
     private const int DecodeLongSide = 960;
 
-    private static readonly HashSet<string> PlayableFormats =
-        new(StringComparer.OrdinalIgnoreCase) { "mp4", "mov", "m4v", "wmv", "avi" };
+
 
     private readonly FileItem _item;
     private readonly string _keyPrefix;
@@ -291,9 +290,12 @@ internal sealed class VideoEditPreview : IDisposable
         return available;
     }
 
-    /// <summary>True when the format is one WPF Media Foundation may open; used by tests too.</summary>
-    internal static bool IsPlayableFormat(string? format) =>
-        format is not null && PlayableFormats.Contains(format);
+    /// <summary>
+    /// Every video format gets a play control. Windows Media Foundation may still refuse a codec; the
+    /// button then hides and the existing scrub-only note explains why. We no longer pre-hide the button
+    /// for MKV/WebM/FLV, because a format list cannot predict the codecs the machine has installed.
+    /// </summary>
+    internal static bool IsPlayableFormat(string? format) => !string.IsNullOrWhiteSpace(format);
 
     /// <summary>Shown only after the preview has a probe result and a first frame.</summary>
     private void ShowPlaybackControl()
@@ -309,7 +311,7 @@ internal sealed class VideoEditPreview : IDisposable
     /// <summary>The shared button's first click opens the player lazily; later clicks only toggle.</summary>
     private async Task ToggleFromControlAsync()
     {
-        if (_disposed || _externalPlayback || _playbackUnavailable || Info is null)
+        if (_disposed || _externalPlayback || _playbackUnavailable || _openingPlayback || Info is null)
             return;
 
         if (_player is null)
