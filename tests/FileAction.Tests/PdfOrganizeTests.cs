@@ -153,6 +153,77 @@ public class PdfOrganizeTests
         Assert.Equal(new[] { PdfPlanProblem.MissingPath }, plan.Validate().Problems);
     }
 
+    // ---------------------------------------------------------------- merge page ranges
+
+    [Fact]
+    public void Merge_page_range_moves_with_its_file()
+    {
+        var plan = new PdfMergePlan([Pdf("a.pdf"), Pdf("b.pdf"), Pdf("c.pdf")]);
+        plan.Sources[0].PageRange = "2-3";
+
+        plan.Move(0, 2);
+
+        Assert.Equal("2-3", plan.Sources[2].PageRange);
+        Assert.Equal("", plan.Sources[0].PageRange);
+        Assert.Equal("", plan.Sources[1].PageRange);
+    }
+
+    [Fact]
+    public void Merge_reset_restores_the_order_but_keeps_each_page_range()
+    {
+        var plan = new PdfMergePlan([Pdf("a.pdf"), Pdf("b.pdf"), Pdf("c.pdf")]);
+        plan.Sources[2].PageRange = "4-5";
+        plan.Move(2, 0);
+
+        plan.Reset();
+
+        Assert.Equal(new[] { "a.pdf", "b.pdf", "c.pdf" }, Names(plan));
+        Assert.Equal("4-5", plan.Sources[2].PageRange);
+    }
+
+    [Fact]
+    public void Merge_validate_flags_a_malformed_page_range()
+    {
+        var plan = new PdfMergePlan([Pdf("a.pdf")]);
+        plan.Sources[0].PageRange = "second";
+
+        Assert.Equal(new[] { PdfPlanProblem.PageRangeInvalid }, plan.Validate().Problems);
+        Assert.Same(plan.Sources[0], plan.FirstInvalidPageRange());
+    }
+
+    [Fact]
+    public void Merge_validate_checks_a_range_against_a_known_page_count()
+    {
+        var plan = new PdfMergePlan([Pdf("a.pdf"), Pdf("b.pdf")]);
+        plan.Sources[0].PageRange = "1-3";
+        plan.Sources[1].PageRange = "2";
+        var counts = new Dictionary<string, int>
+        {
+            [plan.Sources[0].Path] = 2,
+            [plan.Sources[1].Path] = 4,
+        };
+
+        Assert.Contains(PdfPlanProblem.PageRangeInvalid, plan.Validate(counts).Problems);
+        Assert.Same(plan.Sources[0], plan.FirstInvalidPageRange(counts));
+
+        plan.Sources[0].PageRange = "2";
+        Assert.True(plan.Validate(counts).IsValid);
+        Assert.Null(plan.FirstInvalidPageRange(counts));
+
+        // A file whose count could not be probed is left to the writer.
+        Assert.True(plan.Validate(new Dictionary<string, int>()).IsValid);
+    }
+
+    [Fact]
+    public void Merge_ignores_page_ranges_on_images()
+    {
+        var plan = new PdfMergePlan([Image("scan.png")]);
+        plan.Sources[0].PageRange = "not a range";
+
+        Assert.True(plan.Validate(new Dictionary<string, int>()).IsValid);
+        Assert.Null(plan.FirstInvalidPageRange());
+    }
+
     // ---------------------------------------------------------------- page plan
 
     [Fact]
@@ -405,7 +476,10 @@ public class PdfOrganizeTests
         "tool.pdfmerge.error.plan",
         "tool.pdfmerge.error.pdf",
         "tool.pdfmerge.error.image",
+        "tool.pdfmerge.error.range",
         "tool.pdfmerge.order",
+        "tool.pdfmerge.pages",
+        "tool.pdfmerge.pagesHint",
         "tool.pdfmerge.moveUp",
         "tool.pdfmerge.moveDown",
         "tool.pdfmerge.merge",

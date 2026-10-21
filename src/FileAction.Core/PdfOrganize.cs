@@ -59,6 +59,13 @@ public sealed record PdfMergeSource(string Path, PdfPlanKind Kind)
     public string FileName => System.IO.Path.GetFileName(Path);
 
     public bool IsImage => Kind == PdfPlanKind.Image;
+
+    /// <summary>
+    /// The pages this file contributes, as typed in the merge window ("1-3, 5"); empty means every page.
+    /// Only PDFs use it. It is editable in place so the range stays attached to the same file across row
+    /// moves and <see cref="PdfMergePlan.Reset"/>, which only restores the order.
+    /// </summary>
+    public string PageRange { get; set; } = "";
 }
 
 /// <summary>
@@ -89,6 +96,9 @@ public enum PdfPlanProblem
 
     /// <summary>A page rotation is not a multiple of 90 degrees.</summary>
     RotationNotAQuarterTurn,
+
+    /// <summary>A typed merge page range is malformed or names a page outside the document.</summary>
+    PageRangeInvalid,
 }
 
 /// <summary>The problems found in a plan; empty means the plan can be written.</summary>
@@ -167,7 +177,14 @@ public sealed class PdfMergePlan
         _sources.AddRange(_initial);
     }
 
-    public PdfPlanValidation Validate()
+    public PdfPlanValidation Validate() => Validate(null);
+
+    /// <summary>
+    /// Checks the plan. A malformed page range is always reported; when <paramref name="pageCounts"/> has
+    /// a count for a PDF, a range that names a page beyond that document is reported too. A file whose
+    /// count could not be probed is skipped here because the writer checks the real count again.
+    /// </summary>
+    public PdfPlanValidation Validate(IReadOnlyDictionary<string, int>? pageCounts)
     {
         if (_sources.Count == 0)
             return PdfPlanValidation.Of([PdfPlanProblem.NoSources]);
@@ -175,7 +192,41 @@ public sealed class PdfMergePlan
         var problems = new List<PdfPlanProblem>();
         if (_sources.Any(source => string.IsNullOrWhiteSpace(source.Path)))
             problems.Add(PdfPlanProblem.MissingPath);
-        return PdfPlanValidation.Of(problems);
+
+        foreach (var source in _sources)
+        {
+            if (source.IsImage)
+                continue;
+            if (!PdfPageSelection.TryParse(source.PageRange, out var selection))
+            {
+                problems.Add(PdfPlanProblem.PageRangeInvalid);
+                continue;
+            }
+            if (pageCounts is not null && pageCounts.TryGetValue(source.Path, out var pageCount)
+                && !selection.Fits(pageCount))
+                problems.Add(PdfPlanProblem.PageRangeInvalid);
+        }
+
+        return PdfPlanValidation.Of(problems.Distinct().Order().ToList());
+    }
+
+    /// <summary>
+    /// The first PDF whose typed range is malformed or, when its count is known, outside the document;
+    /// null when every range is usable. The window uses it to name the file in the error message.
+    /// </summary>
+    public PdfMergeSource? FirstInvalidPageRange(IReadOnlyDictionary<string, int>? pageCounts = null)
+    {
+        foreach (var source in _sources)
+        {
+            if (source.IsImage)
+                continue;
+            if (!PdfPageSelection.TryParse(source.PageRange, out var selection))
+                return source;
+            if (pageCounts is not null && pageCounts.TryGetValue(source.Path, out var pageCount)
+                && !selection.Fits(pageCount))
+                return source;
+        }
+        return null;
     }
 }
 
