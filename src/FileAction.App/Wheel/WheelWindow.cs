@@ -640,6 +640,13 @@ internal sealed class WheelWindow : Window
         ResetCanvasPose();
         CancelDwell();
         SettleInner();
+        // The website/preview shot of a category should show the inner ring, not the empty gap the
+        // dwell leaves behind. Build it at its settled pose; no timers or storyboards survive capture.
+        if (highlight >= 0 && highlight < _ops.Count && _ops[highlight] is WheelGroupOperation)
+        {
+            OpenInner(highlight, SliceAngle(highlight, _ops.Count));
+            SettleInner();
+        }
         _canvas.LayoutTransform = Transform.Identity;
         SettleSlices();
         if (highlight >= 0 && highlight < _ops.Count)
