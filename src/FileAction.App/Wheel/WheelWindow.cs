@@ -1976,9 +1976,17 @@ internal sealed class WheelWindow : Window
             return panel;
         }
         var op = choice.Operation!;
+        // Rotate left/right share the same short label; on a narrow inner slice the shared label is
+        // clipped to "Rotate" and the two choices become indistinguishable. Keep the direction.
+        var label = op.Id switch
+        {
+            "image.rotate.right" => "Rotate R",
+            "image.rotate.left" => "Rotate L",
+            _ => op.Label,
+        };
         panel.Children.Add(new TextBlock
         {
-            Text = op.Label,
+            Text = label,
             FontFamily = Theme.DisplayFont,
             FontSize = 10.5,
             FontWeight = FontWeights.SemiBold,
