@@ -22,6 +22,55 @@ internal enum WheelMode
     Click,
 }
 
+/// <summary>
+/// The way back from a category sub-wheel. Every category is one level deep in practice, but the trail
+/// keeps a real stack so a future nested group cannot strand the user. A frame records the view it
+/// replaces, the slice that opened the child (for the return highlight) and the angle of that slice
+/// (so the parent disc can grow back out of the slice the user came from).
+/// </summary>
+internal sealed class WheelTrail
+{
+    internal readonly record struct Frame(WheelKind Wheel, int Highlight, bool Repeat, string? GroupId, double OriginAngle);
+
+    private readonly List<Frame> _frames = [];
+
+    /// <summary>The category currently open, or null when the main wheel is showing.</summary>
+    public string? GroupId { get; private set; }
+
+    public bool InSubWheel => _frames.Count > 0;
+
+    public int Depth => _frames.Count;
+
+    /// <summary>The frame <see cref="Back"/> would restore, without leaving the sub-wheel.</summary>
+    public Frame? Parent => _frames.Count == 0 ? null : _frames[^1];
+
+    /// <summary>Enters <paramref name="groupId"/> and remembers the view it replaces.</summary>
+    public Frame Enter(WheelKind wheel, int highlight, bool repeat, string groupId, double originAngle)
+    {
+        var frame = new Frame(wheel, highlight, repeat, GroupId, originAngle);
+        _frames.Add(frame);
+        GroupId = groupId;
+        return frame;
+    }
+
+    /// <summary>Restores the parent view; null when the main wheel is already showing.</summary>
+    public Frame? Back()
+    {
+        if (_frames.Count == 0)
+            return null;
+        var frame = _frames[^1];
+        _frames.RemoveAt(_frames.Count - 1);
+        GroupId = frame.GroupId;
+        return frame;
+    }
+
+    public void Reset()
+    {
+        _frames.Clear();
+        GroupId = null;
+    }
+}
+
 /// <summary>The radial menu. One instance per appearance.</summary>
 internal sealed class WheelWindow : Window
 {
@@ -59,6 +108,8 @@ internal sealed class WheelWindow : Window
     private readonly Border _tabTrack = new() { CornerRadius = new CornerRadius(10), Padding = new Thickness(2), HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
     private readonly StackPanel _hubContent = new() { Width = InnerRadius * 1.75 };
     private Action? _afterClose;
+    private readonly WheelTrail _trail = new();
+    private Storyboard? _reveal;
 
     private IReadOnlyList<FileItem> _items;
     private IReadOnlyList<Operation> _ops = [];
@@ -71,6 +122,7 @@ internal sealed class WheelWindow : Window
     private bool _closing;
     private int _pressed = -1;
     private double _fit = 1.0;
+    private double? _revealFrom;
     private DispatcherTimer? _closeTimer;
 
     public WheelWindow(
@@ -179,16 +231,39 @@ internal sealed class WheelWindow : Window
     /// <summary>Runs the last operation again with the values it used last time.</summary>
     public Action<IReadOnlyList<FileItem>>? RunRepeat { get; init; }
 
-    /// <summary>Opens the chooser for a grouped parent slice; groups are never dispatched themselves.</summary>
-    public Action<WheelGroupOperation, IReadOnlyList<FileItem>>? OpenGroup { get; init; }
+    /// <summary>
+    /// Opens the chooser after a group parent was dropped on. Clicks enter the category in this window;
+    /// a drop has already closed it, so the controller re-opens a seeded sub-wheel at the same anchor.
+    /// The parent index and slice angle let the new sub-wheel grow out of the slice that was dropped on.
+    /// </summary>
+    public Action<WheelGroupOperation, IReadOnlyList<FileItem>, int, double>? OpenGroup { get; init; }
 
     public bool IsFinished => _finished;
 
     private IntPtr Handle => new WindowInteropHelper(this).Handle;
 
-    public void ShowAt(Win32.POINT screenPoint)
+    /// <summary>
+    /// Shows the wheel. A category id seeds the same window directly in its sub-wheel (used after a drop
+    /// closed the parent); the main wheel then remains one Escape away, with the same anchor and items.
+    /// </summary>
+    public void ShowAt(Win32.POINT screenPoint, string? groupId = null, int parentIndex = -1,
+        double? revealFromAngle = null)
     {
         _anchor = screenPoint;
+        _revealFrom = revealFromAngle;
+        if (groupId is not null)
+        {
+            var index = parentIndex >= 0 ? parentIndex : GroupIndex(_ops, groupId);
+            if (index >= 0)
+            {
+                var angle = revealFromAngle ?? SliceAngle(index, _ops.Count);
+                _trail.Enter(_wheel, index, _repeat, groupId, angle);
+                _revealFrom = angle;
+                LoadOperations();
+                Build();
+            }
+        }
+
         Show();
         FitToWorkArea();
         PositionAtAnchor();
@@ -197,6 +272,9 @@ internal sealed class WheelWindow : Window
         Dispatcher.BeginInvoke(PositionAtAnchor);
         if (Motion.Enabled)
         {
+            // A seeded sub-wheel grows out of the parent slice instead of out of the disc centre.
+            if (_revealFrom is { } reveal)
+                SetCanvasScaleOrigin(reveal);
             Motion.Play(Motion.OpenWheel(this, _canvas, _motion), this);
         }
         else
@@ -204,7 +282,7 @@ internal sealed class WheelWindow : Window
             Motion.Release(_canvas, _motion);
             Opacity = 1;
         }
-        AnimateSlicesIn();
+        AnimateSlicesIn(_revealFrom);
 
         if (Mode == WheelMode.Click)
         {
@@ -272,6 +350,7 @@ internal sealed class WheelWindow : Window
             return;
         ApplyView(() =>
         {
+            _trail.Reset();
             _wheel = wheel;
             _repeat = false;
         });
@@ -287,12 +366,17 @@ internal sealed class WheelWindow : Window
             SwitchTo(_wheel);
             return;
         }
-        ApplyView(() => _repeat = true);
+        ApplyView(() =>
+        {
+            _trail.Reset();
+            _repeat = true;
+        });
     }
 
     /// <summary>
     /// Re-renders the open wheel after a live language switch. The slice geometry is untouched:
-    /// only the labels, hub and tabs are rebuilt, and the current highlight is kept.
+    /// only the labels, hub and tabs are rebuilt, and the current highlight is kept. Inside a category
+    /// the children are looked up again, so the sub-wheel follows the language too.
     /// </summary>
     public void Relocalize()
     {
@@ -308,10 +392,51 @@ internal sealed class WheelWindow : Window
     }
 
     /// <summary>
-    /// Rebuilds the wheel's content. With motion on, the disc fades to 25 % and leans 4° while the mode
-    /// changes, then fades back: a fade-through with a rotate, 170 ms in total (budget ≤ 180 ms).
+    /// Opens a category as a sub-wheel in the same window. The parent disc fades out and the children
+    /// grow from the parent slice's point on the ring, so the chooser reads as coming out of the slice
+    /// that was clicked. Only <see cref="_trail"/> changes; the anchor and items stay where they are.
     /// </summary>
-    private void ApplyView(Action mutate, Action? after = null, bool selectFirst = true)
+    private void EnterGroup(int index)
+    {
+        if (_finished || _switching || index < 0 || index >= _ops.Count || _ops[index] is not WheelGroupOperation group)
+            return;
+        var angle = SliceAngle(index, _ops.Count);
+        ApplyView(() =>
+        {
+            _trail.Enter(_wheel, index, _repeat, group.GroupId, angle);
+            _wheel = group.Wheel;
+            _repeat = false;
+        }, selectFirst: true, revealFrom: angle);
+    }
+
+    /// <summary>
+    /// Escape in a sub-wheel: fade the children out and grow the parent disc back from the same slice,
+    /// with that slice selected again. The window, anchor and items are untouched, so this is a return
+    /// rather than a close/reopen.
+    /// </summary>
+    public void Back()
+    {
+        if (_finished || _switching || _trail.Parent is not { } parent)
+            return;
+        ApplyView(() =>
+        {
+            if (_trail.Back() is not { } step)
+                return;
+            _wheel = step.Wheel;
+            _repeat = step.Repeat;
+        }, () =>
+        {
+            if (!_finished && _ops.Count > 0)
+                SetHighlight(Math.Clamp(parent.Highlight, 0, _ops.Count - 1));
+        }, selectFirst: false, revealFrom: parent.OriginAngle);
+    }
+
+    /// <summary>
+    /// Rebuilds the wheel's content. With motion on, the disc fades to 25 % and leans 4° while the view
+    /// changes, then fades back: a fade-through with a rotate, 170 ms in total (budget ≤ 180 ms). A
+    /// sub-wheel adds a scale from the parent slice's point, so the new ring grows out of that slice.
+    /// </summary>
+    private void ApplyView(Action mutate, Action? after = null, bool selectFirst = true, double? revealFrom = null)
     {
         if (Motion.Enabled && IsVisible && !_finished)
         {
@@ -322,41 +447,43 @@ internal sealed class WheelWindow : Window
             {
                 if (_finished)
                     return;
-                CommitView(mutate, after, selectFirst);
+                CommitView(mutate, after, selectFirst, revealFrom);
+                var origin = revealFrom is { } angle ? SlicePoint(angle) : (Point?)null;
                 AnimateCanvas(1, 0, Motion.SwitchMs * 0.6, Motion.EaseOut, () =>
                 {
                     _switching = false;
-                    _canvas.BeginAnimation(OpacityProperty, null);
-                    _canvas.Opacity = 1;
-                    _canvasRotate.BeginAnimation(RotateTransform.AngleProperty, null);
-                    _canvasRotate.Angle = 0;
-                });
+                    ResetCanvasPose();
+                }, origin is null ? null : SubWheelScaleFrom, origin);
             });
             return;
         }
 
         if (_switching)
             CancelSwitch();
-        CommitView(mutate, after, selectFirst);
-        _canvas.Opacity = 1;
-        _canvasRotate.Angle = 0;
+        CommitView(mutate, after, selectFirst, revealFrom);
+        ResetCanvasPose();
     }
 
-    private void CommitView(Action mutate, Action? after, bool selectFirst)
+    /// <summary>Scale a sub-wheel opens from, about the parent slice's point.</summary>
+    private const double SubWheelScaleFrom = 0.3;
+
+    private void CommitView(Action mutate, Action? after, bool selectFirst, double? revealFrom)
     {
         mutate();
         LoadOperations();
         Build();
-        AnimateSlicesIn();
+        AnimateSlicesIn(revealFrom);
         after?.Invoke();
         if (selectFirst && Mode == WheelMode.Click && _ops.Count > 0)
             SetHighlight(0);
     }
 
-    private void AnimateCanvas(double opacity, double angle, double milliseconds, IEasingFunction ease, Action? completed)
+    private void AnimateCanvas(double opacity, double angle, double milliseconds, IEasingFunction ease, Action? completed,
+        double? scaleFrom = null, Point? scaleOrigin = null)
     {
+        var duration = TimeSpan.FromMilliseconds(milliseconds);
         var storyboard = new Storyboard();
-        var fade = new DoubleAnimation(_canvas.Opacity, opacity, TimeSpan.FromMilliseconds(milliseconds))
+        var fade = new DoubleAnimation(_canvas.Opacity, opacity, duration)
         {
             EasingFunction = ease,
             FillBehavior = FillBehavior.HoldEnd,
@@ -364,7 +491,7 @@ internal sealed class WheelWindow : Window
         Storyboard.SetTarget(fade, _canvas);
         Storyboard.SetTargetProperty(fade, new PropertyPath(UIElement.OpacityProperty));
         storyboard.Children.Add(fade);
-        var rotate = new DoubleAnimation(_canvasRotate.Angle, angle, TimeSpan.FromMilliseconds(milliseconds))
+        var rotate = new DoubleAnimation(_canvasRotate.Angle, angle, duration)
         {
             EasingFunction = ease,
             FillBehavior = FillBehavior.HoldEnd,
@@ -372,6 +499,23 @@ internal sealed class WheelWindow : Window
         Storyboard.SetTarget(rotate, _canvasRotate);
         Storyboard.SetTargetProperty(rotate, new PropertyPath(RotateTransform.AngleProperty));
         storyboard.Children.Add(rotate);
+        if (scaleFrom is { } from && scaleOrigin is { } origin)
+        {
+            // The canvas already has a RenderTransformOrigin at its centre, so shift the ScaleTransform
+            // centre by the same amount: the effective fixed point is then exactly the parent slice.
+            _canvasScale.CenterX = origin.X - Size / 2;
+            _canvasScale.CenterY = origin.Y - Size / 2;
+            _canvasScale.ScaleX = 1;
+            _canvasScale.ScaleY = 1;
+            var scaleX = new DoubleAnimation(from, 1, duration) { EasingFunction = ease, FillBehavior = FillBehavior.HoldEnd };
+            Storyboard.SetTarget(scaleX, _canvasScale);
+            Storyboard.SetTargetProperty(scaleX, new PropertyPath(ScaleTransform.ScaleXProperty));
+            storyboard.Children.Add(scaleX);
+            var scaleY = new DoubleAnimation(from, 1, duration) { EasingFunction = ease, FillBehavior = FillBehavior.HoldEnd };
+            Storyboard.SetTarget(scaleY, _canvasScale);
+            Storyboard.SetTargetProperty(scaleY, new PropertyPath(ScaleTransform.ScaleYProperty));
+            storyboard.Children.Add(scaleY);
+        }
         if (completed is not null)
             storyboard.Completed += (_, _) => completed();
         storyboard.Begin(_canvas);
@@ -380,10 +524,22 @@ internal sealed class WheelWindow : Window
     private void CancelSwitch()
     {
         _switching = false;
+        ResetCanvasPose();
+    }
+
+    /// <summary>Stops every canvas pose clock and returns the disc to its resting transform.</summary>
+    private void ResetCanvasPose()
+    {
         _canvas.BeginAnimation(OpacityProperty, null);
         _canvas.Opacity = 1;
         _canvasRotate.BeginAnimation(RotateTransform.AngleProperty, null);
         _canvasRotate.Angle = 0;
+        _canvasScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        _canvasScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        _canvasScale.ScaleX = 1;
+        _canvasScale.ScaleY = 1;
+        _canvasScale.CenterX = 0;
+        _canvasScale.CenterY = 0;
     }
 
     /// <summary>The drag ended somewhere: close unless the drop landed on us.</summary>
@@ -407,6 +563,7 @@ internal sealed class WheelWindow : Window
             return;
         _closing = true;
         CancelSwitch();
+        ReleaseReveal();
         if (!Motion.Enabled || !IsVisible || Dispatcher.HasShutdownStarted)
         {
             Close();
@@ -438,25 +595,10 @@ internal sealed class WheelWindow : Window
     /// <summary>Renders the wheel to a PNG without showing it (used by --self-test).</summary>
     public void RenderPreview(string file, int highlight)
     {
-        _canvas.BeginAnimation(OpacityProperty, null);
-        _canvas.Opacity = 1;
-        _canvasScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-        _canvasScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-        _canvasScale.ScaleX = 1;
-        _canvasScale.ScaleY = 1;
-        _canvasRotate.BeginAnimation(RotateTransform.AngleProperty, null);
-        _canvasRotate.Angle = 0;
+        ReleaseReveal();
+        ResetCanvasPose();
         _canvas.LayoutTransform = Transform.Identity;
-        foreach (var group in _groups)
-        {
-            // Offscreen rendering doesn't advance animations; show the final state.
-            group.BeginAnimation(OpacityProperty, null);
-            var scale = (ScaleTransform)((TransformGroup)group.RenderTransform).Children[0];
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-            scale.ScaleX = 1;
-            scale.ScaleY = 1;
-        }
+        SettleSlices();
         if (highlight >= 0 && highlight < _ops.Count)
             SetHighlight(highlight);
         Content = null;
@@ -473,19 +615,41 @@ internal sealed class WheelWindow : Window
     /// </summary>
     internal FrameworkElement DetachForCapture()
     {
+        ReleaseReveal();
+        SettleSlices();
         Content = null;
-        foreach (var group in _groups)
-        {
-            group.BeginAnimation(OpacityProperty, null);
-            var scale = (ScaleTransform)((TransformGroup)group.RenderTransform).Children[0];
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-        }
         var root = new Grid { Background = SelfTest.Desktop(), Width = Size, Height = Size, FlowDirection = LanguageManager.FlowDirection };
         root.Children.Add(_canvas);
         _canvas.HorizontalAlignment = HorizontalAlignment.Center;
         _canvas.VerticalAlignment = VerticalAlignment.Center;
         return root;
+    }
+
+    /// <summary>
+    /// Shows the slices at their final pose, with no animation clock left behind. The selected slice keeps
+    /// its 7 px pop-out: the reveal completion must not pull the highlight back under the pointer.
+    /// </summary>
+    private void SettleSlices()
+    {
+        var count = _ops.Count;
+        for (var i = 0; i < _groups.Count; i++)
+        {
+            var group = _groups[i];
+            group.BeginAnimation(OpacityProperty, null);
+            group.Opacity = 1;
+            var scale = (ScaleTransform)((TransformGroup)group.RenderTransform).Children[0];
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            scale.ScaleX = 1;
+            scale.ScaleY = 1;
+            var move = (TranslateTransform)((TransformGroup)group.RenderTransform).Children[1];
+            move.BeginAnimation(TranslateTransform.XProperty, null);
+            move.BeginAnimation(TranslateTransform.YProperty, null);
+            var distance = i == _highlight && count > 1 ? PopOut : 0;
+            var angle = count <= 1 ? 0 : i * 360.0 / count * Math.PI / 180;
+            move.X = distance * Math.Sin(angle);
+            move.Y = -distance * Math.Cos(angle);
+        }
     }
 
     /// <summary>
@@ -500,6 +664,8 @@ internal sealed class WheelWindow : Window
         var closeEase = Motion.EaseIn.Ease(close);
         var settled = Motion.Settle.Ease(open);
         var scale = (Motion.WheelScaleFrom + (1 - Motion.WheelScaleFrom) * settled) * (1 - 0.035 * closeEase);
+        _canvasScale.CenterX = 0;
+        _canvasScale.CenterY = 0;
         _canvasScale.ScaleX = scale;
         _canvasScale.ScaleY = scale;
         _canvas.Opacity = Motion.SoftOut.Ease(open) * (1 - closeEase);
@@ -539,10 +705,86 @@ internal sealed class WheelWindow : Window
 
     private void LoadOperations()
     {
-        _ops = _items.Count == 0 ? []
+        var root = _items.Count == 0 ? []
             : _repeat ? (LastOperation?.Invoke(_items) is { } last ? [last] : [])
             : _source(_wheel, _items);
+        _ops = Project(root, _trail.GroupId, out var found);
+        if (!found)
+            _trail.Reset();
         _highlight = -1;
+    }
+
+    /// <summary>
+    /// The slices a view shows: the wheel's own slices, or one category's children. Extracted so the
+    /// trail can be checked without a window (and so relocalizing re-resolves the same category).
+    /// </summary>
+    internal static IReadOnlyList<Operation> Project(IReadOnlyList<Operation> root, string? groupId, out bool found)
+    {
+        found = groupId is null;
+        if (groupId is null)
+            return root;
+        if (root.OfType<WheelGroupOperation>().FirstOrDefault(group => group.GroupId == groupId) is { } group)
+        {
+            found = true;
+            return group.Children;
+        }
+        return root;
+    }
+
+    private static int GroupIndex(IReadOnlyList<Operation> ops, string groupId)
+    {
+        for (var i = 0; i < ops.Count; i++)
+        {
+            if (ops[i] is WheelGroupOperation group && group.GroupId == groupId)
+                return i;
+        }
+        return -1;
+    }
+
+    /// <summary>The centre angle of slice <paramref name="index"/>, clockwise from 12 o'clock.</summary>
+    internal static double SliceAngle(int index, int count) => count <= 0 ? 0 : index * 360.0 / count;
+
+    /// <summary>
+    /// The order the slices reveal in. Without an origin the reveal runs clockwise from the top (the
+    /// authored order). A sub-wheel starts at the parent slice's angle and sweeps clockwise, so the
+    /// children visibly grow out of the slice that was chosen.
+    /// </summary>
+    internal static int[] RevealOrder(int count, double? fromAngle)
+    {
+        var order = Enumerable.Range(0, Math.Max(0, count)).ToArray();
+        if (fromAngle is not { } origin || count < 2)
+            return order;
+        return order
+            .OrderBy(index => ((SliceAngle(index, count) - origin) % 360 + 360) % 360)
+            .ThenBy(index => index)
+            .ToArray();
+    }
+
+    /// <summary>The point at the middle of the ring at <paramref name="angle"/>.</summary>
+    private static Point SlicePoint(double angle) => Polar((InnerRadius + OuterRadius) / 2, angle);
+
+    /// <summary>Puts the canvas scale's effective fixed point on the parent slice.</summary>
+    private void SetCanvasScaleOrigin(double angle)
+    {
+        var point = SlicePoint(angle);
+        _canvasScale.CenterX = point.X - Size / 2;
+        _canvasScale.CenterY = point.Y - Size / 2;
+    }
+
+    private void ReleaseReveal()
+    {
+        var storyboard = _reveal;
+        _reveal = null;
+        if (storyboard is null)
+            return;
+        try
+        {
+            storyboard.Stop(_canvas);
+        }
+        catch (InvalidOperationException)
+        {
+            // Already completed or never started: nothing is holding a clock.
+        }
     }
 
 
@@ -586,6 +828,7 @@ internal sealed class WheelWindow : Window
         e.Effects = op is null ? DragDropEffects.None : SafeEffect(e.AllowedEffects);
         // Virtual files and images can only be read while the drop is in progress.
         var content = op is null ? null : DropContent.Read(e.Data, materialize: true);
+        var parentAngle = SliceAngle(Math.Max(0, index), _ops.Count);
         Finish();
         if (op is not null && content is { Items.Count: > 0 })
         {
@@ -603,7 +846,7 @@ internal sealed class WheelWindow : Window
                     return;
                 }
                 if (op is WheelGroupOperation group)
-                    OpenGroup?.Invoke(group, content.Items);
+                    OpenGroup?.Invoke(group, content.Items, index, parentAngle);
                 else
                     Dispatch(op, content.Items);
             });
@@ -620,7 +863,13 @@ internal sealed class WheelWindow : Window
         if (index >= 0)
             Run(index);
         else if (inHub)
-            Finish();
+        {
+            // The hub is the way back inside a category; on the main wheel it still closes.
+            if (_trail.InSubWheel)
+                Back();
+            else
+                Finish();
+        }
     }
 
     private void OnKeyDown(object sender, KeyEventArgs e)
@@ -630,7 +879,11 @@ internal sealed class WheelWindow : Window
         switch (key)
         {
             case Key.Escape:
-                Finish();
+                // Inside a category Escape returns to the parent wheel; only the main wheel closes.
+                if (_trail.InSubWheel)
+                    Back();
+                else
+                    Finish();
                 break;
             case Key.Left or Key.Up:
                 Move(-1);
@@ -685,14 +938,11 @@ internal sealed class WheelWindow : Window
     {
         var op = _ops[index];
         var items = _items;
-        if (op is WheelGroupOperation group)
+        if (op is WheelGroupOperation)
         {
-            // Keep the wheel open when there is nothing to open the chooser with, rather than losing the
-            // drop on a parent that cannot expand.
-            if (OpenGroup is { } open)
-            {
-                Finish(() => open(group, items));
-            }
+            // A category never closes the wheel: its children replace the ring in this window, so the
+            // parent is still there behind Escape (same anchor, same items, parent slice highlighted).
+            EnterGroup(index);
             return;
         }
         Finish(() => Dispatch(op, items));
@@ -791,6 +1041,7 @@ internal sealed class WheelWindow : Window
 
     private void Build()
     {
+        ReleaseReveal();
         _canvas.Children.Clear();
         _slices.Clear();
         _labels.Clear();
@@ -845,10 +1096,13 @@ internal sealed class WheelWindow : Window
             Canvas.SetLeft(fit, mid.X - fit.DesiredSize.Width / 2);
             Canvas.SetTop(fit, mid.Y - fit.DesiredSize.Height / 2);
 
-            // Slice and label move together when the slice pops out.
+            // Slice and label move together when the slice pops out. The scale centre is the slice's
+            // inner edge, so opening a slice grows it outwards across the ring instead of shrinking it
+            // towards the middle of the disc.
+            var inner = n == 1 ? new Point(Size / 2, Size / 2) : Polar(InnerRadius, i * step);
             var group = new Canvas { Width = Size, Height = Size };
             var transforms = new TransformGroup();
-            transforms.Children.Add(new ScaleTransform(1, 1, Size / 2, Size / 2));
+            transforms.Children.Add(new ScaleTransform(1, 1, inner.X, inner.Y));
             transforms.Children.Add(new TranslateTransform());
             group.RenderTransform = transforms;
             group.Children.Add(path);
@@ -880,24 +1134,66 @@ internal sealed class WheelWindow : Window
         _canvas.Children.Add(_hubContent);
     }
 
-    /// <summary>Slices grow out of the centre one after another, 18 ms apart.</summary>
-    private void AnimateSlicesIn()
+    /// <summary>Scale a slice opens from; its scale centre sits on the ring's inner edge.</summary>
+    private const double RevealScaleFrom = 0.55;
+
+    /// <summary>
+    /// A real circular reveal: slices are hidden before their turn, then grow outwards and fade in one
+    /// after another around the ring (18 ms apart). A delayed animation leaves the base value visible, so
+    /// the resting opacity must be zero until the clock starts; the storyboard holds the final value and
+    /// is released when it completes. In a category the reveal starts at the parent slice's angle.
+    /// </summary>
+    private void AnimateSlicesIn(double? fromAngle = null)
     {
+        ReleaseReveal();
+        if (_groups.Count == 0)
+            return;
+        if (!Motion.Enabled)
+        {
+            SettleSlices();
+            return;
+        }
+
+        var order = RevealOrder(_groups.Count, fromAngle);
+        var rank = new int[_groups.Count];
+        for (var i = 0; i < order.Length; i++)
+            rank[order[i]] = i;
+
+        var storyboard = new Storyboard();
+        var duration = TimeSpan.FromMilliseconds(Motion.SliceMs);
         for (var i = 0; i < _groups.Count; i++)
         {
-            var scale = (ScaleTransform)((TransformGroup)_groups[i].RenderTransform).Children[0];
-            if (!Motion.Enabled)
-            {
-                _groups[i].BeginAnimation(OpacityProperty, null);
-                _groups[i].Opacity = 1;
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                scale.ScaleX = 1;
-                scale.ScaleY = 1;
-                continue;
-            }
-            Motion.Play(Motion.Stagger(_groups[i], i), _canvas);
+            var group = _groups[i];
+            var scale = (ScaleTransform)((TransformGroup)group.RenderTransform).Children[0];
+            var delay = TimeSpan.FromMilliseconds(rank[i] * Motion.StaggerMs);
+            group.Opacity = 0;
+            scale.ScaleX = 1;
+            scale.ScaleY = 1;
+            Target(storyboard, group, UIElement.OpacityProperty,
+                new DoubleAnimation(0, 1, duration) { BeginTime = delay, EasingFunction = Motion.EaseOut, FillBehavior = FillBehavior.HoldEnd });
+            Target(storyboard, scale, ScaleTransform.ScaleXProperty,
+                new DoubleAnimation(RevealScaleFrom, 1, duration) { BeginTime = delay, EasingFunction = Motion.EaseOut, FillBehavior = FillBehavior.HoldEnd });
+            Target(storyboard, scale, ScaleTransform.ScaleYProperty,
+                new DoubleAnimation(RevealScaleFrom, 1, duration) { BeginTime = delay, EasingFunction = Motion.EaseOut, FillBehavior = FillBehavior.HoldEnd });
         }
+
+        _reveal = storyboard;
+        storyboard.Completed += (_, _) =>
+        {
+            if (!ReferenceEquals(_reveal, storyboard))
+                return;
+            _reveal = null;
+            SettleSlices();
+        };
+        // Controllable so a rebuild/finish can stop the clocks instead of leaving them on removed slices.
+        storyboard.Begin(_canvas, true);
+    }
+
+    private static void Target(Storyboard storyboard, DependencyObject target, DependencyProperty property, Timeline animation)
+    {
+        Storyboard.SetTarget(animation, target);
+        Storyboard.SetTargetProperty(animation, new PropertyPath(property));
+        storyboard.Children.Add(animation);
     }
 
     private static StackPanel SliceLabel(Operation op, bool compact)

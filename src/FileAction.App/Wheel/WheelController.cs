@@ -310,7 +310,8 @@ internal sealed class WheelController
             (op, list, dropTargets) => RunOperation(op, list, dropTargets), targets)
         {
             LastOperation = LastFor,
-            OpenGroup = (group, groupItems) => ShowGroupChooser(group, groupItems, at, targets),
+            OpenGroup = (group, groupItems, parentIndex, parentAngle) =>
+                ShowGroupChooser(group, groupItems, at, targets, parentIndex, parentAngle),
             RunRepeat = repeatItems =>
             {
                 if (LastFor(repeatItems) is { } last)
@@ -328,21 +329,21 @@ internal sealed class WheelController
     }
 
     /// <summary>
-    /// Opens the compact chooser for one grouped parent. It is an ordinary click wheel restricted to the
-    /// group's children, so it inherits the same highlighting, keyboard handling and job/tool dispatch.
+    /// Opens the category chooser after a drop closed the parent. It is a seeded sub-wheel of the same
+    /// window type: the normal wheel source is projected through the category, so Escape returns to the
+    /// main wheel at this anchor and with these items instead of closing everything.
     /// </summary>
     private void ShowGroupChooser(
         WheelGroupOperation group,
         IReadOnlyList<FileItem> items,
         Win32.POINT at,
-        DropTargets targets)
+        DropTargets targets,
+        int parentIndex,
+        double parentAngle)
     {
         if (items.Count == 0)
             return;
-        var window = new WheelWindow(WheelMode.Click, group.Wheel, items, _settings,
-            (_, groupItems) => Operations(group.Wheel, groupItems)
-                .OfType<WheelGroupOperation>()
-                .FirstOrDefault(candidate => candidate.GroupId == group.GroupId)?.Children ?? [],
+        var window = new WheelWindow(WheelMode.Click, group.Wheel, items, _settings, Operations,
             (op, list, dropTargets) => RunOperation(op, list, dropTargets), targets)
         {
             LastOperation = LastFor,
@@ -359,6 +360,6 @@ internal sealed class WheelController
         };
         _wheel = window;
         UpdateDestination(targets.UnderCursor);
-        window.ShowAt(at);
+        window.ShowAt(at, group.GroupId, parentIndex, parentAngle);
     }
 }
