@@ -68,8 +68,10 @@ internal sealed class WheelController
         };
         input.EscapePressed += () =>
         {
+            // In drag mode the wheel never takes focus, so this global hook is its only Escape path.
+            // The window applies the same two-step rule: clear the inner ring first, then close.
             if (_wheel is { IsFinished: false, Mode: WheelMode.Drag } wheel)
-                wheel.Finish();
+                wheel.Escape();
         };
     }
 
@@ -329,9 +331,9 @@ internal sealed class WheelController
     }
 
     /// <summary>
-    /// Opens the category chooser after a drop closed the parent. It is a seeded sub-wheel of the same
-    /// window type: the normal wheel source is projected through the category, so Escape returns to the
-    /// main wheel at this anchor and with these items instead of closing everything.
+    /// Opens the two-ring wheel again after a drop closed it, with this category's inner ring seeded. It
+    /// is the same window type at the same anchor with the same items; the outer ring keeps every
+    /// category, so this is not a view swap. Escape still clears the inner ring before closing.
     /// </summary>
     private void ShowGroupChooser(
         WheelGroupOperation group,
