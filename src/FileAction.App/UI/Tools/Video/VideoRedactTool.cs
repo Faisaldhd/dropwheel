@@ -76,6 +76,25 @@ internal sealed class VideoRedactView
 {
     private const int PreviewDelayMilliseconds = 70;
 
+    /// <summary>The drawn size of a resize handle, and the pointer distance that hits it.</summary>
+    private const double HandleSize = 10;
+    private const double HandleHitRadius = 8;
+
+    /// <summary>A new area must be at least this large on screen so a click is not an accidental box.</summary>
+    private const double MinimumDraftDips = 8;
+
+    private static readonly RedactionHandle[] Handles =
+    [
+        RedactionHandle.TopLeft,
+        RedactionHandle.Top,
+        RedactionHandle.TopRight,
+        RedactionHandle.Right,
+        RedactionHandle.BottomRight,
+        RedactionHandle.Bottom,
+        RedactionHandle.BottomLeft,
+        RedactionHandle.Left,
+    ];
+
     private readonly FileItem _item;
     private readonly DropTargets? _targets;
     private readonly ToolLocator _tools = new();
@@ -107,6 +126,7 @@ internal sealed class VideoRedactView
         IsHitTestVisible = false,
     };
     private readonly List<Rectangle> _areaShapes = [];
+    private readonly List<Border> _handles = [];
     private PillChoice<VideoRedactionStyle> _styleChoice = null!;
     private ColorChoice _colorChoice = null!;
     private Border? _previewCard;
@@ -125,7 +145,11 @@ internal sealed class VideoRedactView
     private double _scale = 1;
     private double _originX;
     private double _originY;
-    private Point? _dragStart;
+    private DragKind _dragKind;
+    private VideoRedactionArea? _dragArea;
+    private RedactionHandle _dragHandle;
+    private Point _dragOrigin;
+    private RedactionBox? _draftBox;
     private bool _syncing;
     private CancellationTokenSource? _seek;
     private CancellationTokenSource? _apply;
@@ -276,9 +300,27 @@ internal sealed class VideoRedactView
         _canvas.FlowDirection = FlowDirection.LeftToRight;
         Panel.SetZIndex(_dragRectangle, 20);
         _canvas.Children.Add(_dragRectangle);
+        foreach (var _ in Handles)
+        {
+            var handle = new Border
+            {
+                Width = HandleSize,
+                Height = HandleSize,
+                CornerRadius = new CornerRadius(2),
+                Background = Theme.Accent,
+                BorderBrush = Theme.TextOnAccent,
+                BorderThickness = new Thickness(1),
+                IsHitTestVisible = false,
+                Visibility = Visibility.Collapsed,
+            };
+            Panel.SetZIndex(handle, 15);
+            _handles.Add(handle);
+            _canvas.Children.Add(handle);
+        }
         _canvas.MouseLeftButtonDown += BeginDraw;
         _canvas.MouseMove += ContinueDraw;
         _canvas.MouseLeftButtonUp += EndDraw;
+        _canvas.LostMouseCapture += (_, _) => CancelDrag();
 
         _preview.Children.Add(_image);
         _preview.Children.Add(_canvas);
@@ -430,6 +472,7 @@ internal sealed class VideoRedactView
         _originX = (width - _info.Width * _scale) / 2;
         _originY = (height - _info.Height * _scale) / 2;
         PaintAreas();
+        PaintDraft();
     }
 
     private Rect ImageBounds() => new(
@@ -438,73 +481,205 @@ internal sealed class VideoRedactView
         Math.Max(1, (_info?.Width ?? 1) * _scale),
         Math.Max(1, (_info?.Height ?? 1) * _scale));
 
-    private Point ClampToImage(Point point)
-    {
-        var bounds = ImageBounds();
-        return new Point(
-            Math.Clamp(point.X, bounds.Left, bounds.Right),
-            Math.Clamp(point.Y, bounds.Top, bounds.Bottom));
-    }
+    private Point ToImage(Point point) => new(
+        (point.X - _originX) / Math.Max(_scale, 0.0001),
+        (point.Y - _originY) / Math.Max(_scale, 0.0001));
 
+    /// <summary>
+    /// Pressing an existing area selects it and starts a move; pressing one of the selected area's handles
+    /// resizes it; pressing empty image starts a new box. Clicking outside the picture clears the selection.
+    /// </summary>
     private void BeginDraw(object sender, MouseButtonEventArgs e)
     {
-        if (_info is null)
-            return;
-        var bounds = ImageBounds();
-        var point = e.GetPosition(_canvas);
-        if (!bounds.Contains(point))
+        if (_info is null || e.ChangedButton != MouseButton.Left)
             return;
 
-        _dragStart = point;
-        ShowDrag(point, point);
+        var position = e.GetPosition(_canvas);
+        if (!ImageBounds().Contains(position))
+        {
+            if (_selected >= 0)
+                Select(-1);
+            return;
+        }
+
+        var point = ToImage(position);
+        var selected = SelectedArea();
+        var tolerance = HandleHitRadius / Math.Max(_scale, 0.0001);
+        var handle = selected is null
+            ? RedactionHandle.None
+            : RedactionEditor.HandleAt(VideoRedactionEditor.Box(selected), point.X, point.Y, tolerance);
+
+        if (selected is not null && handle != RedactionHandle.None)
+        {
+            _dragKind = DragKind.Resize;
+            _dragHandle = handle;
+            _dragArea = selected;
+            _dragOrigin = point;
+            _canvas.Cursor = CursorFor(handle);
+        }
+        else
+        {
+            var hit = VideoRedactionEditor.HitTest(_areas, point.X, point.Y);
+            if (hit >= 0)
+            {
+                Select(hit);
+                _dragKind = DragKind.Move;
+                _dragArea = _areas[_selected];
+                _dragOrigin = point;
+                _canvas.Cursor = Cursors.SizeAll;
+            }
+            else
+            {
+                if (_selected >= 0)
+                    Select(-1);
+                _dragKind = DragKind.New;
+                _dragOrigin = point;
+                _draftBox = null;
+                _canvas.Cursor = Cursors.Cross;
+            }
+        }
+
         _canvas.CaptureMouse();
         e.Handled = true;
     }
 
     private void ContinueDraw(object sender, MouseEventArgs e)
     {
-        if (_dragStart is not { } start || !_canvas.IsMouseCaptured || _info is null)
+        if (_info is null)
             return;
-        ShowDrag(start, ClampToImage(e.GetPosition(_canvas)));
+
+        var point = ToImage(e.GetPosition(_canvas));
+        if (_dragKind == DragKind.None)
+        {
+            UpdateCursor(point);
+            return;
+        }
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            FinishDrag();
+            return;
+        }
+
+        var dx = point.X - _dragOrigin.X;
+        var dy = point.Y - _dragOrigin.Y;
+        switch (_dragKind)
+        {
+            case DragKind.Move when _dragArea is not null && SelectedArea() is not null:
+                _areas[_selected] = VideoRedactionEditor.Move(
+                    _dragArea, dx, dy, _info.Width, _info.Height);
+                PaintAreas();
+                break;
+
+            case DragKind.Resize when _dragArea is not null && SelectedArea() is not null:
+                _areas[_selected] = VideoRedactionEditor.Resize(
+                    _dragArea, _dragHandle, dx, dy, _info.Width, _info.Height);
+                PaintAreas();
+                break;
+
+            case DragKind.New:
+                _draftBox = RedactionEditor.Create(
+                    _dragOrigin.X, _dragOrigin.Y, point.X, point.Y, _info.Width, _info.Height);
+                PaintDraft();
+                break;
+        }
     }
 
     private void EndDraw(object sender, MouseButtonEventArgs e)
     {
-        if (_dragStart is not { } start || _info is null)
+        if (_dragKind == DragKind.None)
             return;
-
-        var end = ClampToImage(e.GetPosition(_canvas));
-        _dragStart = null;
-        _canvas.ReleaseMouseCapture();
-        _dragRectangle.Visibility = Visibility.Collapsed;
-
-        var selection = new Rect(start, end);
-        if (selection.Width < 6 || selection.Height < 6)
-            return;
-
-        var x = (int)Math.Round((selection.X - _originX) / _scale);
-        var y = (int)Math.Round((selection.Y - _originY) / _scale);
-        var width = (int)Math.Round(selection.Width / _scale);
-        var height = (int)Math.Round(selection.Height / _scale);
-        x = Math.Clamp(x, 0, _info.Width - 1);
-        y = Math.Clamp(y, 0, _info.Height - 1);
-        width = Math.Clamp(width, 1, _info.Width - x);
-        height = Math.Clamp(height, 1, _info.Height - y);
-
-        var endSeconds = _info.DurationSeconds > 0 ? _info.DurationSeconds : 1;
-        _areas.Add(new VideoRedactionArea(x, y, width, height, 0, endSeconds, _style, _color));
-        Select(_areas.Count - 1);
+        FinishDrag();
+        e.Handled = true;
     }
 
-    private void ShowDrag(Point start, Point end)
+    private void FinishDrag()
     {
-        var rect = new Rect(start, end);
-        Canvas.SetLeft(_dragRectangle, rect.X);
-        Canvas.SetTop(_dragRectangle, rect.Y);
-        _dragRectangle.Width = rect.Width;
-        _dragRectangle.Height = rect.Height;
-        _dragRectangle.Visibility = Visibility.Visible;
+        var kind = _dragKind;
+        var draft = _draftBox;
+        _dragKind = DragKind.None;
+        _dragArea = null;
+        _draftBox = null;
+        _dragRectangle.Visibility = Visibility.Collapsed;
+        if (_canvas.IsMouseCaptured)
+            _canvas.ReleaseMouseCapture();
+
+        if (kind == DragKind.New)
+        {
+            if (draft is { } box && _info is not null &&
+                box.Width * _scale >= MinimumDraftDips && box.Height * _scale >= MinimumDraftDips)
+            {
+                var endSeconds = _info.DurationSeconds > 0 ? _info.DurationSeconds : 1;
+                _areas.Add(VideoRedactionEditor.Create(
+                    box, 0, endSeconds, _style, _color, _info.Width, _info.Height));
+                Select(_areas.Count - 1);
+            }
+            return;
+        }
+
+        if (kind is DragKind.Move or DragKind.Resize)
+        {
+            PaintAreas();
+            PaintChips();
+            UpdateEditor();
+            UpdateHeader();
+        }
     }
+
+    /// <summary>Drops the gesture without undoing the pixels already moved; used when capture is lost.</summary>
+    private void CancelDrag()
+    {
+        if (_dragKind == DragKind.None)
+            return;
+        _dragKind = DragKind.None;
+        _dragArea = null;
+        _draftBox = null;
+        _dragRectangle.Visibility = Visibility.Collapsed;
+    }
+
+    private void PaintDraft()
+    {
+        if (_draftBox is not { } box || box.IsEmpty)
+        {
+            _dragRectangle.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _dragRectangle.Visibility = Visibility.Visible;
+        Canvas.SetLeft(_dragRectangle, _originX + box.X * _scale);
+        Canvas.SetTop(_dragRectangle, _originY + box.Y * _scale);
+        _dragRectangle.Width = Math.Max(1, box.Width * _scale);
+        _dragRectangle.Height = Math.Max(1, box.Height * _scale);
+    }
+
+    private void UpdateCursor(Point point)
+    {
+        var selected = SelectedArea();
+        if (selected is not null)
+        {
+            var tolerance = HandleHitRadius / Math.Max(_scale, 0.0001);
+            var handle = RedactionEditor.HandleAt(
+                VideoRedactionEditor.Box(selected), point.X, point.Y, tolerance);
+            if (handle != RedactionHandle.None)
+            {
+                _canvas.Cursor = CursorFor(handle);
+                return;
+            }
+        }
+
+        _canvas.Cursor = VideoRedactionEditor.HitTest(_areas, point.X, point.Y) >= 0
+            ? Cursors.SizeAll
+            : Cursors.Cross;
+    }
+
+    private static Cursor CursorFor(RedactionHandle handle) => handle switch
+    {
+        RedactionHandle.TopLeft or RedactionHandle.BottomRight => Cursors.SizeNWSE,
+        RedactionHandle.TopRight or RedactionHandle.BottomLeft => Cursors.SizeNESW,
+        RedactionHandle.Top or RedactionHandle.Bottom => Cursors.SizeNS,
+        RedactionHandle.Left or RedactionHandle.Right => Cursors.SizeWE,
+        _ => Cursors.Cross,
+    };
 
     private void PaintAreas()
     {
@@ -537,10 +712,29 @@ internal sealed class VideoRedactView
             _canvas.Children.Add(rectangle);
             _areaShapes.Add(rectangle);
         }
+
+        var selectedArea = SelectedArea();
+        for (var i = 0; i < _handles.Count && i < Handles.Length; i++)
+        {
+            var handle = _handles[i];
+            if (selectedArea is null)
+            {
+                handle.Visibility = Visibility.Collapsed;
+                continue;
+            }
+
+            var (x, y) = RedactionEditor.HandlePoint(VideoRedactionEditor.Box(selectedArea), Handles[i]);
+            Canvas.SetLeft(handle, _originX + x * _scale - HandleSize / 2);
+            Canvas.SetTop(handle, _originY + y * _scale - HandleSize / 2);
+            handle.Visibility = Visibility.Visible;
+        }
         Panel.SetZIndex(_dragRectangle, 20);
     }
 
     // ---------------------------------------------------------------- area editing
+
+    private VideoRedactionArea? SelectedArea() =>
+        _selected >= 0 && _selected < _areas.Count ? _areas[_selected] : null;
 
     private void Select(int index)
     {
@@ -735,6 +929,11 @@ internal sealed class VideoRedactView
         VideoTheme.RepaintButton(_cancel);
         _dragRectangle.Stroke = Theme.Accent;
         _dragRectangle.Fill = VideoPalette.Tint(Theme.AccentColor, 0x22);
+        foreach (var handle in _handles)
+        {
+            handle.Background = Theme.Accent;
+            handle.BorderBrush = Theme.TextOnAccent;
+        }
         PaintAreas();
         PaintChips();
     }
@@ -816,6 +1015,12 @@ internal sealed class VideoRedactView
     private void Reset()
     {
         _seek?.Cancel();
+        _dragKind = DragKind.None;
+        _dragArea = null;
+        _draftBox = null;
+        _dragRectangle.Visibility = Visibility.Collapsed;
+        if (_canvas.IsMouseCaptured)
+            _canvas.ReleaseMouseCapture();
         _areas.Clear();
         _selected = -1;
         _style = VideoRedactionStyle.Solid;
@@ -874,5 +1079,107 @@ internal sealed class VideoRedactView
             _apply.Dispose();
             _apply = null;
         }
+    }
+
+    /// <summary>What the pointer is doing over the preview until it is released.</summary>
+    private enum DragKind
+    {
+        None,
+        New,
+        Move,
+        Resize,
+    }
+}
+
+/// <summary>
+/// Adapts the shared <see cref="RedactionEditor"/> geometry to timed video areas. The editor works in
+/// floating-point image pixels; video areas store whole pixels and add a time range and style, so every
+/// move/resize keeps those untouched and only replaces the rectangle.
+/// </summary>
+internal static class VideoRedactionEditor
+{
+    public static RedactionBox Box(VideoRedactionArea area) =>
+        new(area.X, area.Y, area.Width, area.Height);
+
+    /// <summary>The index of the topmost timed area containing the point, or -1.</summary>
+    public static int HitTest(IReadOnlyList<VideoRedactionArea> areas, double x, double y)
+    {
+        ArgumentNullException.ThrowIfNull(areas);
+        for (var i = areas.Count - 1; i >= 0; i--)
+            if (areas[i] is { } area && Box(area).Contains(x, y))
+                return i;
+        return -1;
+    }
+
+    /// <summary>Moves an area by an image-pixel delta, keeping it inside the frame.</summary>
+    public static VideoRedactionArea Move(
+        VideoRedactionArea area,
+        double dx,
+        double dy,
+        int imageWidth,
+        int imageHeight)
+    {
+        ArgumentNullException.ThrowIfNull(area);
+        return WithBox(
+            area,
+            RedactionEditor.Move(Box(area), dx, dy, imageWidth, imageHeight),
+            imageWidth,
+            imageHeight);
+    }
+
+    /// <summary>Resizes an area from one of its eight handles, anchoring the opposite edge or corner.</summary>
+    public static VideoRedactionArea Resize(
+        VideoRedactionArea area,
+        RedactionHandle handle,
+        double dx,
+        double dy,
+        int imageWidth,
+        int imageHeight)
+    {
+        ArgumentNullException.ThrowIfNull(area);
+        return WithBox(
+            area,
+            RedactionEditor.Resize(handle, Box(area), dx, dy, imageWidth, imageHeight),
+            imageWidth,
+            imageHeight);
+    }
+
+    /// <summary>Builds a new timed area from the rectangle dragged over the preview.</summary>
+    public static VideoRedactionArea Create(
+        RedactionBox box,
+        double startSeconds,
+        double endSeconds,
+        VideoRedactionStyle style,
+        string color,
+        int imageWidth,
+        int imageHeight) =>
+        WithBox(
+            new VideoRedactionArea(0, 0, 1, 1, startSeconds, endSeconds, style, color),
+            box,
+            imageWidth,
+            imageHeight);
+
+    /// <summary>Rounds the rectangle to whole pixels and clamps it to a frame of at least one pixel.</summary>
+    private static VideoRedactionArea WithBox(
+        VideoRedactionArea area,
+        RedactionBox box,
+        int imageWidth,
+        int imageHeight)
+    {
+        if (imageWidth <= 0 || imageHeight <= 0 || box.IsEmpty)
+            return area;
+        if (!double.IsFinite(box.X) || !double.IsFinite(box.Y) ||
+            !double.IsFinite(box.Width) || !double.IsFinite(box.Height))
+            return area;
+
+        var left = Math.Clamp(
+            (int)Math.Round(box.X, MidpointRounding.AwayFromZero), 0, imageWidth - 1);
+        var top = Math.Clamp(
+            (int)Math.Round(box.Y, MidpointRounding.AwayFromZero), 0, imageHeight - 1);
+        var right = Math.Clamp(
+            (int)Math.Round(box.Right, MidpointRounding.AwayFromZero), left + 1, imageWidth);
+        var bottom = Math.Clamp(
+            (int)Math.Round(box.Bottom, MidpointRounding.AwayFromZero), top + 1, imageHeight);
+        return area with { X = left, Y = top, Width = right - left, Height = bottom - top };
     }
 }
