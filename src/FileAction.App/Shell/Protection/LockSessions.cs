@@ -201,6 +201,10 @@ internal sealed class LockSessionManager
         ShowPanel(session);
         _launcher.Open(extracted.Path, session.IsDirectory);
         _timer.Start();
+        // The recovery key has now opened a real container. That is the one event that enables
+        // "Create new Rescuer key" in Protection settings; the password never sets this flag.
+        if (extracted.Read.OpenedWith == LockSecretKind.RescuerKey)
+            LockRuntime.NoteRescuerKeyUsed(secret);
         return extracted.Read.OpenedWith;
     }
 

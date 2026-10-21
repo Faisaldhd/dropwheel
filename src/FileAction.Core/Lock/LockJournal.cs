@@ -287,10 +287,21 @@ public static class ProtectionPaths
     public static string SessionsFolder => Path.Combine(DataFolder, "sessions");
     public static string IconsFolder => Path.Combine(DataFolder, "icons");
     public static string SettingsFile => Path.Combine(DataFolder, "protection.json");
+
+    /// <summary>DPAPI-protected Rescuer material; never a plaintext file.</summary>
+    public static string ProtectionFolder => Path.Combine(DataFolder, "protection");
+    public static string RescuerVaultFile => Path.Combine(ProtectionFolder, "rescuer.dat");
 }
 
-/// <summary>The Rescuer's long-lived material, kept outside the settings file.</summary>
-public sealed record RescuerSecrets(string Key, string? Password);
+/// <summary>
+/// The Rescuer's long-lived material, kept outside the settings file. <paramref name="KeyUsed"/> is set
+/// once the current key has opened a protected file, which is what unlocks "Create new Rescuer key".
+/// </summary>
+public sealed record RescuerSecrets(string Key, string? Password, bool KeyUsed = false)
+{
+    /// <summary>True when both Rescuer doors can be used without asking again.</summary>
+    public bool IsComplete => !string.IsNullOrEmpty(Key) && !string.IsNullOrEmpty(Password);
+}
 
 /// <summary>
 /// Where the Rescuer key and password live between sessions. The app implements this with Windows DPAPI;
@@ -332,7 +343,10 @@ public sealed class ProtectionSettings
 
     public bool AssociationsRegistered { get; set; }
 
-    /// <summary>Non-secret marker: a Rescuer was created, so later sessions ask for the password and key.</summary>
+    /// <summary>
+    /// Non-secret marker: a Rescuer was created, so a missing DPAPI vault means the credentials must be
+    /// re-entered (or a new Rescuer created) rather than silently starting a first-time setup.
+    /// </summary>
     public bool RescuerConfigured { get; set; }
 
     /// <summary>

@@ -617,6 +617,46 @@ public sealed class LockService(
     }
 
     /// <summary>
+    /// Replaces both Rescuer slots of one container in a single verified rewrite. Used after the very first
+    /// Lock, when the file was protected with a provisional pair and the user has just created the real
+    /// Rescuer in Protection settings. The file password and payload are untouched.
+    /// </summary>
+    public void AdoptRescuer(string containerPath, string currentSecret, RescuerSecrets rescuer,
+        ILockFileOps? fileOps = null)
+    {
+        ArgumentNullException.ThrowIfNull(rescuer);
+        if (!LockSecrets.IsAcceptablePassword(rescuer.Password))
+            throw new ArgumentException("The Rescuer password is too short.", nameof(rescuer));
+        if (!global::FileAction.Core.Lock.RescuerKey.TryParse(rescuer.Key, out var canonicalKey))
+            throw new ArgumentException("The Rescuer key is not valid.", nameof(rescuer));
+        if (string.IsNullOrEmpty(currentSecret))
+            throw new ArgumentException("The current secret is empty.", nameof(currentSecret));
+
+        var (header, dataKey, _) = OpenHeader(containerPath, currentSecret);
+        try
+        {
+            var slots = CloneSlots(header);
+            slots[1] = LockContainer.Wrap(dataKey, header, 1, LockSecretKind.RescuerPassword,
+                rescuer.Password!, _newSlotIterations);
+            slots[2] = LockContainer.Wrap(dataKey, header, 2, LockSecretKind.RescuerKey, canonicalKey,
+                _newSlotIterations);
+            LockHeaderRewriter.Rewrite(containerPath, dataKey, slots, rescuer.Password!, fileOps);
+            // The rewriter proves the password door; prove the key door too before reporting success.
+            using var installed = new FileStream(LockPaths.Normalize(containerPath), FileMode.Open,
+                FileAccess.Read, FileShare.Read, 256 * 1024, FileOptions.SequentialScan);
+            var installedHeader = LockContainer.ReadHeader(installed);
+            if (!LockContainer.TryUnwrapRole(installedHeader, LockSecretKind.RescuerKey, canonicalKey,
+                    out var keyCheck))
+                throw new LockDamagedException("rewritten Rescuer key slot");
+            LockSecrets.Wipe(keyCheck);
+        }
+        finally
+        {
+            LockSecrets.Wipe(dataKey);
+        }
+    }
+
+    /// <summary>
     /// Re-wraps slot 2 on many containers with a new Rescuer password, verifying every rewrite by a full
     /// test-open. Failures are collected per file; successful files keep working with the old secrets.
     /// </summary>

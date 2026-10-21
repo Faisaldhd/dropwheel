@@ -12,9 +12,9 @@ using static FileAction.Core.Loc;
 namespace FileAction.App.Shell.Protection;
 
 /// <summary>
-/// One process-wide protection runtime: preferences, the in-memory Rescuer secrets (never written to
-/// disk), the lock service, the session journal and the auto-lock manager. Created lazily, so simply having
-/// the tool available costs nothing until it is used.
+/// One process-wide protection runtime: preferences, the DPAPI Rescuer vault, the lock service, the
+/// session journal and the auto-lock manager. Created lazily, so simply having the tool available costs
+/// nothing until it is used.
 /// </summary>
 internal static class LockRuntime
 {
@@ -36,23 +36,64 @@ internal static class LockRuntime
                 return;
             _initialized = true;
             Settings = ProtectionSettings.Load();
-            Vault = new InMemoryRescuerVault();
-            // A previous build could have written a DPAPI vault with the Rescuer password and key. Remove
-            // it on first use: the secrets now live only in memory for the session.
-            try
-            {
-                var legacy = Path.Combine(ProtectionPaths.DataFolder, "protection", "rescuer.dat");
-                if (File.Exists(legacy))
-                    File.Delete(legacy);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-            }
+            Vault = new DpapiRescuerVault();
             Service = new LockService(LockEnvironment.Default(), new ProtectionHost());
             Journal = new LockJournalStore(ProtectionPaths.SessionsFolder);
             Sessions = new LockSessionManager(Service, Journal, Settings);
             Sessions.Locked += (title, text) => Notifications.Show(title, text);
         }
+    }
+
+    /// <summary>True when the Rescuer pair is held in the DPAPI vault rather than only in memory.</summary>
+    public static bool RescuerPersists => Vault is DpapiRescuerVault { Persistent: true };
+
+    /// <summary>The stored pair when both doors are usable; null means a prompt or first-time flow is due.</summary>
+    public static RescuerSecrets? TryGetRescuerCredentials()
+    {
+        Initialize();
+        var stored = Vault.Load();
+        return stored is not null && stored.IsComplete ? stored : null;
+    }
+
+    /// <summary>Stores a Rescuer pair and marks the Rescuer as configured. Never throws.</summary>
+    public static void SaveRescuer(RescuerSecrets secrets)
+    {
+        Initialize();
+        Vault.Save(secrets);
+        Settings.RescuerConfigured = true;
+        try
+        {
+            Settings.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The vault is the important copy; the marker can be repaired on the next start.
+        }
+    }
+
+    /// <summary>The random pair a first-ever Lock uses until Protection settings replaces it.</summary>
+    public static RescuerSecrets NewProvisionalRescuer() => RescuerPolicy.CreateProvisional();
+
+    /// <summary>
+    /// Marks the current Rescuer key as used after it opens a protected file. Only the current key counts:
+    /// an old key that still opens an older container must not unlock key rotation.
+    /// </summary>
+    public static void NoteRescuerKeyUsed(string typedSecret)
+    {
+        Initialize();
+        var stored = Vault.Load();
+        if (stored is null || stored.KeyUsed || !RescuerPolicy.MatchesKey(stored, typedSecret))
+            return;
+        Vault.Save(stored with { KeyUsed = true });
+    }
+
+    /// <summary>Opens the first-time Rescuer setup right after a successful first Lock.</summary>
+    public static void ShowFirstRescuerSetup(IReadOnlyList<string> containers, RescuerSecrets provisional)
+    {
+        Initialize();
+        if (containers.Count == 0 || provisional.Password is null)
+            return;
+        LockSettingsWindow.ShowFirstTime(containers, provisional);
     }
 
     /// <summary>The generated icon paths, written once next to the protection data.</summary>
@@ -69,27 +110,19 @@ internal static class LockRuntime
     }
 
     /// <summary>
-    /// The Rescuer secrets for this session. They live only in memory: the first-ever setup creates the
-    /// password and the one-time key; every later session asks for both once, because neither is written to
-    /// the settings file, the journal or any other file. Returns null when the user cancels.
+    /// The Rescuer pair for this run. A stored pair is returned silently; when the marker says a Rescuer
+    /// exists but the DPAPI vault cannot be read, the "Rescuer credentials" dialog asks once and proves the
+    /// pair against a real container before it is reused. Returns null when the user cancels or when no
+    /// Rescuer has been created yet (the Protect view then uses a provisional pair).
     /// </summary>
     public static RescuerSecrets? RequireRescuer(Window? owner, string? nearbyPath = null)
     {
         Initialize();
         var stored = Vault.Load();
-        if (stored is not null && !string.IsNullOrEmpty(stored.Password))
+        if (stored is not null && stored.IsComplete)
             return stored;
-
         if (!Settings.RescuerConfigured)
-        {
-            var setup = new RescuerSetupWindow(RescuerSetupMode.FirstTime) { Owner = owner };
-            if (setup.ShowDialog() != true || setup.Result is null)
-                return null;
-            Vault.Save(setup.Result);
-            Settings.RescuerConfigured = true;
-            Settings.Save();
-            return setup.Result;
-        }
+            return null;
 
         // Re-entry: the prompt proves both slots against a real header before these values are baked into
         // new containers. With no existing container there is nothing to compare against, so it accepts
@@ -97,8 +130,9 @@ internal static class LockRuntime
         var prompt = new RescuerSessionWindow(FindVerifierContainers(nearbyPath)) { Owner = owner };
         if (prompt.ShowDialog() != true || string.IsNullOrEmpty(prompt.Password))
             return null;
-        var secrets = new RescuerSecrets(prompt.RecoveryKey, prompt.Password);
-        Vault.Save(secrets);
+        var keyUsed = stored?.KeyUsed == true && LockSecrets.SameSecret(stored.Key, prompt.RecoveryKey);
+        var secrets = new RescuerSecrets(prompt.RecoveryKey, prompt.Password, keyUsed);
+        SaveRescuer(secrets);
         return secrets;
     }
 
@@ -191,7 +225,7 @@ internal static class LockRuntime
         var window = new RescuerKeyWindow { Owner = owner };
         if (window.ShowDialog() != true || string.IsNullOrEmpty(window.RecoveryKey))
             return null;
-        Vault.Save(new RescuerSecrets(window.RecoveryKey, null));
+        Vault.Save(new RescuerSecrets(window.RecoveryKey, stored?.Password, stored?.KeyUsed == true));
         return window.RecoveryKey;
     }
     /// <summary>Registers the per-user file types once, after the first successful protection.</summary>

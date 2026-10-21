@@ -148,7 +148,6 @@ internal sealed class LockProtectView
     private readonly SecretField _password;
     private readonly SecretField _confirm;
     private readonly StrengthMeter _strength = new();
-    private readonly TextBlock _rescuerStatus;
     private readonly TextBlock _progress;
     private readonly TextBlock _match;
     private readonly ActionGateGrid _root = new();
@@ -226,34 +225,6 @@ internal sealed class LockProtectView
         _confirm.Changed += UpdatePair;
         content.Children.Add(LockUi.Card(passwordCard));
 
-        var rescuerCard = new DockPanel();
-        var rescuerText = new StackPanel();
-        rescuerText.Children.Add(new TextBlock
-        {
-            Text = T("tool.lock.rescuer.row"),
-            FontSize = 12.5,
-            Foreground = Theme.Text,
-        });
-        _rescuerStatus = new TextBlock
-        {
-            Text = T("tool.lock.rescuer.checking"),
-            FontSize = 11.5,
-            Foreground = Theme.LockMuted,
-            Margin = new Thickness(0, 2, 0, 0),
-            TextWrapping = TextWrapping.Wrap,
-        };
-        rescuerText.Children.Add(_rescuerStatus);
-        var setup = Controls.Button(T("tool.lock.rescuer.setup"), () =>
-        {
-            // Nearby containers let the re-entry prompt prove the typed Rescuer against a real header.
-            LockRuntime.RequireRescuer(Window.GetWindow(_root), _items[0].Path);
-            RefreshRescuer();
-        });
-        DockPanel.SetDock(setup, Dock.Right);
-        rescuerCard.Children.Add(setup);
-        rescuerCard.Children.Add(rescuerText);
-        content.Children.Add(LockUi.Card(rescuerCard));
-
         content.Children.Add(new DockPanel
         {
             Margin = new Thickness(2, 4, 2, 0),
@@ -297,7 +268,6 @@ internal sealed class LockProtectView
         _root.Children.Add(scroll);
         _root.Loaded += (_, _) =>
         {
-            RefreshRescuer();
             UpdatePair();
             _password.FocusInput();
             _ready.TrySetResult(null);
@@ -329,19 +299,6 @@ internal sealed class LockProtectView
         _root.SetCanApply(status == LockSecrets.PairStatus.Match);
     }
 
-    private void RefreshRescuer()
-    {
-        var stored = LockRuntime.Vault.Load();
-        _rescuerStatus.Text = !LockRuntime.Settings.RescuerConfigured
-            ? T("tool.lock.rescuer.missing")
-            : stored is null || string.IsNullOrEmpty(stored.Password)
-                ? T("tool.lock.rescuer.needsPassword")
-                : T("tool.lock.rescuer.ready");
-        _rescuerStatus.Foreground = stored is null || string.IsNullOrEmpty(stored.Password)
-            ? Theme.LockBadgeText
-            : Theme.BadgeSuccessText;
-    }
-
     private void Reset()
     {
         _password.Clear();
@@ -349,7 +306,6 @@ internal sealed class LockProtectView
         _strength.Update(string.Empty);
         UpdatePair();
         _progress.Text = T("tool.lock.ready");
-        RefreshRescuer();
     }
 
     private async Task<string?> ApplyAsync()
@@ -365,16 +321,30 @@ internal sealed class LockProtectView
             return null;
         LockSessionConsent.Granted = true;
 
-        var rescuer = LockRuntime.RequireRescuer(owner, _items[0].Path);
-        if (rescuer is null || string.IsNullOrEmpty(rescuer.Password))
-            return null;
-
-        var credentials = new LockCredentials
+        // The Protect window asks for the file password only. A stored Rescuer is reused silently; when no
+        // Rescuer exists yet the first Lock uses a provisional pair and Protection settings opens after the
+        // protection has succeeded, so cancelling setup can never block the lock itself.
+        var firstLock = false;
+        RescuerSecrets rescuer;
+        var stored = LockRuntime.TryGetRescuerCredentials();
+        if (stored is not null)
         {
-            FilePassword = _password.Text,
-            RescuerPassword = rescuer.Password,
-            RescuerKey = rescuer.Key,
-        };
+            rescuer = stored;
+        }
+        else if (LockRuntime.Settings.RescuerConfigured)
+        {
+            var prompted = LockRuntime.RequireRescuer(owner, _items[0].Path);
+            if (prompted is null)
+                return null;
+            rescuer = prompted;
+        }
+        else
+        {
+            rescuer = LockRuntime.NewProvisionalRescuer();
+            firstLock = true;
+        }
+
+        var credentials = RescuerPolicy.Credentials(_password.Text, rescuer);
 
         var failures = new List<string>();
         var outputs = new List<string>();
@@ -416,6 +386,17 @@ internal sealed class LockProtectView
         if (outputs.Count > 0)
             LockRuntime.RememberContainer(outputs[^1]);
         LockRuntime.EnsureAssociation();
+
+        if (firstLock && outputs.Count > 0)
+        {
+            // The files are already protected, so this is a setup offer, never a gate. The provisional pair
+            // is only used to repair the Rescuer slots of the containers just written.
+            var containers = outputs.ToArray();
+            var provisional = rescuer;
+            _ = _root.Dispatcher.BeginInvoke(
+                new Action(() => LockRuntime.ShowFirstRescuerSetup(containers, provisional)),
+                System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
 
         if (failures.Count > 0)
         {
@@ -699,7 +680,12 @@ internal sealed class LockUnlockView
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
         var secret = _secret.Text;
-        var knownKey = RescuerKey.TryParse(secret, out var parsed) ? parsed : null;
+        // Keep the vault's current key when there is one. A key that only opens an older container must
+        // not silently revert a key rotation; only the file that was just opened adopts the new password.
+        var knownKey = LockRuntime.TryGetRescuerCredentials() is null &&
+                       RescuerKey.TryParse(secret, out var parsed)
+            ? parsed
+            : null;
         var window = new RescuerSetupWindow(RescuerSetupMode.ResetPassword, knownKey) { Owner = owner };
         if (window.ShowDialog() != true || window.Result is null)
             return;

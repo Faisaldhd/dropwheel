@@ -11,19 +11,47 @@ using static FileAction.Core.Loc;
 namespace FileAction.App.Shell.Protection;
 
 /// <summary>
-/// Settings &gt; Protection. Rescuer password set/change (explaining that already-protected files keep
-/// their old Rescuer until updated), the bulk update, a new Rescuer key, the Recycle-Bin and auto-lock
-/// preferences, and removing the file association.
+/// Settings &gt; Protection. The Rescuer is created here after the first Lock (or from this window at any
+/// time), a password change is proved by the current password or key, and a new key is only offered after
+/// the current one has opened a protected file. The DPAPI persistence status and the manual re-entry
+/// fallback are shown in the same card.
 /// </summary>
 internal sealed class LockSettingsWindow : Window
 {
     private readonly TextBlock _status;
     private readonly TextBlock _busy;
+    private readonly TextBlock _rescuerState;
+    private readonly TextBlock _persistence;
+    private readonly Border _createRescuer;
+    private readonly Border _changePassword;
+    private readonly Border _enterCredentials;
+    private readonly Border _newKey;
+    private readonly TextBlock _newKeyHint;
+    private readonly List<string> _pendingContainers;
+    private readonly RescuerSecrets? _provisional;
+    private bool _autoSetup;
 
-    public LockSettingsWindow()
+    public LockSettingsWindow() : this(null, null)
+    {
+    }
+
+    /// <param name="pendingContainers">
+    /// The containers written by the first Lock. They are adopted (both Rescuer slots rewritten) as soon as
+    /// the user creates the real Rescuer here; cancelling leaves them openable by their file password.
+    /// </param>
+    /// <param name="provisional">The temporary pair those containers currently carry.</param>
+    internal LockSettingsWindow(IReadOnlyList<string>? pendingContainers, RescuerSecrets? provisional)
     {
         LockRuntime.Initialize();
-        var body = LockUi.Configure(this, T("tool.lock.settings.title"), 520, 660);
+        _pendingContainers = pendingContainers?
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+        _provisional = provisional;
+        _autoSetup = _pendingContainers.Count > 0 && provisional?.IsComplete == true &&
+                     !LockRuntime.Settings.RescuerConfigured;
+
+        var body = LockUi.Configure(this, T("tool.lock.settings.title"), 540, 720);
         _status = new TextBlock
         {
             FontSize = 11.5,
@@ -47,15 +75,44 @@ internal sealed class LockSettingsWindow : Window
             FontSize = 12,
             Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 10),
+            Margin = new Thickness(0, 0, 0, 8),
         });
-        var change = Controls.Button(T("tool.lock.settings.changePassword"), ChangeRescuerPassword);
-        var newKey = Controls.Button(T("tool.lock.settings.newKey"), CreateNewKey);
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal };
-        buttons.Children.Add(change);
-        buttons.Children.Add(new Border { Width = 8 });
-        buttons.Children.Add(newKey);
+        _rescuerState = new TextBlock
+        {
+            FontSize = 12,
+            Foreground = Theme.LockMuted,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 8),
+        };
+        rescuer.Children.Add(_rescuerState);
+        _persistence = new TextBlock
+        {
+            FontSize = 11.5,
+            Foreground = Theme.LockMuted,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 10),
+        };
+        rescuer.Children.Add(_persistence);
+
+        var buttons = new WrapPanel();
+        _createRescuer = Controls.Button(T("tool.lock.settings.createRescuer"), BeginFirstTimeSetup, primary: true);
+        _changePassword = Controls.Button(T("tool.lock.settings.changePassword"), ChangeRescuerPassword);
+        _enterCredentials = Controls.Button(T("tool.lock.settings.useCredentials"), EnterCredentials);
+        _newKey = Controls.Button(T("tool.lock.settings.newKey"), CreateNewKey);
+        foreach (var button in new[] { _createRescuer, _changePassword, _enterCredentials, _newKey })
+        {
+            button.Margin = new Thickness(0, 0, 8, 6);
+            buttons.Children.Add(button);
+        }
         rescuer.Children.Add(buttons);
+        _newKeyHint = new TextBlock
+        {
+            FontSize = 11.5,
+            Foreground = Theme.LockBadgeText,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        rescuer.Children.Add(_newKeyHint);
         body.Children.Add(LockUi.Card(rescuer));
 
         // ---- Update existing files
@@ -125,7 +182,18 @@ internal sealed class LockSettingsWindow : Window
         });
         var close = Controls.Button(T("action.close"), Close);
         body.Children.Add(new Border { Margin = new Thickness(0, 14, 0, 0), Child = close });
-        RefreshStatus();
+
+        Loaded += (_, _) =>
+        {
+            RefreshState();
+            if (!_autoSetup)
+                return;
+            _autoSetup = false;
+            // Let Show() finish before opening the modal setup dialog over this window.
+            _ = Dispatcher.BeginInvoke(new Action(BeginFirstTimeSetup),
+                System.Windows.Threading.DispatcherPriority.Background);
+        };
+        Activated += (_, _) => RefreshState();
     }
 
     public static void ShowSingle()
@@ -135,89 +203,206 @@ internal sealed class LockSettingsWindow : Window
         window.Activate();
     }
 
-    private void RefreshStatus()
+    /// <summary>Opens Protection settings (non-modal) right after the first successful Lock.</summary>
+    public static void ShowFirstTime(IReadOnlyList<string> containers, RescuerSecrets provisional)
+    {
+        var window = new LockSettingsWindow(containers, provisional);
+        window.Show();
+        window.Activate();
+    }
+
+    private void RefreshState()
     {
         var stored = LockRuntime.Vault.Load();
-        if (!LockRuntime.Settings.RescuerConfigured)
+        var ready = stored is not null && stored.IsComplete;
+        if (ready && !LockRuntime.Settings.RescuerConfigured)
         {
-            _status.Text = T("tool.lock.settings.rescuerMissing");
-            _status.Foreground = Theme.LockBadgeText;
+            // A DPAPI vault from an earlier build already proves the Rescuer exists.
+            LockRuntime.Settings.RescuerConfigured = true;
+            try
+            {
+                LockRuntime.Settings.Save();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+        var configured = LockRuntime.Settings.RescuerConfigured;
+
+        if (!configured && !ready)
+        {
+            _rescuerState.Text = T("tool.lock.settings.rescuerMissing");
+            _rescuerState.Foreground = Theme.LockBadgeText;
+        }
+        else if (!ready)
+        {
+            _rescuerState.Text = T("tool.lock.settings.credentialsMissing");
+            _rescuerState.Foreground = Theme.LockBadgeText;
+        }
+        else
+        {
+            _rescuerState.Text = T("tool.lock.settings.rescuerReady");
+            _rescuerState.Foreground = Theme.BadgeSuccessText;
+        }
+
+        _persistence.Text = !ready
+            ? string.Empty
+            : LockRuntime.RescuerPersists
+                ? T("tool.lock.settings.persisted")
+                : T("tool.lock.settings.sessionOnly");
+
+        _createRescuer.Visibility = !configured && !ready ? Visibility.Visible : Visibility.Collapsed;
+        _changePassword.Visibility = configured || ready ? Visibility.Visible : Visibility.Collapsed;
+        _enterCredentials.Visibility = configured && !ready ? Visibility.Visible : Visibility.Collapsed;
+        var canRotate = ready && RescuerPolicy.CanCreateNewKey(stored);
+        _newKey.Visibility = configured || ready ? Visibility.Visible : Visibility.Collapsed;
+        _newKey.IsEnabled = canRotate;
+        _newKey.Opacity = canRotate ? 1 : 0.55;
+        _newKeyHint.Text = ready && !canRotate ? T("tool.lock.settings.newKeyNeedsUse") : string.Empty;
+    }
+
+    private void BeginFirstTimeSetup()
+    {
+        if (LockRuntime.Settings.RescuerConfigured && LockRuntime.TryGetRescuerCredentials() is not null)
+            return;
+        var setup = new RescuerSetupWindow(RescuerSetupMode.FirstTime) { Owner = this };
+        if (setup.ShowDialog() != true || setup.Result is null)
+        {
+            _status.Text = T("tool.lock.settings.setupSkipped");
             return;
         }
-        _status.Text = stored is null || string.IsNullOrEmpty(stored.Password)
-            ? T("tool.lock.settings.rescuerNoPassword")
-            : T("tool.lock.settings.rescuerReady");
-        _status.Foreground = Theme.LockMuted;
+        RefreshState();
+        if (_pendingContainers.Count > 0 && _provisional is not null && _provisional.IsComplete)
+            AdoptPendingContainers(setup.Result);
+        else
+            _status.Text = T("tool.lock.settings.setupDone");
+    }
+
+    /// <summary>
+    /// Rewrites both Rescuer slots of the files written by the first Lock. The payload and the file password
+    /// never change, and a failure leaves that file exactly as it was.
+    /// </summary>
+    private void AdoptPendingContainers(RescuerSecrets created)
+    {
+        var containers = _pendingContainers.ToArray();
+        var provisional = _provisional!;
+        _busy.Text = T("tool.lock.settings.setupWorking", 0, containers.Length);
+        var progress = new Progress<(int Done, int Total)>(value =>
+            _busy.Text = T("tool.lock.settings.setupWorking", value.Done, value.Total));
+        _ = Task.Run(() =>
+        {
+            var failures = 0;
+            var done = 0;
+            foreach (var container in containers)
+            {
+                try
+                {
+                    LockRuntime.Service.AdoptRescuer(container, provisional.Password!, created);
+                }
+                catch (Exception ex) when (ex is LockException or IOException or UnauthorizedAccessException
+                                               or LockPolicyException or ArgumentException)
+                {
+                    failures++;
+                }
+                ((IProgress<(int, int)>)progress).Report((++done, containers.Length));
+            }
+            Dispatcher.BeginInvoke((Action)(() =>
+            {
+                _busy.Text = string.Empty;
+                if (failures == 0)
+                {
+                    _status.Text = T("tool.lock.settings.setupApplied");
+                    _status.Foreground = Theme.BadgeSuccessText;
+                    _pendingContainers.Clear();
+                }
+                else
+                {
+                    _status.Text = T("tool.lock.settings.setupPartial", containers.Length - failures,
+                        containers.Length);
+                    _status.Foreground = Theme.BadgeErrorText;
+                }
+            }));
+        });
+    }
+
+    /// <summary>The stored pair, or the manual "Rescuer credentials" fallback when DPAPI has nothing.</summary>
+    private RescuerSecrets? EnsureCredentials()
+    {
+        var stored = LockRuntime.TryGetRescuerCredentials();
+        if (stored is not null)
+            return stored;
+        if (!LockRuntime.Settings.RescuerConfigured)
+        {
+            BeginFirstTimeSetup();
+            return LockRuntime.TryGetRescuerCredentials();
+        }
+        var prompted = LockRuntime.RequireRescuer(this);
+        if (prompted is not null)
+            RefreshState();
+        return prompted;
+    }
+
+    private void EnterCredentials()
+    {
+        if (EnsureCredentials() is not null)
+            _status.Text = T("tool.lock.settings.credentialsSaved");
     }
 
     private void ChangeRescuerPassword()
     {
-        var stored = LockRuntime.Vault.Load();
-        string? knownKey = null;
-        if (stored is null || string.IsNullOrEmpty(stored.Password))
-        {
-            knownKey = LockRuntime.RequireRescuerKey(this);
-            if (knownKey is null)
-                return;
-        }
-        else if (LockRuntime.RequireRescuer(this) is null)
-        {
+        var stored = EnsureCredentials();
+        if (stored is null)
             return;
-        }
-        var window = new RescuerSetupWindow(RescuerSetupMode.ResetPassword, knownKey) { Owner = this };
+        var proof = new SecretPromptWindow(T("tool.lock.rescuer.currentSecret"),
+            T("tool.lock.settings.changePasswordHint"),
+            value => RescuerPolicy.TryMatch(stored, value, out _) ? null : T("tool.lock.error.wrongSecret"))
+        {
+            Owner = this,
+        };
+        if (proof.ShowDialog() != true)
+            return;
+        var window = new RescuerSetupWindow(RescuerSetupMode.ResetPassword, stored.Key) { Owner = this };
         if (window.ShowDialog() != true)
             return;
-        RefreshStatus();
+        RefreshState();
         _status.Text = T("tool.lock.settings.passwordChanged");
         _busy.Text = T("tool.lock.settings.updateReminder");
     }
 
     private void CreateNewKey()
     {
-        var stored = LockRuntime.Vault.Load();
-        if (stored is null || string.IsNullOrEmpty(stored.Password))
+        var stored = EnsureCredentials();
+        if (stored is null)
+            return;
+        if (!RescuerPolicy.CanCreateNewKey(stored))
         {
-            var key = LockRuntime.RequireRescuerKey(this);
-            if (key is null)
-                return;
-            LockRuntime.Vault.Save(new RescuerSecrets(key, null));
-        }
-        else if (LockRuntime.RequireRescuer(this) is null)
-        {
+            _status.Text = T("tool.lock.settings.newKeyNeedsUse");
             return;
         }
-        var old = LockRuntime.Vault.Load();
-        var window = new RescuerSetupWindow(RescuerSetupMode.NewKey) { Owner = this };
+        var proof = new SecretPromptWindow(T("tool.lock.settings.newKeyPassword"),
+            T("tool.lock.settings.newKeyPasswordHint"),
+            value => RescuerPolicy.MatchesPassword(stored, value) ? null : T("tool.lock.error.wrongSecret"))
+        {
+            Owner = this,
+        };
+        if (proof.ShowDialog() != true)
+            return;
+        // The password is proved; this window generates and displays the replacement key exactly once.
+        var window = new RescuerSetupWindow(RescuerSetupMode.NewKey, verifiedPassword: stored.Password)
+        {
+            Owner = this,
+        };
         if (window.ShowDialog() != true || window.Result is null)
             return;
-        RefreshStatus();
-        if (old is null)
-            return;
-        if (Dialogs.Show(this, T("tool.lock.settings.updateNowAfterKey"), Title, MessageBoxButton.YesNo,
-                MessageBoxImage.Question) != MessageBoxResult.Yes)
-            return;
-        var folder = PickFolder();
-        if (folder is null)
-            return;
-        var newKey = window.Result.Key;
-        RunUpdate(EnumerateProtected(folder), secret => LockRuntime.Service.SetRescuerKey(secret, old.Key, newKey),
-            T("tool.lock.settings.keysUpdated"));
+        RefreshState();
+        _status.Text = T("tool.lock.settings.newKeyCreated");
     }
 
     private void UpdateProtectedFiles()
     {
-        var stored = LockRuntime.Vault.Load();
-        string? knownKey = null;
-        if (stored is null || string.IsNullOrEmpty(stored.Password))
-        {
-            knownKey = LockRuntime.RequireRescuerKey(this);
-            if (knownKey is null)
-                return;
-        }
-        else if (LockRuntime.RequireRescuer(this) is null)
-        {
+        var stored = EnsureCredentials();
+        if (stored is null)
             return;
-        }
         var folder = PickFolder();
         if (folder is null)
             return;
@@ -228,7 +413,7 @@ internal sealed class LockSettingsWindow : Window
             return;
         }
 
-        var setup = new RescuerSetupWindow(RescuerSetupMode.ResetPassword, knownKey) { Owner = this };
+        var setup = new RescuerSetupWindow(RescuerSetupMode.ResetPassword, stored.Key) { Owner = this };
         if (setup.ShowDialog() != true || setup.Result is null)
             return;
         var newPassword = setup.Result.Password!;
@@ -237,7 +422,7 @@ internal sealed class LockSettingsWindow : Window
         if (prompt.ShowDialog() != true || string.IsNullOrEmpty(prompt.Secret))
             return;
         var current = prompt.Secret;
-        RefreshStatus();
+        RefreshState();
         RunUpdate(files, path => LockRuntime.Service.SetRescuerPassword(path, current, newPassword),
             T("tool.lock.settings.updated"));
     }
@@ -301,14 +486,17 @@ internal sealed class LockSettingsWindow : Window
     }
 }
 
-/// <summary>A neutral one-field prompt for "current Rescuer password or key".</summary>
+/// <summary>A neutral one-field prompt for a current Rescuer password or key, with an inline validator.</summary>
 internal sealed class SecretPromptWindow : Window
 {
     private readonly SecretField _secret;
+    private readonly TextBlock _error;
+    private readonly Func<string, string?>? _validate;
 
-    public SecretPromptWindow(string title, string hint)
+    public SecretPromptWindow(string title, string hint, Func<string, string?>? validate = null)
     {
-        var body = LockUi.Configure(this, title, 430, 250);
+        _validate = validate;
+        var body = LockUi.Configure(this, title, 430, 290);
         body.Children.Add(new TextBlock
         {
             Text = hint,
@@ -319,15 +507,18 @@ internal sealed class SecretPromptWindow : Window
         });
         _secret = new SecretField(title);
         body.Children.Add(_secret);
+        _error = new TextBlock
+        {
+            FontSize = 11.5,
+            Foreground = Theme.BadgeErrorText,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 6, 0, 0),
+        };
+        _secret.Changed += () => _error.Text = string.Empty;
+        body.Children.Add(_error);
         var buttons = new DockPanel { Margin = new Thickness(0, 16, 0, 0) };
         var cancel = Controls.Button(T("tool.lock.cancel"), Close);
-        var ok = Controls.Button(T("action.ok"), () =>
-        {
-            if (string.IsNullOrEmpty(_secret.Text))
-                return;
-            DialogResult = true;
-            Close();
-        }, primary: true);
+        var ok = Controls.Button(T("action.ok"), Submit, primary: true);
         DockPanel.SetDock(cancel, Dock.Left);
         DockPanel.SetDock(ok, Dock.Right);
         buttons.Children.Add(cancel);
@@ -340,10 +531,9 @@ internal sealed class SecretPromptWindow : Window
                 Close();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Enter && !string.IsNullOrEmpty(_secret.Text))
+            else if (e.Key == Key.Enter)
             {
-                DialogResult = true;
-                Close();
+                Submit();
                 e.Handled = true;
             }
         };
@@ -352,4 +542,18 @@ internal sealed class SecretPromptWindow : Window
     }
 
     public string Secret => _secret.Text;
+
+    private void Submit()
+    {
+        if (string.IsNullOrEmpty(_secret.Text))
+            return;
+        var problem = _validate?.Invoke(_secret.Text);
+        if (!string.IsNullOrEmpty(problem))
+        {
+            _error.Text = problem;
+            return;
+        }
+        DialogResult = true;
+        Close();
+    }
 }

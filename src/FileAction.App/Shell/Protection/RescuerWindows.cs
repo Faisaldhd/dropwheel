@@ -58,9 +58,15 @@ internal sealed class RescuerSetupWindow : Window
     private bool _allowClose;
     private string _key = string.Empty;
     private string _keyPassword = string.Empty;
+    private bool _keyUsed;
     private readonly string? _knownKey;
 
-    public RescuerSetupWindow(RescuerSetupMode mode, string? knownKey = null)
+    /// <param name="knownKey">The key a reset keeps, when no vault key is available.</param>
+    /// <param name="verifiedPassword">
+    /// A password Protection settings already proved. Supplying it for <see cref="RescuerSetupMode.NewKey"/>
+    /// skips the proof page and goes straight to the freshly generated key.
+    /// </param>
+    public RescuerSetupWindow(RescuerSetupMode mode, string? knownKey = null, string? verifiedPassword = null)
     {
         _mode = mode;
         _knownKey = knownKey;
@@ -76,7 +82,7 @@ internal sealed class RescuerSetupWindow : Window
         _keyPage = new StackPanel { Visibility = Visibility.Collapsed };
 
         _current = new SecretField(T("tool.lock.rescuer.currentSecret"));
-        if (mode == RescuerSetupMode.NewKey)
+        if (mode == RescuerSetupMode.NewKey && verifiedPassword is null)
         {
             var currentCard = new StackPanel();
             currentCard.Children.Add(new TextBlock
@@ -259,6 +265,15 @@ internal sealed class RescuerSetupWindow : Window
 
         if (mode == RescuerSetupMode.ResetPassword)
             _keyPage.Visibility = Visibility.Collapsed;
+        if (mode == RescuerSetupMode.NewKey && verifiedPassword is not null)
+        {
+            // Protection settings already proved the current password. Generate the one-time key now and
+            // land the user directly on the only page that matters: the key itself.
+            _key = RescuerKey.Generate();
+            _keyPassword = verifiedPassword;
+            _keyUsed = false;
+            ShowKeyPage();
+        }
         UpdatePair();
         Closing += (_, e) =>
         {
@@ -273,8 +288,8 @@ internal sealed class RescuerSetupWindow : Window
             if (_confirmed && Result is null && _key.Length > 0)
             {
                 // The user confirmed the key, so closing keeps it instead of silently losing it.
-                Result = new RescuerSecrets(_key, _keyPassword);
-                LockRuntime.Vault.Save(Result);
+                Result = new RescuerSecrets(_key, _keyPassword, _keyUsed);
+                LockRuntime.SaveRescuer(Result);
                 _allowClose = true;
                 return;
             }
@@ -310,7 +325,9 @@ internal sealed class RescuerSetupWindow : Window
         };
         Loaded += (_, _) =>
         {
-            if (mode != RescuerSetupMode.NewKey)
+            if (_keyPage.Visibility == Visibility.Visible)
+                _typedLast4.Focus();
+            else if (mode != RescuerSetupMode.NewKey)
                 _password.FocusInput();
             else
                 _current.FocusInput();
@@ -361,10 +378,7 @@ internal sealed class RescuerSetupWindow : Window
                 return;
             }
             var typed = _current.Text.Trim();
-            var matchesPassword = string.Equals(typed, stored.Password, StringComparison.Ordinal);
-            var matchesKey = RescuerKey.TryParse(typed, out var typedKey) &&
-                             string.Equals(typedKey, stored.Key, StringComparison.Ordinal);
-            if (!matchesPassword && !matchesKey)
+            if (!RescuerPolicy.TryMatch(stored, typed, out _))
             {
                 Dialogs.Show(this, T("tool.lock.error.wrongSecret"), Title, MessageBoxButton.OK,
                     MessageBoxImage.Information);
@@ -372,6 +386,7 @@ internal sealed class RescuerSetupWindow : Window
             }
             _key = RescuerKey.Generate();
             _keyPassword = stored.Password ?? string.Empty;
+            _keyUsed = false;
             ShowKeyPage();
             return;
         }
@@ -403,10 +418,13 @@ internal sealed class RescuerSetupWindow : Window
                     MessageBoxImage.Warning);
                 return;
             }
+            // A password change keeps the same key, so a key that already opened a file stays "used".
+            _keyUsed = stored?.KeyUsed == true;
         }
         else
         {
             key = RescuerKey.Generate();
+            _keyUsed = false;
         }
 
         _key = key;
@@ -414,8 +432,8 @@ internal sealed class RescuerSetupWindow : Window
         if (_mode == RescuerSetupMode.ResetPassword)
         {
             // No key to show: save immediately.
-            Result = new RescuerSecrets(key, password);
-            LockRuntime.Vault.Save(Result);
+            Result = new RescuerSecrets(key, password, _keyUsed);
+            LockRuntime.SaveRescuer(Result);
             DialogResult = true;
             Close();
             return;
@@ -447,8 +465,8 @@ internal sealed class RescuerSetupWindow : Window
             return;
         }
         _allowClose = true;
-        Result = new RescuerSecrets(_key, _keyPassword);
-        LockRuntime.Vault.Save(Result);
+        Result = new RescuerSecrets(_key, _keyPassword, _keyUsed);
+        LockRuntime.SaveRescuer(Result);
         DialogResult = true;
         Close();
     }
@@ -502,9 +520,9 @@ internal sealed class RescuerSetupWindow : Window
 
 
 /// <summary>
-/// Asks for the Rescuer password and the recovery key once per session. Neither is stored: the password
-/// wraps new file keys for this run, and the recovery key is needed to create the third slot. On the next
-/// start the user is asked again, so losing the settings file or the device reveals nothing.
+/// The manual fallback shown when a Rescuer marker exists but the DPAPI vault cannot be read (a new Windows
+/// profile, a failed protection, or an upgrade). It asks for both doors once and proves them against a real
+/// container; the successful pair is then saved through the same vault the normal path uses.
 /// </summary>
 internal sealed class RescuerSessionWindow : Window
 {
