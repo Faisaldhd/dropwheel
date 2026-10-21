@@ -1945,3 +1945,8 @@ html[data-theme="light"] .tool-play { background: rgba(255, 255, 255, 0.9); colo
   clip-path: none;
   white-space: nowrap;
 }
+
+/* 2.4.1 what's-new Settings figure */
+.shot-figure { margin: 0 0 26px; text-align: center; }
+.shot-figure img { display: block; width: min(100%, 420px); height: auto; margin-inline: auto; border-radius: 20px; border: 1px solid var(--line-strong); background: var(--bg-2); }
+.shot-figure figcaption { color: var(--muted); font-size: 0.82rem; line-height: 1.6; margin-block-start: 10px; }
