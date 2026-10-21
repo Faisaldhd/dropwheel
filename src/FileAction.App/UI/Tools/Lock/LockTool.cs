@@ -110,10 +110,21 @@ internal static class LockOutput
     }
 }
 
-/// <summary>The protect view: password + confirmation + strength meter, Rescuer status and the warning.</summary>
+/// <summary>
+/// The gate every Lock view uses: the shared window reads the primary label from here and disables the
+/// button until the view says it is usable. Protect and Unlock share the grid but not the label.
+/// </summary>
 internal sealed class ActionGateGrid : Grid, IToolActionGate, IToolActionLabel
 {
-    public string PrimaryLabelKey => "tool.lock.protect";
+    public const string ProtectLabelKey = "tool.lock.protect";
+    public const string UnlockLabelKey = "tool.lock.unlock.open";
+
+    public ActionGateGrid(string primaryLabelKey = ProtectLabelKey)
+    {
+        PrimaryLabelKey = primaryLabelKey;
+    }
+
+    public string PrimaryLabelKey { get; }
 
     private bool _canApply;
 
@@ -520,7 +531,7 @@ internal sealed class ActionLabelGrid : Grid, IToolActionLabel
 internal sealed class LockUnlockView
 {
     private readonly FileItem _item;
-    private readonly ActionGateGrid _root = new();
+    private readonly ActionGateGrid _root = new(ActionGateGrid.UnlockLabelKey);
     private readonly SecretField _secret;
     private readonly TextBlock _error;
     private readonly TextBlock _ladder;
@@ -577,7 +588,11 @@ internal sealed class LockUnlockView
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 6, 0, 0),
         };
-        _secret.Changed += () => _error.Text = string.Empty;
+        _secret.Changed += () =>
+        {
+            _error.Text = string.Empty;
+            UpdateCanApply();
+        };
         card.Children.Add(_error);
 
         var forgot = new TextBlock
@@ -631,6 +646,7 @@ internal sealed class LockUnlockView
         _root.Children.Add(scroll);
         _root.Loaded += (_, _) =>
         {
+            UpdateCanApply();
             _secret.FocusInput();
             _ready.TrySetResult(null);
         };
@@ -643,7 +659,11 @@ internal sealed class LockUnlockView
         _secret.Clear();
         _error.Text = string.Empty;
         _ladder.Visibility = Visibility.Collapsed;
+        UpdateCanApply();
     }
+
+    /// <summary>The primary "Open" stays disabled until a password or Rescuer key is typed.</summary>
+    private void UpdateCanApply() => _root.SetCanApply(!string.IsNullOrEmpty(_secret.Text));
 
     private async Task<string?> OpenAsync()
     {
