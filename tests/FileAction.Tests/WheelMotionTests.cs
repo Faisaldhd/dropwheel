@@ -1,3 +1,8 @@
+using System.Reflection;
+using System.Runtime.ExceptionServices;
+using System.Windows;
+using System.Windows.Threading;
+using FileAction.App;
 using FileAction.App.Wheel;
 using FileAction.Core;
 
@@ -69,6 +74,98 @@ public class WheelMotionTests
     }
 
     [Fact]
+    public void Dropping_a_child_runs_it_while_a_category_parent_still_opens_the_chooser()
+    {
+        var child = new FakeOperation("child");
+        var group = Group("category.test", child);
+        Operation[] outer = [group, new FakeOperation("direct")];
+        var choices = WheelWindow.InnerRing(group.Children, 0);
+
+        // A drop on the category parent keeps opening the category, not running it as a job.
+        var parent = WheelWindow.DropTargetAt(WheelZone.Outer, 0, outer, choices);
+        Assert.Equal(WheelWindow.DropAction.OpenCategory, parent.Action);
+        Assert.Same(group, parent.Operation);
+
+        // A plain outer slice is run directly.
+        var direct = WheelWindow.DropTargetAt(WheelZone.Outer, 1, outer, choices);
+        Assert.Equal(WheelWindow.DropAction.Run, direct.Action);
+        Assert.Same(outer[1], direct.Operation);
+
+        // An inner child dispatches its own tool.
+        var inner = WheelWindow.DropTargetAt(WheelZone.Inner, 0, outer, choices);
+        Assert.Equal(WheelWindow.DropAction.Run, inner.Action);
+        Assert.Same(child, inner.Operation);
+    }
+
+    [Fact]
+    public void Dropping_outside_the_disc_or_on_a_pager_cancels()
+    {
+        var child = new FakeOperation("child");
+        var group = Group("category.test", child);
+        Operation[] outer = [group];
+        var choices = WheelWindow.InnerRing(group.Children, 0);
+
+        foreach (var zone in new[] { WheelZone.None, WheelZone.Hub })
+        {
+            var target = WheelWindow.DropTargetAt(zone, 0, outer, choices);
+            Assert.Equal(WheelWindow.DropAction.Nothing, target.Action);
+            Assert.Null(target.Operation);
+        }
+
+        // An out-of-range index and the compact "+n" slice are not tools: a drop on either cancels.
+        Assert.Equal(WheelWindow.DropAction.Nothing, WheelWindow.DropTargetAt(WheelZone.Outer, 99, outer, choices).Action);
+        var more = new InnerChoice(null, 4);
+        Assert.Equal(WheelWindow.DropAction.Nothing, WheelWindow.DropTargetAt(WheelZone.Inner, 0, outer, [more]).Action);
+    }
+
+    [Fact]
+    public void Drag_mode_dwells_for_450_ms_paints_the_arc_and_then_opens_the_category()
+    {
+        RunOnSta(() =>
+        {
+            var child = new FakeOperation("child");
+            var group = Group("category.test", child);
+            Operation[] outer = [group, new FakeOperation("direct")];
+            var window = new WheelWindow(
+                WheelMode.Drag,
+                WheelKind.Tools,
+                [new FileItem("photo.png")],
+                new AppSettings(),
+                (_, _) => outer,
+                (_, _, _) => { });
+            try
+            {
+                var size = (double)typeof(WheelWindow)
+                    .GetField("Size", BindingFlags.NonPublic | BindingFlags.Static)!
+                    .GetRawConstantValue()!;
+                var categoryPoint = new Point(size / 2, size / 2 - WheelWindow.OuterLabelRadius);
+
+                // Hovering the category starts the dwell and paints its progress arc.
+                Invoke(window, "PointerMove", categoryPoint);
+                Assert.Equal(0, Field<int>(window, "_dwellIndex"));
+                Assert.NotNull(Field<object?>(window, "_dwellArc"));
+                var timer = Field<DispatcherTimer?>(window, "_dwellTimer");
+                Assert.NotNull(timer);
+                Assert.True(timer!.IsEnabled);
+
+                // Run the tick the timer would run after 450 ms; this avoids a wall-clock sleep.
+                SetField(window, "_dwellStarted", Environment.TickCount64 - (long)WheelWindow.DwellMs - 1);
+                Invoke(window, "DwellTick");
+
+                Assert.Equal(-1, Field<int>(window, "_dwellIndex"));
+                Assert.Null(Field<object?>(window, "_dwellArc"));
+                Assert.False(timer.IsEnabled);
+                Assert.Equal(group.GroupId, Field<string?>(window, "_innerGroupId"));
+                Assert.Single(Field<IReadOnlyList<InnerChoice>>(window, "_innerChoices"));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
     public void The_inner_ring_never_waits_visibly_or_exceeds_its_motion_budget()
     {
         // Owner's budget: a short 450 ms dwell with a visible progress arc, entrance <= 120 ms,
@@ -80,6 +177,43 @@ public class WheelMotionTests
         Assert.True(WheelWindow.InnerExitMs <= 100);
         Assert.InRange(WheelWindow.InnerRevealFrom, 0.3, 0.8);
         Assert.InRange(WheelWindow.InnerScaleFrom, 0.8, 0.99);
+    }
+
+    private static WheelGroupOperation Group(string id, Operation child) =>
+        new(new WheelGroupDefinition(id, child.Id, [child.Id]), child, [child]);
+
+    private static void Invoke(WheelWindow window, string method, params object?[] args) =>
+        typeof(WheelWindow).GetMethod(method, BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(window, args);
+
+    private static T Field<T>(WheelWindow window, string name) =>
+        (T)typeof(WheelWindow).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(window)!;
+
+    private static void SetField(WheelWindow window, string name, object value) =>
+        typeof(WheelWindow).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(window, value);
+
+    /// <summary>Runs a WPF window test on its own STA thread and rethrows the original failure.</summary>
+    private static void RunOnSta(Action action)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null)
+            ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     private sealed class FakeOperation(string id) : Operation(id, WheelKind.Tools, id, "x")
