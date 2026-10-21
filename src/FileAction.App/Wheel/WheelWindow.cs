@@ -795,7 +795,7 @@ internal sealed class WheelWindow : Window
         // A crowded wheel (19+ real tool slices) cannot fit icon + title + subtitle at the old radius:
         // the three lines reach back into the hub and the neighbours. Move the text outward and drop the
         // secondary lines, keeping only the operation name.
-        var compact = n > 18;
+        var compact = n > 16;
         var labelRadius = InnerRadius + (OuterRadius - InnerRadius) * (compact ? 0.66 : 0.54);
         var labelWidth = n <= 2 ? 120 : Math.Clamp(
             2 * labelRadius * Math.Sin(step / 2 * Math.PI / 180) * (compact ? 0.92 : 0.84),
