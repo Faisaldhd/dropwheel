@@ -5,9 +5,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using FileAction.App.Shell;
 using FileAction.Core;
 using static FileAction.Core.Loc;
@@ -22,9 +20,6 @@ namespace FileAction.App.UI.Tools;
 /// </summary>
 internal sealed class ToolWindow : Window
 {
-    private const int DwmwaSystemBackdropType = 38;
-    private const int DwmsbtMainWindow = 2;
-
     /// <summary>Room inside the transparent window for the 38 DIP halo; the same inset Settings uses.</summary>
     private const double FrameMargin = 24;
 
@@ -62,11 +57,8 @@ internal sealed class ToolWindow : Window
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out NativePoint point);
 
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(IntPtr window);
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(IntPtr monitor, int dpiType, out uint dpiX, out uint dpiY);
 
     private readonly IToolWindowSpec _spec;
     private readonly IReadOnlyList<FileItem> _items;
@@ -102,9 +94,15 @@ internal sealed class ToolWindow : Window
         Foreground = Theme.Text;
         FlowDirection = LanguageManager.IsRtl ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
 
+        // Capture the pointer and its monitor once, while the window still has no HWND. The first frame
+        // must already sit next to the cursor: positioning from SourceInitialized/Loaded showed the
+        // window at WPF's default spot for one frame and then snapped it across the desktop.
+        _cursorAnchor = CaptureCursor();
+        var initialWork = WorkAreaForPlacement();
+
         // Open immediately at the tool's default size; the media probe refines it later.
         var initial = ToolWindowSizer.Compute(
-            spec.Layout, null, null, SystemParameters.WorkArea.Width, SystemParameters.WorkArea.Height, 1.0);
+            spec.Layout, null, null, initialWork.WidthInPixels, initialWork.HeightInPixels, initialWork.Scale);
         Width = initial.Width;
         Height = initial.Height;
 
@@ -116,7 +114,9 @@ internal sealed class ToolWindow : Window
         // view (the content root) and the button bar, so one transform set animates all three together.
         _motion = Motion.Prepare(_chrome!);
         UiSetup.Configure(this, animate: false);
-        SourceInitialized += (_, _) => PlaceNearCursor();
+        // No SourceInitialized/Loaded repositioning: Show() uses these Left/Top directly, so the first
+        // visible frame is the anchored one and no later layout pass moves the card.
+        PlaceBeforeShow(initialWork);
         Loaded += (_, _) =>
         {
             StartOpenMotion();
@@ -268,13 +268,9 @@ internal sealed class ToolWindow : Window
         var media = await _content.Ready;
         if (media is not { Width: > 0, Height: > 0 })
             return;
-        if (!TryGetWorkArea(out var work))
-        {
-            // A hidden/headless window can fail the monitor probe; fall back to the WPF work area so the
-            // media still gets its correct aspect instead of staying at the tall placeholder size.
-            var area = SystemParameters.WorkArea;
-            work = new WorkArea(area.Left, area.Top, area.Width, area.Height, 1.0);
-        }
+        // A hidden/headless window can fail the monitor probe; the helper falls back to the WPF work area
+        // so the media still gets its correct aspect instead of staying at the tall placeholder size.
+        var work = WorkAreaForPlacement();
 
         var size = ToolWindowSizer.Compute(_spec.Layout, media.Value.Width, media.Value.Height,
             work.WidthInPixels, work.HeightInPixels, work.Scale);
@@ -298,16 +294,17 @@ internal sealed class ToolWindow : Window
 
     /// <summary>
     /// Detaches the chrome for the motion self-test and the website clips. The element can be rendered
-    /// repeatedly at different poses; the window itself is never shown.
+    /// repeatedly at different poses; the window itself is never shown. A transparent background lets
+    /// the chrome tests inspect the halo margin instead of the preview wallpaper.
     /// </summary>
-    internal FrameworkElement DetachForCapture()
+    internal FrameworkElement DetachForCapture(Brush? background = null)
     {
         if (_chrome is null)
             throw new InvalidOperationException("tool window chrome was not built");
         Content = null;
         var root = new Grid
         {
-            Background = SelfTest.Desktop(),
+            Background = background ?? SelfTest.Desktop(),
             Width = Width,
             Height = Height,
             FlowDirection = FlowDirection,
@@ -644,7 +641,7 @@ internal sealed class ToolWindow : Window
         public double HeightInPixels => Height * Scale;
     }
 
-    /// <summary>The work area of the monitor under the cursor, in DIPs, with its DPI scale.</summary>
+    /// <summary>The work area of the monitor under the cursor, in DIPs, with that monitor's DPI scale.</summary>
     private bool TryGetWorkArea(out WorkArea area)
     {
         area = default;
@@ -662,11 +659,9 @@ internal sealed class ToolWindow : Window
             if (!GetMonitorInfo(monitor, ref info))
                 return false;
 
-            // Use WPF's own DPI for the window. GetDpiForWindow returns 96 before per-monitor awareness
-            // is applied on some systems, which put the near-cursor window at the wrong offset.
-            var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
-            if (scale <= 0)
-                scale = 1.0;
+            // The window may not have an HWND yet, so ask the monitor itself. GetDpiForWindow returns 96
+            // before per-monitor awareness is applied on some systems, which misplaced the first frame.
+            var scale = MonitorScale(monitor);
 
             area = new WorkArea(
                 info.Work.Left / scale,
@@ -682,30 +677,59 @@ internal sealed class ToolWindow : Window
         }
     }
 
-    /// <summary>
-    /// Opens the tool next to the pointer, not in the middle of the monitor. The anchor is captured once,
-    /// so the card keeps its place while the media probe resizes it.
-    /// </summary>
-    private void PlaceNearCursor()
+    /// <summary>The cursor's monitor work area, or the WPF work area when the probe is unavailable.</summary>
+    private WorkArea WorkAreaForPlacement()
+    {
+        if (TryGetWorkArea(out var work))
+            return work;
+        var area = SystemParameters.WorkArea;
+        return new WorkArea(area.Left, area.Top, area.Width, area.Height, WpfScale());
+    }
+
+    /// <summary>Physical screen pixels of the pointer, captured once before the window is shown.</summary>
+    private static NativePoint? CaptureCursor() => GetCursorPos(out var cursor) ? cursor : null;
+
+    /// <summary>The target monitor's scale, with WPF's DPI as the fallback for older Windows builds.</summary>
+    private double MonitorScale(IntPtr monitor)
     {
         try
         {
-            if (_cursorAnchor is null && GetCursorPos(out var cursor))
-                _cursorAnchor = cursor;
-            if (!TryGetWorkArea(out var work))
-                return;
-
-            var width = ActualWidth > 0 ? ActualWidth : Width;
-            var height = ActualHeight > 0 ? ActualHeight : Height;
-            var (left, top) = Placement(width, height, work);
-            Left = left;
-            Top = top;
-            ApplyBackdrop();
+            if (GetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, out var dpiX, out _) == 0 && dpiX > 0)
+                return dpiX / 96.0;
         }
-        catch
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
         {
-            // Placement is cosmetic; the default position is still usable.
+            // The shcore entry point is missing on pre-8.1 Windows; fall through to WPF's DPI.
         }
+
+        return WpfScale();
+    }
+
+    /// <summary>The DPI of the window's current presentation source, or 100% before it is connected.</summary>
+    private double WpfScale()
+    {
+        try
+        {
+            var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+            return scale > 0 ? scale : 1.0;
+        }
+        catch (InvalidOperationException)
+        {
+            // A window that is not connected to a presentation source yet; 100% is the safe fallback.
+            return 1.0;
+        }
+    }
+
+    /// <summary>
+    /// Sets the anchored position before Show(). The pointer and work area were captured in the
+    /// constructor, so the first frame the user sees is already beside the cursor; nothing repositions
+    /// the card after it becomes visible.
+    /// </summary>
+    private void PlaceBeforeShow(WorkArea work)
+    {
+        var (left, top) = Placement(Width, Height, work);
+        Left = left;
+        Top = top;
     }
 
     /// <summary>Near-cursor position in DIPs, clamped to the monitor's work area.</summary>
@@ -725,21 +749,5 @@ internal sealed class ToolWindow : Window
         return (
             Math.Clamp(fallbackLeft, work.Left, Math.Max(work.Left, work.Left + work.Width - width)),
             Math.Clamp(fallbackTop, work.Top, Math.Max(work.Top, work.Top + work.Height - height)));
-    }
-
-    private void ApplyBackdrop()
-    {
-        try
-        {
-            var handle = new WindowInteropHelper(this).Handle;
-            if (handle == IntPtr.Zero)
-                return;
-            var backdrop = DwmsbtMainWindow;
-            DwmSetWindowAttribute(handle, DwmwaSystemBackdropType, ref backdrop, sizeof(int));
-        }
-        catch
-        {
-            // Windows 10 has no system backdrop; the semi-transparent panel is the fallback.
-        }
     }
 }
