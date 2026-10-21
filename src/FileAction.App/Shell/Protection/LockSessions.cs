@@ -32,8 +32,32 @@ internal sealed class LockSession : IDisposable
         Watcher?.Dispose();
         Watcher = null;
         LockSecrets.Wipe(DataKey);
-        Panel?.ClosePanel();
+        var panel = Panel;
         Panel = null;
+        if (panel is null)
+            return;
+        if (panel.Dispatcher.CheckAccess())
+            panel.ClosePanel();
+        else
+            panel.Dispatcher.BeginInvoke(new Action(panel.ClosePanel));
+    }
+
+    /// <summary>Panel updates arrive from the watcher's thread pool too; never touch WPF off its dispatcher.</summary>
+    public void SetStatus(UnlockedStatus status) => UpdatePanel(panel => panel.SetStatus(status));
+
+    public void SetError(string detail) => UpdatePanel(panel => panel.SetError(detail));
+
+    private void UpdatePanel(Action<UnlockedPanel> update)
+    {
+        var panel = Panel;
+        if (panel is null)
+            return;
+        if (panel.Dispatcher.CheckAccess())
+        {
+            update(panel);
+            return;
+        }
+        panel.Dispatcher.BeginInvoke(new Action(() => update(panel)));
     }
 }
 
@@ -48,20 +72,39 @@ internal sealed class LockSessionManager
     private readonly LockService _service;
     private readonly LockJournalStore _journal;
     private readonly ProtectionSettings _settings;
-    private readonly ILockHoldProbe _holdProbe = new WindowsHoldProbe();
-    private readonly IExplorerProbe _explorerProbe = new ShellExplorerProbe();
-    private readonly ILockLauncher _launcher = new ShellLockLauncher();
+    private readonly ILockHoldProbe _holdProbe;
+    private readonly IExplorerProbe _explorerProbe;
+    private readonly ILockLauncher _launcher;
     private readonly DispatcherTimer _timer;
     private readonly Dictionary<string, LockSession> _sessions = new(StringComparer.Ordinal);
     private readonly object _gate = new();
+    private int _polling;
 
-    public LockSessionManager(LockService service, LockJournalStore journal, ProtectionSettings settings)
+    public LockSessionManager(LockService service, LockJournalStore journal, ProtectionSettings settings,
+        ILockHoldProbe? holdProbe = null, IExplorerProbe? explorerProbe = null, ILockLauncher? launcher = null)
     {
         _service = service;
         _journal = journal;
         _settings = settings;
+        _holdProbe = holdProbe ?? new WindowsHoldProbe();
+        _explorerProbe = explorerProbe ?? new ShellExplorerProbe();
+        _launcher = launcher ?? new ShellLockLauncher();
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        _timer.Tick += (_, _) => Poll();
+        // The tick only starts the poll; every blocking probe and every hash runs on a worker thread.
+        _timer.Tick += (_, _) => _ = PollSafelyAsync();
+    }
+
+    private async Task PollSafelyAsync()
+    {
+        try
+        {
+            await PollOnceAsync();
+        }
+        catch (Exception ex)
+        {
+            // A poll is background housekeeping: log it, keep the unlocked session and retry next tick.
+            FileAction.App.Diagnostics.AppLog.Error("lock poll", ex);
+        }
     }
 
     /// <summary>Raised after a successful relock, for the "Locked" toast.</summary>
@@ -95,11 +138,17 @@ internal sealed class LockSessionManager
             LockPaths.DisplayName(containerPath), false, DateTimeOffset.Now, LockSessionState.Extracting, null);
         _journal.Create(provisional);
         ExtractOutcome extracted;
+        string? treeHash;
         try
         {
-            // Extraction can take seconds for a large file; the UI thread stays responsive and the
-            // continuation returns to it before any window or journal work happens.
-            extracted = await Task.Run(() => _service.ExtractTo(containerPath, secret, tempRoot));
+            // Extraction and the folder tree hash can take seconds for a large item; both run on the
+            // worker, and the continuation returns to the UI thread before any window or journal work.
+            (extracted, treeHash) = await Task.Run(() =>
+            {
+                var outcome = _service.ExtractTo(containerPath, secret, tempRoot);
+                var hash = outcome.Read.Meta.IsDirectory ? LockArchive.TreeHash(outcome.Path) : null;
+                return (outcome, hash);
+            });
         }
         catch
         {
@@ -127,7 +176,7 @@ internal sealed class LockSessionManager
             IsDirectory = extracted.Read.Meta.IsDirectory,
             State = LockSessionState.Open,
             EntryCount = extracted.Read.Meta.EntryCount,
-            TreeHash = extracted.Read.Meta.IsDirectory ? LockArchive.TreeHash(extracted.Path) : null,
+            TreeHash = treeHash,
             FileHash = extracted.Read.Meta.IsDirectory
                 ? null
                 : Convert.ToHexString(extracted.Read.Digest.Sha256),
@@ -165,53 +214,57 @@ internal sealed class LockSessionManager
         if (session.Busy)
             return;
         session.Busy = true;
-        var wasError = session.Record.State == LockSessionState.Error;
-        (string? FileHash, string? TreeHash) before;
         try
         {
-            before = Snapshot(session.Record.PlaintextPath);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            session.Record = session.Record.WithState(LockSessionState.Error, ex.Message);
-            _journal.Write(session.Record);
-            session.Panel?.SetError(T("tool.lock.panel.changedSalvage"));
-            session.Busy = false;
-            return;
-        }
-        if (wasError && !MatchesSnapshot(session.Record, before))
-        {
-            session.Record = session.Record.WithState(LockSessionState.Error,
-                "The unlocked content changed since the last save. Retry refused so the good container is kept; open the item and salvage the copy.");
-            _journal.Write(session.Record);
-            session.Panel?.SetError(T("tool.lock.panel.changedSalvage"));
-            session.Busy = false;
-            return;
-        }
-        session.Panel?.SetStatus(UnlockedStatus.Syncing);
-        session.Record = session.Record.WithState(LockSessionState.Syncing);
-        _journal.Write(session.Record);
-        try
-        {
-            await Task.Run(() => _service.RelockFromSession(session.Record.ContainerPath, session.Header,
-                session.DataKey, session.Record.PlaintextPath,
-                expectedFileHash: wasError ? session.Record.FileHash : null,
-                expectedTreeHash: wasError ? session.Record.TreeHash : null));
-            _journal.Delete(session.Record.Id);
-            NotifyLocked(session.Record);
-            lock (_gate)
-                _sessions.Remove(session.Record.Id);
-            session.Dispose();
-        }
-        catch (Exception ex)
-        {
-            session.Record = session.Record.WithState(LockSessionState.Error, ex.Message) with
+            var wasError = session.Record.State == LockSessionState.Error;
+            var plaintextPath = session.Record.PlaintextPath;
+            (string? FileHash, string? TreeHash) before;
+            try
             {
-                FileHash = before.FileHash ?? session.Record.FileHash,
-                TreeHash = before.TreeHash ?? session.Record.TreeHash,
-            };
+                // Hashing the whole unlocked file (or walking a folder tree) can take seconds for a big
+                // item. It must never run on the dispatcher, or the wheel and every window freeze.
+                before = await Task.Run(() => Snapshot(plaintextPath)).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                session.Record = session.Record.WithState(LockSessionState.Error, ex.Message);
+                _journal.Write(session.Record);
+                session.SetError(T("tool.lock.panel.changedSalvage"));
+                return;
+            }
+            if (wasError && !MatchesSnapshot(session.Record, before))
+            {
+                session.Record = session.Record.WithState(LockSessionState.Error,
+                    "The unlocked content changed since the last save. Retry refused so the good container is kept; open the item and salvage the copy.");
+                _journal.Write(session.Record);
+                session.SetError(T("tool.lock.panel.changedSalvage"));
+                return;
+            }
+            session.SetStatus(UnlockedStatus.Syncing);
+            session.Record = session.Record.WithState(LockSessionState.Syncing);
             _journal.Write(session.Record);
-            session.Panel?.SetError(LockRuntime.Describe(ex));
+            try
+            {
+                await Task.Run(() => _service.RelockFromSession(session.Record.ContainerPath, session.Header,
+                    session.DataKey, session.Record.PlaintextPath,
+                    expectedFileHash: wasError ? session.Record.FileHash : null,
+                    expectedTreeHash: wasError ? session.Record.TreeHash : null)).ConfigureAwait(true);
+                _journal.Delete(session.Record.Id);
+                NotifyLocked(session.Record);
+                lock (_gate)
+                    _sessions.Remove(session.Record.Id);
+                session.Dispose();
+            }
+            catch (Exception ex)
+            {
+                session.Record = session.Record.WithState(LockSessionState.Error, ex.Message) with
+                {
+                    FileHash = before.FileHash ?? session.Record.FileHash,
+                    TreeHash = before.TreeHash ?? session.Record.TreeHash,
+                };
+                _journal.Write(session.Record);
+                session.SetError(LockRuntime.Describe(ex));
+            }
         }
         finally
         {
@@ -240,55 +293,128 @@ internal sealed class LockSessionManager
         Locked?.Invoke(T("tool.lock.panel.locked.title"),
             T("tool.lock.panel.locked.body", Bidi.Value(record.OriginalName)));
 
-    /// <summary>The poll: recompute the rules for every session, then relock the ones that are due.</summary>
-    private void Poll()
+    /// <summary>
+    /// The poll: recompute the rules for every session, then relock the ones that are due. The blocking
+    /// probes (a held file, Explorer's shell API, a folder walk) run on a worker thread; only the cheap
+    /// decision and the panel updates happen on the dispatcher, so a slow shell can never freeze the wheel.
+    /// </summary>
+    internal async Task PollOnceAsync()
     {
-        List<LockSession> sessions;
-        lock (_gate)
-            sessions = _sessions.Values.ToList();
-        if (sessions.Count == 0)
-        {
-            _timer.Stop();
+        // A probe can outlast the two-second tick; skip this tick instead of stacking overlapping probes.
+        if (Interlocked.Exchange(ref _polling, 1) == 1)
             return;
-        }
-
-        foreach (var session in sessions)
+        try
         {
-            if (session.Busy || session.Record.State is LockSessionState.Relocked)
-                continue;
+            List<LockSession> sessions;
+            lock (_gate)
+                sessions = _sessions.Values.ToList();
+            if (sessions.Count == 0)
+            {
+                _timer.Stop();
+                return;
+            }
+
+            var requests = sessions
+                .Where(session => !session.Busy && session.Record.State is not LockSessionState.Relocked)
+                .Select(session => new AutoLockProbeRequest(session, session.Record.PlaintextPath, session.IsDirectory))
+                .ToList();
+            if (requests.Count == 0)
+                return;
+
+            IReadOnlyList<AutoLockProbe> probes;
             try
             {
-                var plaintext = session.Record.PlaintextPath;
-                var lastChange = session.LastChange;
+                probes = await Task.Run(() => ProbeAll(requests)).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                                           or InvalidOperationException)
+            {
+                // Fail closed: a probe that could not answer makes this tick wait, never lock blindly.
+                return;
+            }
+
+            var now = DateTimeOffset.Now;
+            foreach (var probe in probes)
+            {
+                var session = probe.Session;
+                if (session.Busy || session.Record.State is LockSessionState.Relocked)
+                    continue;
+                lock (_gate)
+                {
+                    if (!_sessions.TryGetValue(session.Record.Id, out var current) ||
+                        !ReferenceEquals(current, session))
+                        continue;
+                }
+
                 try
                 {
-                    var stamp = session.IsDirectory
-                        ? Directory.GetLastWriteTimeUtc(plaintext)
-                        : File.GetLastWriteTimeUtc(plaintext);
-                    if (stamp > lastChange)
-                        lastChange = new DateTimeOffset(stamp, TimeSpan.Zero);
+                    var lastChange = session.LastChange;
+                    if (probe.LastWriteUtc is { } stamp && stamp > lastChange)
+                        lastChange = stamp;
+
+                    var input = new AutoLockInput(
+                        session.IsDirectory,
+                        ApplicationHoldsFile: probe.ApplicationHoldsFile,
+                        ExplorerShowsFolder: probe.ExplorerShowsFolder,
+                        AnyFileInFolderHeld: probe.AnyFileInFolderHeld,
+                        SinceLastChange: now - lastChange,
+                        SinceOpened: now - session.Record.OpenedUtc,
+                        GraceSeconds: _settings.GraceSeconds,
+                        IdleFallbackMinutes: _settings.IdleFallbackMinutes);
+                    if (AutoLockRules.Decide(input) == AutoLockDecision.Lock)
+                        _ = RelockAsync(session);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
+                    session.SetError(LockRuntime.Describe(ex));
                 }
-
-                var input = new AutoLockInput(
-                    session.IsDirectory,
-                    ApplicationHoldsFile: !session.IsDirectory && _holdProbe.HoldsFile(plaintext),
-                    ExplorerShowsFolder: session.IsDirectory && _explorerProbe.ShowsFolder(plaintext),
-                    AnyFileInFolderHeld: session.IsDirectory && _holdProbe.AnyFileHeld(plaintext),
-                    SinceLastChange: DateTimeOffset.Now - lastChange,
-                    SinceOpened: DateTimeOffset.Now - session.Record.OpenedUtc,
-                    GraceSeconds: _settings.GraceSeconds,
-                    IdleFallbackMinutes: _settings.IdleFallbackMinutes);
-                if (AutoLockRules.Decide(input) == AutoLockDecision.Lock)
-                    _ = RelockAsync(session);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                session.Panel?.SetError(LockRuntime.Describe(ex));
             }
         }
+        finally
+        {
+            Interlocked.Exchange(ref _polling, 0);
+        }
+    }
+
+    private sealed record AutoLockProbeRequest(LockSession Session, string PlaintextPath, bool IsDirectory);
+
+    private sealed record AutoLockProbe(
+        LockSession Session,
+        DateTimeOffset? LastWriteUtc,
+        bool ApplicationHoldsFile,
+        bool ExplorerShowsFolder,
+        bool AnyFileInFolderHeld);
+
+    /// <summary>Runs on a worker thread: every call here may block for seconds.</summary>
+    private IReadOnlyList<AutoLockProbe> ProbeAll(IReadOnlyList<AutoLockProbeRequest> requests)
+    {
+        var probes = new List<AutoLockProbe>(requests.Count);
+        foreach (var request in requests)
+            probes.Add(Probe(request));
+        return probes;
+    }
+
+    private AutoLockProbe Probe(AutoLockProbeRequest request)
+    {
+        DateTimeOffset? lastWrite = null;
+        try
+        {
+            var stamp = request.IsDirectory
+                ? Directory.GetLastWriteTimeUtc(request.PlaintextPath)
+                : File.GetLastWriteTimeUtc(request.PlaintextPath);
+            if (stamp != DateTime.MinValue)
+                lastWrite = new DateTimeOffset(stamp, TimeSpan.Zero);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+        }
+
+        return new AutoLockProbe(
+            request.Session,
+            lastWrite,
+            ApplicationHoldsFile: !request.IsDirectory && _holdProbe.HoldsFile(request.PlaintextPath),
+            ExplorerShowsFolder: request.IsDirectory && _explorerProbe.ShowsFolder(request.PlaintextPath),
+            AnyFileInFolderHeld: request.IsDirectory && _holdProbe.AnyFileHeld(request.PlaintextPath));
     }
 
     private void AttachWatcher(LockSession session)
@@ -309,7 +435,7 @@ internal sealed class LockSessionManager
             void Changed(object? sender, FileSystemEventArgs args)
             {
                 session.LastChange = DateTimeOffset.Now;
-                session.Panel?.SetStatus(UnlockedStatus.Syncing);
+                session.SetStatus(UnlockedStatus.Syncing);
             }
             watcher.Changed += Changed;
             watcher.Created += Changed;
@@ -317,7 +443,7 @@ internal sealed class LockSessionManager
             watcher.Renamed += (sender, args) =>
             {
                 session.LastChange = DateTimeOffset.Now;
-                session.Panel?.SetStatus(UnlockedStatus.Syncing);
+                session.SetStatus(UnlockedStatus.Syncing);
             };
             session.Watcher = watcher;
         }
@@ -366,6 +492,7 @@ internal sealed class LockSessionManager
             return;
         }
 
+        SweepRestoreTemp(owner);
         SweepSessionFolders(records, owner);
         foreach (var record in records)
         {
