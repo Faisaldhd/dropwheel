@@ -1761,7 +1761,11 @@ internal sealed class WheelWindow : Window
             default:
                 CancelDwell();
                 CancelSwapDwell();
-                SetInnerHighlight(-1);
+                // Crossing the hub is how the pointer reaches the far side of the small inner ring.
+                // Keep the last child highlighted instead of blanking it on every pass through the
+                // centre; a click on the hub still clears the ring explicitly.
+                if (_innerGroupId is null)
+                    SetInnerHighlight(-1);
                 SetHighlight(-1);
                 break;
         }
