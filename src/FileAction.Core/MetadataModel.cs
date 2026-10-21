@@ -154,6 +154,85 @@ public static class MetadataModel
     };
 }
 
+/// <summary>
+/// The rules for editing several files in one window: every file must share one supported metadata kind,
+/// and the editable rows are the tags that kind always has. Chapters stay per file and are not batched.
+/// </summary>
+public static class MetadataBatch
+{
+    /// <summary>The kind every file shares, or None when the list is empty, mixed or unsupported.</summary>
+    public static MetadataKind KindOf(IReadOnlyList<FileItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        if (items.Count == 0)
+            return MetadataKind.None;
+
+        MetadataKind kind = MetadataKind.None;
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (items[i].IsDirectory)
+                return MetadataKind.None;
+
+            var itemKind = MetadataModel.KindOf(Formats.Normalize(items[i].Format));
+            if (itemKind == MetadataKind.None || (i > 0 && itemKind != kind))
+                return MetadataKind.None;
+            kind = itemKind;
+        }
+
+        return kind;
+    }
+
+    /// <summary>True when the files can be edited together.</summary>
+    public static bool Accepts(IReadOnlyList<FileItem> items) => KindOf(items) != MetadataKind.None;
+
+    /// <summary>
+    /// One editable row per tag shared by the files. The value shown is the common value when every file
+    /// agrees; otherwise it is blank, so a blank box never overwrites a value that differs between files.
+    /// Chapters are excluded because each file has its own chapter list.
+    /// </summary>
+    public static IReadOnlyList<MetadataField> SharedFields(IReadOnlyList<MetadataDocument> documents)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+        if (documents.Count == 0)
+            return [];
+
+        var first = documents[0];
+        var fields = new List<MetadataField>();
+        foreach (var field in first.Fields)
+        {
+            if (!field.Editable || field.EditKey == MetadataEditKeys.Chapters)
+                continue;
+            if (fields.Any(existing => string.Equals(existing.EditKey, field.EditKey, StringComparison.Ordinal)))
+                continue;
+            fields.Add(field with { Value = CommonValue(documents, field.EditKey!) });
+        }
+
+        return fields;
+    }
+
+    /// <summary>The value every file reports for a tag, or empty when the values differ or one file lacks it.</summary>
+    public static string CommonValue(IReadOnlyList<MetadataDocument> documents, string editKey)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+        ArgumentException.ThrowIfNullOrEmpty(editKey);
+        if (documents.Count == 0)
+            return string.Empty;
+
+        string? common = null;
+        foreach (var document in documents)
+        {
+            var value = document.Fields.FirstOrDefault(field => string.Equals(field.EditKey, editKey, StringComparison.Ordinal))?.Value
+                ?? string.Empty;
+            if (common is null)
+                common = value;
+            else if (!string.Equals(common, value, StringComparison.Ordinal))
+                return string.Empty;
+        }
+
+        return common ?? string.Empty;
+    }
+}
+
 /// <summary>One rendered group of <see cref="MetadataField"/> values.</summary>
 public sealed record MetadataGroupSlice(string GroupKey, IReadOnlyList<MetadataField> Fields);
 
@@ -246,8 +325,19 @@ public sealed class MetadataEdit
     /// <summary>Writes a copy without any metadata instead of the values above.</summary>
     public bool RemoveAll { get; set; }
 
+    /// <summary>
+    /// Batch mode: only the rows the user actually changed count as an edit, so seeded common values do
+    /// not rewrite every file unchanged.
+    /// </summary>
+    public bool ApplyOnlyChanged { get; set; }
+
     /// <summary>Keys whose tag the user removed with the per-field button; they are deleted on save.</summary>
     public ISet<string> RemovedFields { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>Keys whose value differs from the value the row opened with; batch mode's save gate.</summary>
+    public ISet<string> ChangedFields { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+    private readonly Dictionary<string, string> _seeded = new(StringComparer.Ordinal);
 
     /// <summary>The current value of one editable row.</summary>
     public string Get(string key) => key switch
@@ -271,6 +361,78 @@ public sealed class MetadataEdit
     {
         var text = value ?? string.Empty;
         RemovedFields.Remove(key);
+        Assign(key, text);
+
+        // A row that is back at the value it opened with is not a change; this keeps batch saves honest
+        // when the user types and then reverts a value.
+        if (_seeded.TryGetValue(key, out var seeded)
+                ? string.Equals(seeded, text, StringComparison.Ordinal)
+                : text.Length == 0)
+            ChangedFields.Remove(key);
+        else
+            ChangedFields.Add(key);
+    }
+
+    /// <summary>Sets a row's opening value without counting it as a change; used to seed the editor.</summary>
+    public void Seed(string key, string? value)
+    {
+        var text = value ?? string.Empty;
+        Assign(key, text);
+        RemovedFields.Remove(key);
+        ChangedFields.Remove(key);
+        _seeded[key] = text;
+    }
+
+    /// <summary>Deletes one editable tag: the value is cleared and the writer removes the tag.</summary>
+    public void Remove(string key)
+    {
+        Set(key, string.Empty);
+        RemovedFields.Add(key);
+    }
+
+    /// <summary>True when the user explicitly removed this tag (as opposed to leaving it empty).</summary>
+    public bool IsRemoved(string key) => RemovedFields.Contains(key);
+
+    /// <summary>Clears every value, removal and change mark, ready to seed the editor again.</summary>
+    public void Reset()
+    {
+        RemoveAll = false;
+        Title = string.Empty;
+        Artist = string.Empty;
+        Album = string.Empty;
+        Author = string.Empty;
+        Subject = string.Empty;
+        Keywords = string.Empty;
+        CameraMake = string.Empty;
+        CameraModel = string.Empty;
+        Latitude = string.Empty;
+        Longitude = string.Empty;
+        ChapterText = string.Empty;
+        RemovedFields.Clear();
+        ChangedFields.Clear();
+        _seeded.Clear();
+    }
+
+    /// <summary>True when at least one editable value (or the remove switch) would change the file.</summary>
+    public bool HasEdits =>
+        RemoveAll
+        || RemovedFields.Count > 0
+        || (ApplyOnlyChanged
+            ? ChangedFields.Count > 0
+            : !string.IsNullOrWhiteSpace(Title)
+                || !string.IsNullOrWhiteSpace(Artist)
+                || !string.IsNullOrWhiteSpace(Album)
+                || !string.IsNullOrWhiteSpace(Author)
+                || !string.IsNullOrWhiteSpace(Subject)
+                || !string.IsNullOrWhiteSpace(Keywords)
+                || !string.IsNullOrWhiteSpace(CameraMake)
+                || !string.IsNullOrWhiteSpace(CameraModel)
+                || !string.IsNullOrWhiteSpace(Latitude)
+                || !string.IsNullOrWhiteSpace(Longitude)
+                || !string.IsNullOrWhiteSpace(ChapterText));
+
+    private void Assign(string key, string text)
+    {
         switch (key)
         {
             case MetadataEditKeys.ExifMake:
@@ -309,32 +471,6 @@ public sealed class MetadataEdit
                 break;
         }
     }
-
-    /// <summary>Deletes one editable tag: the value is cleared and the writer removes the tag.</summary>
-    public void Remove(string key)
-    {
-        Set(key, string.Empty);
-        RemovedFields.Add(key);
-    }
-
-    /// <summary>True when the user explicitly removed this tag (as opposed to leaving it empty).</summary>
-    public bool IsRemoved(string key) => RemovedFields.Contains(key);
-
-    /// <summary>True when at least one editable value (or the remove switch) would change the file.</summary>
-    public bool HasEdits =>
-        RemoveAll
-        || RemovedFields.Count > 0
-        || !string.IsNullOrWhiteSpace(Title)
-        || !string.IsNullOrWhiteSpace(Artist)
-        || !string.IsNullOrWhiteSpace(Album)
-        || !string.IsNullOrWhiteSpace(Author)
-        || !string.IsNullOrWhiteSpace(Subject)
-        || !string.IsNullOrWhiteSpace(Keywords)
-        || !string.IsNullOrWhiteSpace(CameraMake)
-        || !string.IsNullOrWhiteSpace(CameraModel)
-        || !string.IsNullOrWhiteSpace(Latitude)
-        || !string.IsNullOrWhiteSpace(Longitude)
-        || !string.IsNullOrWhiteSpace(ChapterText);
 }
 
 /// <summary>One validation problem; <see cref="MessageKey"/> is a localization key, not display text.</summary>

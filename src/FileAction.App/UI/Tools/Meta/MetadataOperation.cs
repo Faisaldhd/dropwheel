@@ -5,8 +5,9 @@ using static FileAction.Core.Loc;
 namespace FileAction.App.UI.Tools.Meta;
 
 /// <summary>
-/// "Edit metadata" on the Tools wheel: applies to one image, audio/video file or PDF and opens the
-/// metadata window, where every field is listed and a copy with the edited tags can be written.
+/// "Edit metadata" on the Tools wheel: applies to one or more images, audio/video files or PDFs of the
+/// same kind and opens the metadata window, where every field is listed and a copy with the edited tags
+/// can be written.
 /// </summary>
 internal sealed class MetadataOperation : Operation, IInteractiveTool
 {
@@ -20,10 +21,9 @@ internal sealed class MetadataOperation : Operation, IInteractiveTool
     /// <summary>Images and PDFs are read in-process; audio and video need FFmpeg.</summary>
     public override bool IsAvailable(ToolLocator tools, IReadOnlyList<FileItem> items)
     {
-        if (items.Count != 1 || items[0].IsDirectory)
-            return false;
-        var kind = Compression.KindOf(items[0].Format);
-        return kind is MediaKind.Audio or MediaKind.Video ? tools.Has(ExternalTool.Ffmpeg) : kind != MediaKind.None;
+        var kind = MetadataBatch.KindOf(items);
+        return kind is MetadataKind.Image or MetadataKind.Pdf
+            || (kind == MetadataKind.Media && tools.Has(ExternalTool.Ffmpeg));
     }
 
     /// <summary>Never used: the wheel opens the tool window before a job is created.</summary>

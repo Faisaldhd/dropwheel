@@ -897,5 +897,13 @@ public class CompressMetadataToolTests
         Assert.False(CompressTool.Instance.Applies([]));
         Assert.False(MetadataTool.Instance.Applies([]));
         Assert.False(CompressTool.Instance.Applies([new FileItem(Temp("a.jpg")), new FileItem(Temp("b.jpg"))]));
+        Assert.True(MetadataTool.Instance.Applies([new FileItem(Temp("a.jpg")), new FileItem(Temp("b.jpg"))]),
+            "metadata should accept several images");
+        Assert.True(MetadataTool.Instance.Applies([new FileItem(Temp("a.pdf")), new FileItem(Temp("b.pdf"))]),
+            "metadata should accept several PDFs");
+        Assert.False(MetadataTool.Instance.Applies([new FileItem(Temp("a.jpg")), new FileItem(Temp("b.pdf"))]),
+            "metadata should not mix file kinds");
+        Assert.False(MetadataTool.Instance.Applies([new FileItem(Temp("a.jpg")), new FileItem(Temp("b.docx"))]),
+            "metadata should not accept a batch with an unsupported file");
     }
 }

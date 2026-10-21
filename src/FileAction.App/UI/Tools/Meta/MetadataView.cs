@@ -11,18 +11,19 @@ namespace FileAction.App.UI.Tools.Meta;
 /// (file, tracks, EXIF/IPTC/XMP, PDF info, chapters). Every tag the tool can write is rendered as an
 /// editable value with a per-field remove button; the rest reads as label: value. The footer carries the
 /// fixed note and "Remove All", the window's primary button is "Save", and the work runs asynchronously
-/// so it can be cancelled from the window.
+/// so it can be cancelled from the window. Several files of the same kind share one tag form: the common
+/// value is shown, only the rows the user changes are written, and chapters stay per file.
 /// </summary>
 internal sealed class MetadataView
 {
-    private readonly FileItem _item;
+    private readonly IReadOnlyList<FileItem> _items;
     private readonly DropTargets? _targets;
     private readonly ToolLocator _tools = new();
     private readonly MetadataKind _kind;
-    private readonly string _format;
-    private readonly Task<MetadataRead> _load;
+    private readonly bool _batch;
+    private readonly Task<MetadataBatchRead> _load;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly MetadataEdit _edit = new();
+    private readonly MetadataEdit _edit;
 
     private readonly TextBlock _title = new();
     private readonly TextBlock _meta = ToolControls.Label(string.Empty, 11.5);
@@ -33,19 +34,21 @@ internal sealed class MetadataView
     private readonly Border _cancel;
 
     private MetadataDocument _document = MetadataDocument.Empty(MetadataKind.None);
+    private IReadOnlyList<double> _durations = [];
     private double _duration;
     private CancellationTokenSource? _cts;
     private bool _running;
 
-    public MetadataView(FileItem item, DropTargets? targets)
+    public MetadataView(IReadOnlyList<FileItem> items, DropTargets? targets)
     {
-        _item = item;
+        _items = items;
         _targets = targets;
-        _format = Formats.Normalize(item.Format);
-        _kind = MetadataModel.KindOf(_format);
+        _batch = items.Count > 1;
+        _kind = MetadataBatch.KindOf(items);
+        _edit = new MetadataEdit { ApplyOnlyChanged = _batch };
         _cancel = Controls.Button(T("tool.metadata.cancel"), () => _cts?.Cancel());
-        // Read off the UI thread: the window opens immediately and fills in when the file has been read.
-        _load = MetadataRunner.ReadAsync(item, _kind, _tools, CancellationToken.None);
+        // Read off the UI thread: the window opens immediately and fills in when the files have been read.
+        _load = MetadataRunner.ReadManyAsync(items, _kind, _tools, CancellationToken.None);
         _search.TextChanged += (_, _) => RenderList();
     }
 
@@ -90,15 +93,29 @@ internal sealed class MetadataView
         return new ToolContent(root, Reset, ApplyAsync, _ready.Task, ActivateAsync);
     }
 
-    /// <summary>Fills the field list and seeds the editable values from what the file already has.</summary>
+    /// <summary>Fills the field list and seeds the editable values from what the files already have.</summary>
     public async Task ActivateAsync()
     {
         try
         {
             var read = await _load;
-            _document = read.Document;
-            _duration = read.DurationSeconds;
-            _meta.Text = $"{Bidi.Value(_kind == MetadataKind.Pdf ? "PDF" : Formats.Display(_format))} · {T("tool.metadata.count", _document.Count)}";
+            var documents = read.Documents;
+            _durations = read.Durations;
+
+            if (_batch)
+            {
+                // One shared tag form: values every file agrees on, blank where they differ.
+                _document = new MetadataDocument(_kind, MetadataBatch.SharedFields(documents));
+                _meta.Text = T("tool.metadata.count", _document.Count);
+            }
+            else
+            {
+                _document = documents.Count > 0 ? documents[0] : MetadataDocument.Empty(_kind);
+                _duration = _durations.Count > 0 ? _durations[0] : 0;
+                var format = _items.Count > 0 ? _items[0].Format : string.Empty;
+                _meta.Text = $"{Bidi.Value(_kind == MetadataKind.Pdf ? "PDF" : Formats.Display(Formats.Normalize(format)))} · {T("tool.metadata.count", _document.Count)}";
+            }
+
             SeedEdit();
             RenderList();
         }
@@ -118,7 +135,7 @@ internal sealed class MetadataView
     private FrameworkElement BuildHeader()
     {
         var stack = new StackPanel { Margin = new Thickness(0, 4, 0, 2) };
-        _title.Text = Bidi.Value(_item.Name);
+        _title.Text = _batch || _items.Count == 0 ? Items(_items.Count) : Bidi.Value(_items[0].Name);
         _title.FontSize = 15;
         _title.FontWeight = FontWeights.SemiBold;
         _title.Foreground = Theme.Text;
@@ -301,15 +318,14 @@ internal sealed class MetadataView
 
     // ------------------------------------------------------------------ state
 
-    /// <summary>Seeds every editable row from the values the file already has.</summary>
+    /// <summary>Seeds every editable row from the values the files already have.</summary>
     private void SeedEdit()
     {
-        _edit.RemoveAll = false;
-        _edit.RemovedFields.Clear();
+        _edit.Reset();
         foreach (var field in _document.Fields)
         {
             if (field.EditKey is { } key)
-                _edit.Set(key, field.Value);
+                _edit.Seed(key, field.Value);
         }
     }
 
@@ -339,14 +355,13 @@ internal sealed class MetadataView
             throw new ConversionException(T("tool.metadata.error.empty"));
 
         IReadOnlyList<MetadataChapter> chapters = Array.Empty<MetadataChapter>();
-        if (MetadataValidation.SupportsChapters(_kind) && !_edit.RemoveAll && !_edit.IsRemoved(MetadataEditKeys.Chapters))
+        if (!_batch && MetadataValidation.SupportsChapters(_kind) && !_edit.RemoveAll && !_edit.IsRemoved(MetadataEditKeys.Chapters))
         {
             chapters = MetadataValidation.ParseChapters(_edit.ChapterText, out var chapterIssues);
             if (chapterIssues.Count > 0)
                 throw new ConversionException(chapterIssues[0].Describe());
         }
 
-        var directory = ToolOutputFolder.For(_item, _targets);
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
@@ -359,7 +374,16 @@ internal sealed class MetadataView
         BeginRun();
         try
         {
-            return await MetadataRunner.WriteAsync(_item, _kind, _edit, chapters, _duration, directory, _tools, token, progress);
+            if (_batch)
+            {
+                var outputs = await MetadataRunner.WriteManyAsync(
+                    _items, _kind, _edit, _durations, _targets, _tools, token, progress);
+                // The shared window reports "what was created"; for a batch that is the number of copies.
+                return outputs.Count == 0 ? null : Items(outputs.Count);
+            }
+
+            var directory = ToolOutputFolder.For(_items[0], _targets);
+            return await MetadataRunner.WriteAsync(_items[0], _kind, _edit, chapters, _duration, directory, _tools, token, progress);
         }
         catch (OperationCanceledException)
         {
