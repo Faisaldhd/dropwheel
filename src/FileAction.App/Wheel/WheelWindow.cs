@@ -1439,7 +1439,11 @@ internal sealed class WheelWindow : Window
         var hit = HitAt(point);
         var overChild = hit.Zone == WheelZone.Inner && hit.Index >= 0 && hit.Index < _innerChoices.Count && !_innerChoices[hit.Index].IsMore;
         var overSlice = hit.Zone == WheelZone.Outer && hit.Index >= 0 && hit.Index < _ops.Count;
-        e.Effects = overChild || overSlice ? SafeEffect(e.AllowedEffects) : DragDropEffects.None;
+        // Crossing the hub/text while dragging must not become a "no drop" island: OLE then stops feeding
+        // DragOver and the pointer can no longer reach the inner ring. Keep the effect alive over the hub
+        // while a category is open; the drop still does nothing until it reaches a child.
+        var overHub = hit.Zone == WheelZone.Hub && _innerGroupId is not null;
+        e.Effects = overChild || overSlice || overHub ? SafeEffect(e.AllowedEffects) : DragDropEffects.None;
     }
 
     /// <summary>
