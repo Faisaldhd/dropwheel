@@ -37,6 +37,62 @@ public class AudioToolsTests
         [Parsed_silencedetect_0 @ 000001e86d8cf300] silence_end: 5 | silence_duration: 1.000272
         """;
 
+    // ------------------------------------------------------------------ stream probe
+
+    [Fact]
+    public void Audio_probe_reads_a_mono_flac_stream_banner()
+    {
+        const string log = """
+            Input #0, flac, from 'album.flac':
+              Duration: 00:00:03.00, start: 0.000000, bitrate: 154 kb/s
+              Stream #0:0: Audio: flac, 44100 Hz, mono, s16
+            """;
+
+        var info = AudioProbe.Parse(log);
+
+        Assert.NotNull(info);
+        Assert.Equal(44100, info!.Value.SampleRate);
+        Assert.Equal(1, info.Value.Channels);
+        Assert.True(info.Value.IsMono);
+    }
+
+    [Fact]
+    public void Audio_probe_reads_a_stereo_mp3_stream_banner()
+    {
+        const string log = """
+              Stream #0:0: Audio: mp3 (mp3float), 48000 Hz, stereo, fltp, 192 kb/s
+            """;
+
+        var info = AudioProbe.Parse(log);
+
+        Assert.NotNull(info);
+        Assert.Equal(48000, info!.Value.SampleRate);
+        Assert.Equal(2, info.Value.Channels);
+        Assert.False(info.Value.IsMono);
+    }
+
+    [Theory]
+    [InlineData("mono", 1)]
+    [InlineData("stereo", 2)]
+    [InlineData("5.0", 5)]
+    [InlineData("5.1(side)", 6)]
+    [InlineData("7.1", 8)]
+    [InlineData("12 channels", 12)]
+    public void Audio_probe_maps_channel_layouts(string layout, int channels)
+    {
+        Assert.Equal(channels, AudioProbe.ChannelCount(layout));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("ffmpeg version 9.0.2")]
+    [InlineData("  Duration: 00:00:03.00, bitrate: 154 kb/s")]
+    public void Audio_probe_returns_null_without_an_audio_stream(string? log)
+    {
+        Assert.Null(AudioProbe.Parse(log));
+    }
+
     // ------------------------------------------------------------------ loudness
 
     [Fact]
@@ -137,6 +193,19 @@ public class AudioToolsTests
         Assert.Contains("linear=true", filter, StringComparison.Ordinal);
         Assert.Contains("print_format=summary", filter, StringComparison.Ordinal);
         Assert.StartsWith("loudnorm=I=-16:TP=-1.5:LRA=11", filter, StringComparison.Ordinal);
+        // loudnorm leaves its output at 192 kHz/24-bit; the tail restores the source rate and 16-bit.
+        Assert.EndsWith(",aresample=48000,aformat=sample_fmts=s16", filter, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_filter_uses_the_source_sample_rate_after_normalizing()
+    {
+        var measurement = AudioLoudness.Parse(LoudnormLog)!;
+
+        var filter = AudioLoudness.ApplyFilter(LoudnessTarget.Default, measurement, sampleRate: 44100);
+
+        Assert.Contains(":linear=true,aresample=44100,aformat=sample_fmts=s16", filter, StringComparison.Ordinal);
+        Assert.DoesNotContain("192000", filter, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -150,11 +219,13 @@ public class AudioToolsTests
 
         var silentFilter = AudioLoudness.ApplyFilter(LoudnessTarget.Default, AudioLoudness.Parse(silent));
         Assert.DoesNotContain("measured_", silentFilter, StringComparison.Ordinal);
-        Assert.EndsWith("print_format=summary", silentFilter, StringComparison.Ordinal);
+        Assert.EndsWith("print_format=summary,aresample=48000,aformat=sample_fmts=s16", silentFilter, StringComparison.Ordinal);
 
         var emptyFilter = AudioLoudness.ApplyFilter(LoudnessTarget.Default, null);
         Assert.DoesNotContain("measured_", emptyFilter, StringComparison.Ordinal);
-        Assert.Equal("loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary", emptyFilter);
+        Assert.Equal(
+            "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary,aresample=48000,aformat=sample_fmts=s16",
+            emptyFilter);
     }
 
     [Fact]
@@ -178,13 +249,17 @@ public class AudioToolsTests
         const string input = @"C:\audio\tone.wav";
         const string output = @"C:\audio\tone Normalized.wav";
         var measurement = AudioLoudness.Parse(LoudnormLog);
-        var arguments = AudioLoudness.ApplyArguments(input, output, LoudnessTarget.Default, measurement, ["-c:a", "pcm_s16le"]);
+        var arguments = AudioLoudness.ApplyArguments(
+            input, output, LoudnessTarget.Default, measurement, ["-c:a", "pcm_s16le"], sampleRate: 44100);
 
         Assert.Equal(output, arguments[^1]);
         Assert.Equal("-c:a", arguments[^3]);
         Assert.Equal("pcm_s16le", arguments[^2]);
         Assert.Contains("-af", arguments);
-        Assert.Equal(AudioLoudness.ApplyFilter(LoudnessTarget.Default, measurement), arguments[arguments.ToList().IndexOf("-af") + 1]);
+        Assert.Equal(
+            AudioLoudness.ApplyFilter(LoudnessTarget.Default, measurement, 44100),
+            arguments[arguments.ToList().IndexOf("-af") + 1]);
+        Assert.Contains("aresample=44100", arguments[arguments.ToList().IndexOf("-af") + 1], StringComparison.Ordinal);
         Assert.Single(arguments, argument => argument == output);
     }
 
@@ -553,6 +628,7 @@ public class AudioToolsTests
 
         Assert.Equal("tools.audionormalize", normalize.Id);
         Assert.Equal("tools.audiotrim", trim.Id);
+        Assert.Equal("tool.audionormalize.primary", normalize.PrimaryLabelKey);
         Assert.Equal(560, normalize.Layout.ChromeWidth + normalize.Layout.DefaultPreviewWidth, 6);
         Assert.Equal(520, normalize.Layout.ChromeHeight + normalize.Layout.DefaultPreviewHeight, 6);
         Assert.Equal(560, trim.Layout.ChromeWidth + trim.Layout.DefaultPreviewWidth, 6);

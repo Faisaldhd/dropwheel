@@ -279,6 +279,14 @@ internal sealed class AudioBleepView
 
         BuildPreviewRow();
         _controls.Children.Add(_previewRow);
+        _controls.Children.Add(new TextBlock
+        {
+            Text = T("tool.audiobleep.preview.note"),
+            FontSize = 11,
+            Foreground = Theme.Muted,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(2, 0, 2, 8),
+        });
         _controls.Children.Add(BuildToolbar());
 
         _controls.Children.Add(SliderRow(
@@ -313,13 +321,16 @@ internal sealed class AudioBleepView
         RefreshFromModel();
     }
 
-    /// <summary>Two real buttons: the untouched audio, or the audio with the sections replaced by the tone.</summary>
+    /// <summary>
+    /// Two view toggles: the untouched waveform, or the waveform with the sections drawn as the tone that
+    /// will replace them. This window has no audio playback; the note below says so and points at Save.
+    /// </summary>
     private void BuildPreviewRow()
     {
         _previewRow.Children.Clear();
 
-        _originalPreview = new PreviewButton(T("tool.audiobleep.preview.original"), null, () => SetPreview(false));
-        _bleepedPreview = new PreviewButton(T("tool.audiobleep.preview.bleeped"), Glyphs.Play, () => SetPreview(true));
+        _originalPreview = new PreviewButton(T("tool.audiobleep.preview.original"), () => SetPreview(false));
+        _bleepedPreview = new PreviewButton(T("tool.audiobleep.preview.bleeped"), () => SetPreview(true));
         _originalPreview.SetSelected(!_bleeped);
         _bleepedPreview.SetSelected(_bleeped);
 
@@ -537,13 +548,12 @@ internal sealed class AudioBleepView
         }
     }
 
-    /// <summary>A pill button that shows whether it is the preview currently on screen.</summary>
+    /// <summary>A pill toggle that shows which waveform view is currently on screen.</summary>
     private sealed class PreviewButton
     {
         private readonly TextBlock _label;
-        private readonly TextBlock? _icon;
 
-        public PreviewButton(string text, string? glyph, Action click)
+        public PreviewButton(string text, Action click)
         {
             _label = new TextBlock
             {
@@ -553,18 +563,6 @@ internal sealed class AudioBleepView
             };
 
             var content = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            if (glyph is not null)
-            {
-                _icon = new TextBlock
-                {
-                    Text = glyph,
-                    FontFamily = Theme.Icons,
-                    FontSize = 11,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(0, 1, 6, 0),
-                };
-                content.Children.Add(_icon);
-            }
             content.Children.Add(_label);
 
             Root = new Border
@@ -587,8 +585,6 @@ internal sealed class AudioBleepView
             Root.BorderBrush = selected ? Brushes.Transparent : Theme.PanelBorder;
             _label.Foreground = selected ? Theme.TextOnAccent : Theme.Text;
             _label.FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal;
-            if (_icon is not null)
-                _icon.Foreground = selected ? Theme.TextOnAccent : Theme.Text;
         }
     }
 }

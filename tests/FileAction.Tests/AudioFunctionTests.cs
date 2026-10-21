@@ -1,6 +1,8 @@
 using System.Globalization;
+using System.Text;
 using FileAction.App.UI.Tools.Audio;
 using FileAction.Core;
+using FileAction.Core.Backends;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -57,6 +59,72 @@ public class AudioFunctionTests : IDisposable
         return folder;
     }
 
+    /// <summary>The owner's real fixture when it is present; CI keeps its generated samples instead.</summary>
+    private static string? Fixture(string name) =>
+        TestData.FixtureRoot is { } root && File.Exists(Path.Combine(root, name))
+            ? Path.Combine(root, name)
+            : null;
+
+    private bool SkipWithoutFixture(string name, out string path)
+    {
+        var fixture = Fixture(name);
+        if (fixture is not null)
+        {
+            path = fixture;
+            return false;
+        }
+        _output.WriteLine($"skipped: _local test data has no {name}");
+        path = string.Empty;
+        return true;
+    }
+
+    /// <summary>FFmpeg's own stream banner, used to read the sample format and size line.</summary>
+    private async Task<string> BannerAsync(string path)
+    {
+        var log = new StringBuilder();
+        await ProcessRunner.RunAsync(
+            _ffmpeg!,
+            ["-hide_banner", "-nostdin", "-i", path],
+            CancellationToken.None,
+            line =>
+            {
+                lock (log)
+                    log.AppendLine(line);
+            },
+            throwOnError: false).ConfigureAwait(false);
+        return log.ToString();
+    }
+
+    /// <summary>RMS per channel after decoding to PCM, so a silent channel or a 6 dB loss is measurable.</summary>
+    private async Task<double[]> ChannelRmsAsync(string path, int channels)
+    {
+        var pcm = Path.Combine(_dir, $"rms-{Guid.NewGuid():N}.pcm");
+        await ProcessRunner.RunAsync(
+            _ffmpeg!,
+            [
+                "-hide_banner", "-nostdin", "-y",
+                "-i", path,
+                "-vn",
+                "-ac", channels.ToString(CultureInfo.InvariantCulture),
+                "-ar", "44100",
+                "-f", "s16le", pcm,
+            ],
+            CancellationToken.None).ConfigureAwait(false);
+
+        var bytes = await File.ReadAllBytesAsync(pcm).ConfigureAwait(false);
+        var count = bytes.Length / (2 * channels);
+        var sums = new double[channels];
+        for (var i = 0; i < count; i++)
+        {
+            for (var channel = 0; channel < channels; channel++)
+            {
+                var sample = BitConverter.ToInt16(bytes, (i * channels + channel) * 2) / 32768.0;
+                sums[channel] += sample * sample;
+            }
+        }
+        return sums.Select(sum => count == 0 ? 0 : Math.Sqrt(sum / count)).ToArray();
+    }
+
     [Fact]
     public async Task Normalize_reaches_the_requested_loudness_and_true_peak()
     {
@@ -70,11 +138,19 @@ public class AudioFunctionTests : IDisposable
 
         var outDir = OutputFolder(_dir, "normalize-out");
         var created = await AudioRunner.NormalizeAsync(
-            _ffmpeg!, new FileItem(source), target, before!, outDir, CancellationToken.None);
+            _ffmpeg!, new FileItem(source), target, before!, outDir, 48000, CancellationToken.None);
 
         Assert.True(File.Exists(created), created);
         Assert.True(new FileInfo(created).Length > 0, "empty output");
         Assert.Empty(Directory.GetFiles(outDir, "*.part.*"));
+
+        // loudnorm must not leave the file at its internal 192 kHz/24-bit working format.
+        var probe = await AudioRunner.ProbeAsync(_ffmpeg!, created, CancellationToken.None);
+        Assert.NotNull(probe);
+        Assert.Equal(48000, probe!.Value.SampleRate);
+        var banner = await BannerAsync(created);
+        Assert.Contains("s16", banner, StringComparison.Ordinal);
+        Assert.DoesNotContain("192000 Hz", banner, StringComparison.Ordinal);
 
         var after = await AudioRunner.MeasureAsync(_ffmpeg!, created, target, CancellationToken.None);
         Assert.NotNull(after);
@@ -84,6 +160,130 @@ public class AudioFunctionTests : IDisposable
             $"true peak {after.TruePeak:0.00} dBTP is over the {target.TruePeakDb:0.0} dBTP limit");
         _output.WriteLine(
             $"normalize: {target.IntegratedLufs:0.0} LUFS target, got {after.Integrated:0.00} LUFS / {after.TruePeak:0.00} dBTP");
+    }
+
+    [Theory]
+    [InlineData("album.flac", true)]
+    [InlineData("tone.wav", true)]
+    [InlineData("song.mp3", false)]
+    public async Task Normalize_fixture_keeps_the_source_rate_and_a_sane_depth(string name, bool lossless)
+    {
+        if (SkipWithoutFfmpeg())
+            return;
+        if (SkipWithoutFixture(name, out var source))
+            return;
+
+        var sourceInfo = await AudioRunner.ProbeAsync(_ffmpeg!, source, CancellationToken.None);
+        Assert.NotNull(sourceInfo);
+
+        var target = LoudnessTarget.Default;
+        var measurement = await AudioRunner.MeasureAsync(_ffmpeg!, source, target, CancellationToken.None);
+        Assert.NotNull(measurement);
+        Assert.False(measurement!.IsSilent);
+
+        var outDir = OutputFolder(_dir, "fixture-normalize-" + Path.GetFileNameWithoutExtension(name));
+        var created = await AudioRunner.NormalizeAsync(
+            _ffmpeg!, new FileItem(source), target, measurement, outDir, sourceInfo!.Value.SampleRate, CancellationToken.None);
+
+        Assert.True(File.Exists(created), created);
+        var probe = await AudioRunner.ProbeAsync(_ffmpeg!, created, CancellationToken.None);
+        Assert.NotNull(probe);
+        Assert.Equal(sourceInfo.Value.SampleRate, probe!.Value.SampleRate);
+        Assert.NotEqual(192000, probe.Value.SampleRate);
+
+        if (lossless)
+        {
+            var banner = await BannerAsync(created);
+            Assert.Contains("s16", banner, StringComparison.Ordinal);
+            Assert.DoesNotContain("24 bit", banner, StringComparison.Ordinal);
+            Assert.DoesNotContain("192000 Hz", banner, StringComparison.Ordinal);
+        }
+
+        _output.WriteLine($"{name}: {sourceInfo.Value.SampleRate} Hz -> {probe.Value.SampleRate} Hz");
+    }
+
+    [Fact]
+    public async Task Channels_duplicate_a_mono_fixture_into_both_sides_without_attenuation()
+    {
+        if (SkipWithoutFfmpeg())
+            return;
+        if (SkipWithoutFixture("album.flac", out var source))
+            return;
+
+        var outDir = OutputFolder(_dir, "fixture-channels");
+        var sourceProbe = await AudioRunner.ProbeAsync(_ffmpeg!, source, CancellationToken.None);
+        Assert.NotNull(sourceProbe);
+        Assert.True(sourceProbe!.Value.IsMono, $"album.flac probed as {sourceProbe.Value.Channels} channels");
+
+        var stereo = Path.Combine(outDir, "album Stereo.wav");
+        var stereoArgs = new List<string> { "-hide_banner", "-nostdin", "-y", "-i", source };
+        stereoArgs.AddRange(AudioEffects.ChannelArguments(AudioChannelMode.Stereo, sourceIsMono: sourceProbe.Value.IsMono));
+        stereoArgs.AddRange(["-c:a", "pcm_s16le", stereo]);
+        await ProcessRunner.RunAsync(_ffmpeg!, stereoArgs, CancellationToken.None);
+
+        var sourceRms = (await ChannelRmsAsync(source, 1))[0];
+        var stereoRms = await ChannelRmsAsync(stereo, 2);
+        Assert.True(sourceRms > 0.001, $"the fixture is silent: {sourceRms}");
+        Assert.InRange(stereoRms[0] / sourceRms, 0.97, 1.03);
+        Assert.InRange(stereoRms[1] / sourceRms, 0.97, 1.03);
+
+        var mono = Path.Combine(outDir, "album Mono.wav");
+        var monoArgs = new List<string> { "-hide_banner", "-nostdin", "-y", "-i", source };
+        monoArgs.AddRange(AudioEffects.ChannelArguments(AudioChannelMode.Mono, sourceIsMono: sourceProbe.Value.IsMono));
+        monoArgs.AddRange(["-c:a", "pcm_s16le", mono]);
+        await ProcessRunner.RunAsync(_ffmpeg!, monoArgs, CancellationToken.None);
+
+        var monoRms = (await ChannelRmsAsync(mono, 1))[0];
+        Assert.InRange(monoRms / sourceRms, 0.97, 1.03);
+        _output.WriteLine($"channels: source RMS {sourceRms:0.000}, stereo {stereoRms[0]:0.000}/{stereoRms[1]:0.000}, mono {monoRms:0.000}");
+    }
+
+    [Fact]
+    public async Task Bleep_fixture_writes_a_playable_bleeped_file()
+    {
+        if (SkipWithoutFfmpeg())
+            return;
+        if (SkipWithoutFixture("album.flac", out var source))
+            return;
+
+        var outDir = OutputFolder(_dir, "fixture-bleep");
+        var created = Path.Combine(outDir, "album Bleeped.flac");
+        var args = new List<string> { "-hide_banner", "-nostdin", "-y", "-i", source };
+        args.AddRange(AudioEffects.BleepArguments([new AudioRange(0.5, 1.0)], 1000, 70));
+        args.AddRange(FfmpegBackend.CodecArgs("flac", new Settings()));
+        args.Add(created);
+        await ProcessRunner.RunAsync(_ffmpeg!, args, CancellationToken.None);
+
+        Assert.True(File.Exists(created), created);
+        var decoded = await AudioRunner.WaveformAsync(_ffmpeg!, created, CancellationToken.None);
+        Assert.InRange(decoded.Duration, 2.95, 3.05);
+        Assert.Contains(decoded.Peaks, peak => peak > 0.01f);
+        var banner = await BannerAsync(created);
+        Assert.Contains("Audio:", banner, StringComparison.Ordinal);
+        _output.WriteLine($"bleep: {decoded.Duration:0.000} s, peak {decoded.Peaks.Max():0.00}");
+    }
+
+    [Fact]
+    public async Task Visualizer_fixture_writes_the_requested_video_and_audio()
+    {
+        if (SkipWithoutFfmpeg())
+            return;
+        if (SkipWithoutFixture("tone.wav", out var source))
+            return;
+
+        var outDir = OutputFolder(_dir, "fixture-visualizer");
+        var created = Path.Combine(outDir, "tone Visualizer.mp4");
+        var args = new List<string> { "-hide_banner", "-nostdin", "-y", "-i", source };
+        args.AddRange(AudioEffects.VisualizerArguments(AudioVisualizerOrientation.Landscape, AudioVisualizerStyle.Waveform));
+        args.Add(created);
+        await ProcessRunner.RunAsync(_ffmpeg!, args, CancellationToken.None);
+
+        Assert.True(File.Exists(created), created);
+        Assert.True(new FileInfo(created).Length > 0, "empty visualizer");
+        var banner = await BannerAsync(created);
+        Assert.Contains("1920x1080", banner, StringComparison.Ordinal);
+        Assert.Contains("Audio: aac", banner, StringComparison.Ordinal);
+        _output.WriteLine($"visualizer: {new FileInfo(created).Length} bytes");
     }
 
     [Fact]

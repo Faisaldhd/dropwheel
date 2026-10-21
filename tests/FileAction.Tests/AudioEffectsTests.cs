@@ -29,6 +29,36 @@ public class AudioEffectsTests
     }
 
     [Fact]
+    public void Mono_source_is_duplicated_into_both_stereo_channels_at_full_level()
+    {
+        // A mono source has no c1: the old expression read it as silence and wrote a dead right channel.
+        Assert.Equal(
+            "pan=stereo|c0=1*c0|c1=1*c0",
+            AudioEffects.ChannelFilter(AudioChannelMode.Stereo, sourceIsMono: true));
+
+        Assert.Equal(
+            "pan=stereo|c0=0.5*c0|c1=1*c0",
+            AudioEffects.ChannelFilter(AudioChannelMode.Stereo, 50, 100, sourceIsMono: true));
+
+        Assert.Equal(
+            new[] { "-af", "pan=stereo|c0=1*c0|c1=1*c0", "-ac", "2" },
+            AudioEffects.ChannelArguments(AudioChannelMode.Stereo, sourceIsMono: true));
+    }
+
+    [Fact]
+    public void Mono_source_stays_at_full_level_when_written_as_mono()
+    {
+        // 0.5*c0 would lose 6 dB; a mono source needs no downmix attenuation.
+        Assert.Equal(
+            "pan=mono|c0=1*c0",
+            AudioEffects.ChannelFilter(AudioChannelMode.Mono, sourceIsMono: true));
+
+        Assert.Equal(
+            "pan=mono|c0=0.5*c0",
+            AudioEffects.ChannelFilter(AudioChannelMode.Mono, 50, 100, sourceIsMono: true));
+    }
+
+    [Fact]
     public void Volume_sliders_become_pan_gains()
     {
         Assert.Equal(
@@ -338,6 +368,7 @@ public class AudioEffectsTests
         "tool.audiobleep.help",
         "tool.audiobleep.preview.original",
         "tool.audiobleep.preview.bleeped",
+        "tool.audiobleep.preview.note",
         "tool.audiobleep.save",
         "tool.audiobleep.tone",
         "tool.audiobleep.volume",

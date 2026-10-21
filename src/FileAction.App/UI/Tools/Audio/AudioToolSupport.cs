@@ -17,11 +17,16 @@ internal sealed class AudioWaveform
     private const int SampleRate = 4000;
     private const int Buckets = 1200;
 
-    private AudioWaveform(double duration, float[] left, float[] right)
+    /// <summary>Signed sample pairs kept for the visualizer's vector-scope preview.</summary>
+    private const int ScopePairs = 1024;
+
+    private AudioWaveform(double duration, float[] left, float[] right, float[] scopeLeft, float[] scopeRight)
     {
         Duration = duration;
         Left = left;
         Right = right;
+        ScopeLeft = scopeLeft;
+        ScopeRight = scopeRight;
     }
 
     public double Duration { get; }
@@ -31,6 +36,12 @@ internal sealed class AudioWaveform
 
     /// <summary>Peak amplitude per bucket, 0–1, for the right channel.</summary>
     public float[] Right { get; }
+
+    /// <summary>Signed left samples spread across the file, -1 to 1, for a real vector-scope preview.</summary>
+    public float[] ScopeLeft { get; }
+
+    /// <summary>Signed right samples matching <see cref="ScopeLeft"/>.</summary>
+    public float[] ScopeRight { get; }
 
     /// <summary>Decodes a small PCM copy and reduces it to peaks. Throws when ffmpeg fails.</summary>
     public static async Task<AudioWaveform> LoadAsync(string ffmpeg, string path, CancellationToken ct)
@@ -55,6 +66,11 @@ internal sealed class AudioWaveform
             var totalFrames = new FileInfo(pcm).Length / 4;
             var left = new float[Buckets];
             var right = new float[Buckets];
+            var scopeCount = (int)Math.Min(ScopePairs, totalFrames);
+            var scopeLeft = new float[scopeCount];
+            var scopeRight = new float[scopeCount];
+            var scopeStride = Math.Max(1, totalFrames / Math.Max(1, scopeCount));
+            var scopeCaptured = 0;
             var buffer = new byte[1 << 20];
             long frame = 0;
             await using (var stream = new FileStream(pcm, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, useAsync: true))
@@ -66,17 +82,28 @@ internal sealed class AudioWaveform
                     for (var i = 0; i < count; i++)
                     {
                         var bucket = (int)Math.Min(Buckets - 1, (frame + i) * Buckets / Math.Max(1, totalFrames));
-                        var l = Math.Abs(BitConverter.ToInt16(buffer, i * 4)) / 32768f;
-                        var r = Math.Abs(BitConverter.ToInt16(buffer, i * 4 + 2)) / 32768f;
-                        if (l > left[bucket])
-                            left[bucket] = l;
-                        if (r > right[bucket])
-                            right[bucket] = r;
+                        var l = BitConverter.ToInt16(buffer, i * 4) / 32768f;
+                        var r = BitConverter.ToInt16(buffer, i * 4 + 2) / 32768f;
+                        if (Math.Abs(l) > left[bucket])
+                            left[bucket] = Math.Abs(l);
+                        if (Math.Abs(r) > right[bucket])
+                            right[bucket] = Math.Abs(r);
+                        if (scopeCaptured < scopeCount && (frame + i) % scopeStride == 0)
+                        {
+                            scopeLeft[scopeCaptured] = l;
+                            scopeRight[scopeCaptured] = r;
+                            scopeCaptured++;
+                        }
                     }
                     frame += count;
                 }
             }
-            return new AudioWaveform(totalFrames / (double)SampleRate, left, right);
+            if (scopeCaptured < scopeCount)
+            {
+                Array.Resize(ref scopeLeft, scopeCaptured);
+                Array.Resize(ref scopeRight, scopeCaptured);
+            }
+            return new AudioWaveform(totalFrames / (double)SampleRate, left, right, scopeLeft, scopeRight);
         }
         finally
         {

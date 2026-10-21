@@ -21,6 +21,27 @@ internal static class AudioRunner
 
     public static string RequireFfmpeg(ToolLocator tools) => tools.Require(ExternalTool.Ffmpeg);
 
+    /// <summary>
+    /// Reads the first audio stream's sample rate and channel count from FFmpeg's stream banner. The
+    /// command has no output and exits non-zero by design, so its log is read but no failure is raised;
+    /// null means FFmpeg found no readable audio stream.
+    /// </summary>
+    public static async Task<AudioProbeInfo?> ProbeAsync(string ffmpeg, string path, CancellationToken ct)
+    {
+        var log = new StringBuilder();
+        await ProcessRunner.RunAsync(
+            ffmpeg,
+            ["-hide_banner", "-nostdin", "-i", path],
+            ct,
+            line =>
+            {
+                lock (log)
+                    log.AppendLine(line);
+            },
+            throwOnError: false).ConfigureAwait(false);
+        return AudioProbe.Parse(log.ToString());
+    }
+
     /// <summary>The first loudness pass; null when FFmpeg exited successfully but printed no usable JSON.</summary>
     public static async Task<LoudnessMeasurement?> MeasureAsync(
         string ffmpeg,
@@ -99,13 +120,17 @@ internal static class AudioRunner
         return AudioTrim.ParseSilence(log.ToString());
     }
 
-    /// <summary>Second loudness pass into a unique "&lt;name&gt; Normalized" file next to the source.</summary>
+    /// <summary>
+    /// Second loudness pass into a unique "&lt;name&gt; Normalized" file next to the source. The source
+    /// sample rate is passed through so the output is not left at loudnorm's internal 192 kHz.
+    /// </summary>
     public static Task<string> NormalizeAsync(
         string ffmpeg,
         FileItem item,
         LoudnessTarget target,
         LoudnessMeasurement measurement,
         string outputDirectory,
+        int sampleRate,
         CancellationToken ct)
     {
         var format = FfmpegBackend.SafeContainer(item.Format);
@@ -116,7 +141,7 @@ internal static class AudioRunner
             format,
             tmp => RunProcessAsync(
                 ffmpeg,
-                AudioLoudness.ApplyArguments(item.Path, tmp, target, measurement, encoder),
+                AudioLoudness.ApplyArguments(item.Path, tmp, target, measurement, encoder, sampleRate),
                 ct));
     }
 

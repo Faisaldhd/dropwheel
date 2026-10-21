@@ -65,6 +65,7 @@ internal sealed class AudioChannelsView
     private AudioChannelSolo _solo = AudioChannelSolo.Both;
     private int _leftVolume = 100;
     private int _rightVolume = 100;
+    private bool _sourceIsMono;
 
     public AudioChannelsView(FileItem item, DropTargets? targets)
     {
@@ -101,7 +102,11 @@ internal sealed class AudioChannelsView
         try
         {
             var ffmpeg = _tools.Require(ExternalTool.Ffmpeg);
+            // The filter has to know whether the second input channel exists: a mono source is duplicated
+            // by the pan filter instead of reading a missing c1 (which would write silence on the right).
+            var probe = AudioRunner.ProbeAsync(ffmpeg, _item.Path, _life.Token);
             var waveform = await AudioWaveform.LoadAsync(ffmpeg, _item.Path, _life.Token);
+            _sourceIsMono = (await probe)?.IsMono ?? false;
             _waveform = waveform;
             _waveformView.Waveform = waveform;
             _waveformView.Stereo = true;
@@ -249,7 +254,7 @@ internal sealed class AudioChannelsView
         var suffix = T(_mode == AudioChannelMode.Mono
             ? "tool.audiochannels.suffix.mono"
             : "tool.audiochannels.suffix.stereo");
-        var args = AudioEffects.ChannelArguments(_mode, _leftVolume, _rightVolume, _solo);
+        var args = AudioEffects.ChannelArguments(_mode, _leftVolume, _rightVolume, _solo, _sourceIsMono);
         var codec = FfmpegBackend.CodecArgs(format, new Settings());
         var tools = _tools;
         var duration = _waveform.Duration;
