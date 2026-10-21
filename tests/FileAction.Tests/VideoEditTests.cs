@@ -222,6 +222,21 @@ public class VideoEditTests
     public void Stream_copy_is_only_offered_for_copy_safe_containers(string container, bool expected) =>
         Assert.Equal(expected, VideoEdit.SupportsStreamCopy(container));
 
+    [Theory]
+    [InlineData(1.0, 1.0, true)]
+    [InlineData(1.0, 1.32, true)]
+    [InlineData(1.0, 0.7, true)]
+    // Keyframe roll: a 1 s trim copied from an earlier keyframe came out at 2.02 s.
+    [InlineData(1.0, 2.021, false)]
+    [InlineData(1.0, 0.2, false)]
+    [InlineData(0.0, 1.0, false)]
+    [InlineData(1.0, 0.0, false)]
+    public void Copied_trim_lengths_are_accepted_only_inside_the_keyframe_tolerance(
+        double expected, double actual, bool matches) =>
+        Assert.Equal(
+            matches,
+            VideoEdit.CopyLengthMatches(TimeSpan.FromSeconds(expected), TimeSpan.FromSeconds(actual)));
+
     // ---------------------------------------------------------------- trim
 
     [Fact]

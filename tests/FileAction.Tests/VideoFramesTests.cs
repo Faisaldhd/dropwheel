@@ -32,16 +32,29 @@ public class VideoFramesTests
     }
 
     [Fact]
-    public void Total_frames_rounds_the_duration_and_never_returns_zero()
+    public void Total_frames_floors_the_duration_and_never_returns_zero()
     {
         Assert.Equal(300, FrameMath.TotalFrames(10, 30));
-        Assert.Equal(300, FrameMath.TotalFrames(10, 29.97));
+        // 10 s at 29.97 fps is 299.7 frames; rounding up invented a frame that does not exist.
+        Assert.Equal(299, FrameMath.TotalFrames(10, 29.97));
+        // clip.mkv: 2.021 s of container duration holds 48 frames at 24 fps (2.021 × 24 = 48.504).
+        Assert.Equal(48, FrameMath.TotalFrames(2.021, 24));
         Assert.Equal(1, FrameMath.TotalFrames(0.01, 30));
         Assert.Equal(1, FrameMath.TotalFrames(0, 30));
         Assert.Equal(1, FrameMath.TotalFrames(-5, 30));
         // A missing frame rate falls back to 30 rather than dividing by zero.
         Assert.Equal(300, FrameMath.TotalFrames(10, 0));
         Assert.Equal(300, FrameMath.TotalFrames(10, double.NaN));
+    }
+
+    [Fact]
+    public void Seek_times_stay_inside_the_last_picture()
+    {
+        Assert.Equal(0, FrameMath.ClampSeek(-2, 2), 10);
+        Assert.Equal(1.95, FrameMath.ClampSeek(1.99, 2.0), 10);
+        Assert.Equal(1.9, FrameMath.ClampSeek(1.9, 2.0), 10);
+        // An unknown duration leaves the caller's time alone.
+        Assert.Equal(4.5, FrameMath.ClampSeek(4.5, 0), 10);
     }
 
     [Fact]

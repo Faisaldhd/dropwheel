@@ -9,7 +9,10 @@ namespace FileAction.Core;
 /// </summary>
 public static class VideoToolRunner
 {
-    /// <summary>Trims, copying packets when asked and re-encoding when a codec/container pair refuses a copy.</summary>
+    /// <summary>
+    /// Trims, copying packets when asked and re-encoding when a codec/container pair refuses a copy or
+    /// when the copied file's measured length shows it began at an earlier keyframe.
+    /// </summary>
     public static Task<string> TrimAsync(
         string ffmpeg,
         VideoTrimRequest request,
@@ -24,18 +27,29 @@ public static class VideoToolRunner
         return ProduceAsync(outputDirectory, baseName, container, async temporary =>
         {
             var withOutput = request with { OutputPath = temporary };
-            try
+            if (request.Mode == VideoTrimMode.StreamCopy && !cancellationToken.IsCancellationRequested)
             {
-                await ProcessRunner.RunAsync(
-                    ffmpeg, VideoEdit.BuildTrimArgs(withOutput), cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await ProcessRunner.RunAsync(
+                        ffmpeg, VideoEdit.BuildTrimArgs(withOutput), cancellationToken).ConfigureAwait(false);
+
+                    // Split verifies every copied part's length for the same reason: a copy can only
+                    // begin at a keyframe, and a container without an edit list keeps the pre-roll.
+                    // If the measured length is wrong, encode the requested range instead.
+                    if (await CopyTrimMatchesAsync(ffmpeg, temporary, request, cancellationToken).ConfigureAwait(false))
+                        return;
+                }
+                catch (ConversionException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    // The container refused the copied codecs; the re-encode below writes a playable file.
+                }
             }
-            catch (ConversionException) when (request.Mode == VideoTrimMode.StreamCopy && !cancellationToken.IsCancellationRequested)
-            {
-                await ProcessRunner.RunAsync(
-                    ffmpeg,
-                    VideoEdit.BuildTrimArgs(withOutput with { Mode = VideoTrimMode.ReEncode }),
-                    cancellationToken).ConfigureAwait(false);
-            }
+
+            await ProcessRunner.RunAsync(
+                ffmpeg,
+                VideoEdit.BuildTrimArgs(withOutput with { Mode = VideoTrimMode.ReEncode }),
+                cancellationToken).ConfigureAwait(false);
         }, cancellationToken);
     }
 
@@ -86,6 +100,21 @@ public static class VideoToolRunner
                 ffmpeg,
                 VideoEdit.BuildSpeedArgs(request with { OutputPath = temporary }),
                 cancellationToken), cancellationToken);
+    }
+
+    /// <summary>
+    /// Reads a copied trim's real length and compares it with the requested range. A null probe means
+    /// FFmpeg cannot read its own output, which is just as unusable as a wrong length.
+    /// </summary>
+    private static async Task<bool> CopyTrimMatchesAsync(
+        string ffmpeg,
+        string path,
+        VideoTrimRequest request,
+        CancellationToken cancellationToken)
+    {
+        var expected = request.End - (request.Start < TimeSpan.Zero ? TimeSpan.Zero : request.Start);
+        var info = await VideoProbe.ReadAsync(ffmpeg, path, cancellationToken).ConfigureAwait(false);
+        return info is not null && VideoEdit.CopyLengthMatches(expected, info.Duration);
     }
 
     /// <summary>

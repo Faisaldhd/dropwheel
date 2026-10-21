@@ -23,12 +23,17 @@ public static class FrameMath
     public static double SafeFps(double fps) =>
         double.IsFinite(fps) && fps is > 0 and <= MaxFps ? fps : DefaultFps;
 
-    /// <summary>How many frames a clip has, at least one even when the duration is unknown.</summary>
+    /// <summary>
+    /// How many whole frames fit in a clip, at least one even when the duration is unknown. The count is
+    /// floored: rounding up invents a frame past the last timestamp (2.021 s at 24 fps is 48 frames, not
+    /// 49), and scrubbing or exporting that phantom frame makes FFmpeg produce nothing. Callers that can
+    /// read the exact packet count pass it instead of this duration estimate.
+    /// </summary>
     public static int TotalFrames(double durationSeconds, double fps)
     {
         if (!double.IsFinite(durationSeconds) || durationSeconds <= 0)
             return 1;
-        var frames = Math.Round(durationSeconds * SafeFps(fps), MidpointRounding.AwayFromZero);
+        var frames = Math.Floor(durationSeconds * SafeFps(fps));
         return (int)Math.Clamp(frames, 1, int.MaxValue - 1);
     }
 
@@ -42,6 +47,20 @@ public static class FrameMath
     /// </summary>
     public static double SeekSeconds(int frame, double fps) =>
         Math.Max(0, (Math.Max(0, frame) - 0.5) / SafeFps(fps));
+
+    /// <summary>
+    /// Keeps an input-seek time off the very end of the file. A container length from the banner can be
+    /// a few milliseconds longer than its last picture (audio padding), so seeking exactly at the end
+    /// finds no frame; staying 50 ms inside leaves the last real picture reachable.
+    /// </summary>
+    public static double ClampSeek(double seconds, double durationSeconds)
+    {
+        if (!double.IsFinite(seconds) || seconds < 0)
+            seconds = 0;
+        if (!double.IsFinite(durationSeconds) || durationSeconds <= 0)
+            return seconds;
+        return Math.Min(seconds, Math.Max(0, durationSeconds - 0.05));
+    }
 
     /// <summary>The frame index shown at <paramref name="seconds"/>, clamped to <paramref name="totalFrames"/>.</summary>
     public static int FrameAt(double seconds, double fps, int totalFrames)

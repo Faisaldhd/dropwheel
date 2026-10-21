@@ -46,6 +46,7 @@ internal sealed class VideoSpeedOperation : Operation, IInteractiveTool
     public VideoSpeedOperation()
         : base("tools.videospeed", WheelKind.Tools, T("tool.videospeed.label"), Glyphs.Stopwatch, T("tool.videospeed.subtitle"))
     {
+        Requires = [ExternalTool.Ffmpeg];
     }
 
     public override bool AppliesTo(IReadOnlyList<FileItem> items) => VideoSpeedTool.Instance.Applies(items);

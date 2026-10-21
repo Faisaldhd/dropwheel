@@ -15,10 +15,13 @@ using Path = System.IO.Path;
 
 namespace FileAction.App.UI.Tools.Video;
 
-/// <summary>What the FFmpeg banner says about a clip: duration, frame rate and original pixel size.</summary>
-internal sealed record VideoInfo(double DurationSeconds, double Fps, int Width, int Height)
+/// <summary>
+/// What the FFmpeg banner says about a clip: duration, frame rate and original pixel size, plus the
+/// exact packet count when the probe could read it (0 means unknown, so the duration estimate is used).
+/// </summary>
+internal sealed record VideoInfo(double DurationSeconds, double Fps, int Width, int Height, int FrameCount = 0)
 {
-    public int TotalFrames => FrameMath.TotalFrames(DurationSeconds, Fps);
+    public int TotalFrames => FrameCount > 0 ? FrameCount : FrameMath.TotalFrames(DurationSeconds, Fps);
 }
 
 /// <summary>
@@ -34,12 +37,16 @@ internal static class VideoProbe
     private static readonly Regex SizePattern = new(@"(?<w>\d{2,5})x(?<h>\d{2,5})", RegexOptions.Compiled);
     private static readonly Regex FpsPattern = new(@"(?<fps>\d+(?:\.\d+)?)\s+fps\b", RegexOptions.Compiled);
     private static readonly Regex TbrPattern = new(@"(?<tbr>\d+(?:\.\d+)?)\s+tbr\b", RegexOptions.Compiled);
+    private static readonly Regex FrameCountPattern = new(@"\bframe=\s*(\d+)", RegexOptions.Compiled);
 
     public static async Task<VideoInfo?> ReadAsync(string ffmpeg, string path, CancellationToken ct)
     {
         var lines = new List<string>();
-        // "-i" with no output exits with code 1 on purpose; only the banner is wanted.
-        await ProcessRunner.RunAsync(ffmpeg, ["-hide_banner", "-nostdin", "-i", path], ct,
+        // The same FFmpeg pass prints the banner and counts the video packets. Copying to the null
+        // muxer reads no pixels and gives the exact frame count, so a container whose duration includes
+        // audio padding (40.05 s for a 2400-frame, 40 s video) does not invent extra frames.
+        await ProcessRunner.RunAsync(ffmpeg,
+            ["-hide_banner", "-nostdin", "-i", path, "-map", "0:v:0", "-c", "copy", "-f", "null", "-"], ct,
             line =>
             {
                 lock (lines)
@@ -84,9 +91,20 @@ internal static class VideoProbe
         if (!double.IsFinite(fps) || fps <= 0 || fps > 240)
             fps = FrameMath.DefaultFps;
 
+        var frameCount = 0;
+        foreach (var line in copy)
+        {
+            if (FrameCountPattern.Match(line) is { Success: true } frames
+                && int.TryParse(frames.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count)
+                && count > 0)
+            {
+                frameCount = count;
+            }
+        }
+
         if (!double.IsFinite(duration) || duration < 0)
             duration = 0;
-        return new VideoInfo(duration, fps, width, height);
+        return new VideoInfo(duration, fps, width, height, frameCount);
     }
 }
 
@@ -177,9 +195,11 @@ internal static class VideoRunner
         double fps,
         string outputDirectory,
         IProgress<(int Done, int Total)> progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        double durationSeconds = 0)
     {
         var temporary = OutputPaths.TempDirectory();
+        var frameStep = Math.Max(0.001, 1 / FrameMath.SafeFps(fps));
         try
         {
             var files = new List<string>(frames.Count);
@@ -188,19 +208,32 @@ internal static class VideoRunner
                 ct.ThrowIfCancellationRequested();
                 var name = FrameMath.CaptureFileName(item.BaseName, frames[i]);
                 var framePath = Path.Combine(temporary, name);
-                var seconds = FrameMath.SeekSeconds(frames[i], fps);
-                await ProcessRunner.RunAsync(ffmpeg,
-                [
-                    "-hide_banner", "-nostdin", "-y",
-                    "-ss", seconds.ToString("0.000", CultureInfo.InvariantCulture),
-                    "-i", item.Path,
-                    "-frames:v", "1",
-                    "-update", "1",
-                    "-f", "image2",
-                    framePath,
-                ], ct).ConfigureAwait(false);
+                var seconds = FrameMath.ClampSeek(FrameMath.SeekSeconds(frames[i], fps), durationSeconds);
 
-                if (!File.Exists(framePath) || new FileInfo(framePath).Length == 0)
+                // A banner duration may be a few milliseconds longer than the last picture (audio
+                // padding), so the final frame can seek past every timestamp and FFmpeg then writes no
+                // PNG. Step one frame back until a picture is produced instead of aborting the export.
+                var attempts = durationSeconds > 0 && seconds >= durationSeconds - 0.5 ? 4 : 1;
+                var written = false;
+                for (var attempt = 0; attempt < attempts && !written; attempt++)
+                {
+                    await ProcessRunner.RunAsync(ffmpeg,
+                    [
+                        "-hide_banner", "-nostdin", "-y",
+                        "-ss", Math.Max(0, seconds - attempt * frameStep)
+                            .ToString("0.000", CultureInfo.InvariantCulture),
+                        "-i", item.Path,
+                        "-frames:v", "1",
+                        "-update", "1",
+                        "-f", "image2",
+                        framePath,
+                    ], ct).ConfigureAwait(false);
+                    written = File.Exists(framePath) && new FileInfo(framePath).Length > 0;
+                    if (!written)
+                        OutputPaths.TryDelete(framePath);
+                }
+
+                if (!written)
                     throw new ConversionException(T("error.conversion.noOutput"));
 
                 files.Add(framePath);
@@ -532,6 +565,28 @@ internal sealed class ColorChoice : StackPanel
             var selected = string.Equals(VideoPalette.Options[i].Token, _value, StringComparison.OrdinalIgnoreCase);
             _rings[i].BorderBrush = selected ? Theme.Accent : Theme.PanelBorder;
         }
+    }
+}
+
+/// <summary>
+/// The root panel of the frames and redaction windows. It is the element <see cref="ToolContent.View"/>
+/// exposes, so it has to carry <see cref="IToolActionGate"/> itself; the owning view calls
+/// <see cref="SetCanApply"/> whenever its capture/area state changes.
+/// </summary>
+internal sealed class VideoGateGrid : Grid, IToolActionGate
+{
+    private bool _canApply;
+
+    public bool CanApply => _canApply;
+
+    public event Action? CanApplyChanged;
+
+    public void SetCanApply(bool value)
+    {
+        if (value == _canApply)
+            return;
+        _canApply = value;
+        CanApplyChanged?.Invoke();
     }
 }
 

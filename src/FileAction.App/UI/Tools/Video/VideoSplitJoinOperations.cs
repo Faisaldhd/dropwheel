@@ -14,6 +14,7 @@ internal sealed class VideoSplitOperation : Operation, IInteractiveTool
     public VideoSplitOperation()
         : base("tools.videosplit", WheelKind.Tools, T("tool.videosplit.label"), Glyphs.Split, T("tool.videosplit.subtitle"))
     {
+        Requires = [ExternalTool.Ffmpeg];
     }
 
     public override bool AppliesTo(IReadOnlyList<FileItem> items) => VideoSplitTool.Instance.Applies(items);
@@ -32,6 +33,7 @@ internal sealed class VideoJoinOperation : Operation, IInteractiveTool
     public VideoJoinOperation()
         : base("tools.videojoin", WheelKind.Tools, T("tool.videojoin.label"), Glyphs.Merge, T("tool.videojoin.subtitle"))
     {
+        Requires = [ExternalTool.Ffmpeg];
     }
 
     public override bool AppliesTo(IReadOnlyList<FileItem> items) => VideoJoinTool.Instance.Applies(items);

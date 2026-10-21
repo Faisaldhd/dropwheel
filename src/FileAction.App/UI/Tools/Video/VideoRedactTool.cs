@@ -112,7 +112,7 @@ internal sealed class VideoRedactView
     private Border? _previewCard;
     private Border? _previousButton;
     private Border? _nextButton;
-    private Grid? _root;
+    private VideoGateGrid? _root;
     private VideoThemeHook? _theme;
 
     private string? _ffmpeg;
@@ -183,7 +183,7 @@ internal sealed class VideoRedactView
 
     public ToolContent Build()
     {
-        var root = new Grid();
+        var root = new VideoGateGrid();
         _root = root;
         for (var i = 0; i < 6; i++)
             root.RowDefinitions.Add(new RowDefinition { Height = i == 0 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
@@ -698,7 +698,12 @@ internal sealed class VideoRedactView
         }
     }
 
-    private void UpdateHeader() => _header.Text = T("tool.videoredact.areas", _areas.Count);
+    private void UpdateHeader()
+    {
+        _header.Text = T("tool.videoredact.areas", _areas.Count);
+        // No areas means there is nothing to hide; the shared window disables Apply.
+        _root?.SetCanApply(_ffmpeg is not null && _info is not null && _areas.Count > 0);
+    }
 
     /// <summary>Re-applies the current Theme brushes after a light/dark switch.</summary>
     private void RepaintTheme()

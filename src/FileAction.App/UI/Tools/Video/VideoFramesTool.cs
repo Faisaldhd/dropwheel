@@ -100,7 +100,7 @@ internal sealed class VideoFramesView
     private Border? _previousButton;
     private Border? _nextButton;
     private Border? _captureButton;
-    private Grid? _root;
+    private VideoGateGrid? _root;
     private ToolWindow? _window;
     private VideoThemeHook? _theme;
 
@@ -145,7 +145,7 @@ internal sealed class VideoFramesView
 
     public ToolContent Build()
     {
-        var root = new Grid();
+        var root = new VideoGateGrid();
         _root = root;
         for (var i = 0; i < 6; i++)
             root.RowDefinitions.Add(new RowDefinition { Height = i == 0 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
@@ -365,6 +365,8 @@ internal sealed class VideoFramesView
     private void PaintCaptures()
     {
         UpdatePrimaryLabel();
+        // Nothing captured means there is nothing to save; the shared window disables Apply.
+        _root?.SetCanApply(_ffmpeg is not null && _info is not null && !_captures.IsEmpty);
         _chips.Children.Clear();
         if (_captures.IsEmpty)
         {
@@ -517,7 +519,8 @@ internal sealed class VideoFramesView
         try
         {
             return await VideoRunner.ExportFramesAsync(
-                _ffmpeg, _item, frames, _info.Fps, directory, progress, _apply.Token).ConfigureAwait(true);
+                _ffmpeg, _item, frames, _info.Fps, directory, progress, _apply.Token,
+                _info.DurationSeconds).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
