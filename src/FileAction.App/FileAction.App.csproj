@@ -21,7 +21,7 @@
     <ApplicationIcon>Assets\DropWheel.ico</ApplicationIcon>
     <StartupObject>FileAction.App.Program</StartupObject>
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
-    <Version>2.4.2</Version>
+    <Version>2.4.3</Version>
     <SatelliteResourceLanguages>en;ar</SatelliteResourceLanguages>
     <!--
       Smaller download: trim only libraries marked as trim-safe (the .NET runtime, the Windows SDK projectionâ€¦);
