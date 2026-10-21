@@ -12,17 +12,17 @@ internal sealed class MetadataTool : IToolWindowSpec
     public static readonly MetadataTool Instance = new();
 
     /// <summary>
-    /// ~536 × 660 DIP: a field list and a two-column editor need the height. The shared sizer still clamps
-    /// it to the work area of the monitor under the cursor.
+    /// ~576 × 660 DIP: the three-column editor (label, value, remove button) needs a real minimum width,
+    /// otherwise the remove buttons paint outside the rounded card. The sizer still clamps it to the work area.
     /// </summary>
     internal static readonly ToolSpecLayout Panel = new(
         ChromeWidth: 36,
         ChromeHeight: 140,
-        PreviewMinWidth: 360,
+        PreviewMinWidth: 500,
         PreviewMinHeight: 340,
-        PreviewMaxWidth: 620,
+        PreviewMaxWidth: 660,
         PreviewMaxHeight: 700,
-        DefaultPreviewWidth: 500,
+        DefaultPreviewWidth: 540,
         DefaultPreviewHeight: 520);
 
     public string Id => "tools.metadata";
