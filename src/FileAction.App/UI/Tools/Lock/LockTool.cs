@@ -705,7 +705,7 @@ internal sealed class LockUnlockView
         });
     }
 
-    private void RemoveProtection()
+    private async void RemoveProtection()
     {
         var owner = Window.GetWindow(_root);
         if (Dialogs.Show(owner, T("tool.lock.removeConfirm.body", Bidi.Value(LockPaths.DisplayName(_item.Path))),
@@ -714,6 +714,13 @@ internal sealed class LockUnlockView
             return;
         try
         {
+            // Opening a protected file starts a session; relock and close it first so Unprotect is not
+            // refused with "lock this file first" after the user just opened it.
+            if (!await LockRuntime.Sessions.CloseForRemovalAsync(_item.Path))
+            {
+                _error.Text = T("tool.lock.error.openSession");
+                return;
+            }
             var outcome = LockRuntime.Service.Unprotect(_item.Path, _secret.Text,
                 LockRuntime.Settings.RecycleContainerAfterUnlock);
             LockIconCache.RemoveItem(outcome.RestoredPath);
