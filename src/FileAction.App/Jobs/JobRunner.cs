@@ -28,6 +28,19 @@ internal sealed class JobRunner(AppSettings settings, ToolLocator tools)
     {
         if (op is NeedsToolOperation needs)
         {
+            // LibreOffice is a backend DropWheel cannot download. Point at the official installer instead
+            // of offering a download that would fail after the confirmation prompt.
+            var separate = needs.Missing.Where(tool => !ToolInstaller.CanInstall(tool)).ToList();
+            if (separate.Count > 0)
+            {
+                var names = string.Join(" + ", separate.Select(ToolLocator.DisplayName));
+                var hints = string.Join("\n", separate.Select(ToolLocator.InstallHint));
+                Dialogs.Show(
+                    $"{names}\n\n{T("tool.installCommand")}\n{hints}",
+                    "DropWheel", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             if (await DownloadToolsAsync(needs.Missing, ask: true))
                 Start(needs.Inner, items, parameters);
             return;

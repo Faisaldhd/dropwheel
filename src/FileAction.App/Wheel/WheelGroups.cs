@@ -99,7 +99,7 @@ internal static class WheelGroups
 internal sealed class WheelGroupOperation : Operation
 {
     public WheelGroupOperation(WheelGroupDefinition definition, Operation title, IReadOnlyList<Operation> children)
-        : base($"wheel.group.{definition.Id}", title.Wheel, Label(definition, title), title.Glyph, Items(children.Count))
+        : base($"wheel.group.{definition.Id}", title.Wheel, GroupLabel(definition, title), title.Glyph, Items(children.Count))
     {
         GroupId = definition.Id;
         Title = title;
@@ -113,7 +113,7 @@ internal sealed class WheelGroupOperation : Operation
 
     public IReadOnlyList<Operation> Children { get; }
 
-    private static string Label(WheelGroupDefinition definition, Operation title) =>
+    private static string GroupLabel(WheelGroupDefinition definition, Operation title) =>
         definition.LabelKey is null ? title.Label : T(definition.LabelKey);
 
     public override bool AppliesTo(IReadOnlyList<FileItem> items) => false;
