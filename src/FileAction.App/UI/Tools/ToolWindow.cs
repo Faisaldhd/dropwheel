@@ -159,8 +159,15 @@ internal sealed class ToolWindow : Window
         }
 
         var media = await _content.Ready;
-        if (media is not { Width: > 0, Height: > 0 } || !TryGetWorkArea(out var work))
+        if (media is not { Width: > 0, Height: > 0 })
             return;
+        if (!TryGetWorkArea(out var work))
+        {
+            // A hidden/headless window can fail the monitor probe; fall back to the WPF work area so the
+            // media still gets its correct aspect instead of staying at the tall placeholder size.
+            var area = SystemParameters.WorkArea;
+            work = new WorkArea(area.Left, area.Top, area.Width, area.Height, 1.0);
+        }
 
         var size = ToolWindowSizer.Compute(_spec.Layout, media.Value.Width, media.Value.Height,
             work.WidthInPixels, work.HeightInPixels, work.Scale);
