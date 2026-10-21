@@ -294,7 +294,8 @@ internal static class LockUi
             ToolTip = T("action.cancel"),
         };
         close.MouseLeftButtonUp += (_, _) => window.Close();
-        DockPanel.SetDock(close, Dock.Left);
+        // LTR puts Close at the top-right; FlowDirection.RightToLeft mirrors it to the top-left.
+        DockPanel.SetDock(close, Dock.Right);
         titleBar.Children.Add(close);
         titleBar.Children.Add(new TextBlock
         {
