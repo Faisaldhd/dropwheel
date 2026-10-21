@@ -242,7 +242,7 @@ internal sealed class VideoFramesView
         _previewCard = new Border
         {
             Background = Theme.Card,
-            CornerRadius = new CornerRadius(14),
+            CornerRadius = new CornerRadius(12),
             Padding = new Thickness(6),
             Margin = new Thickness(0, 4, 0, 8),
             Child = _preview,

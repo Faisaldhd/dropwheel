@@ -65,7 +65,7 @@ internal sealed class CropView
     private readonly DropTargets? _targets;
     private readonly Task<(BitmapSource Bitmap, int Width, int Height)> _load;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly Grid _preview = new() { Margin = new Thickness(0, 4, 0, 10), ClipToBounds = true };
+    private readonly Grid _preview = new() { ClipToBounds = true };
     private readonly Canvas _overlay = new();
     private readonly Border _frame = new() { BorderBrush = Theme.Accent, BorderThickness = new Thickness(2) };
     private readonly List<(CropHandle Handle, Border Element)> _handles = [];
@@ -94,10 +94,14 @@ internal sealed class CropView
     {
         _item = item;
         _targets = targets;
+        // A compact, centred loading card, never a tall opaque placeholder over the whole photo well.
         _placeholder = new Border
         {
             Background = Theme.Card,
             CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(18),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
             Child = new ProgressBar { IsIndeterminate = true, Width = 120, Height = 4 },
         };
         // Decode on a background thread, downsampled: the window can open immediately.
@@ -184,18 +188,37 @@ internal sealed class CropView
             _overlay.Children.Add(element);
         }
 
+        // The photo well is part of the rounded card: a tinted surface with the same curve, so a
+        // letterboxed landscape photo reads as media inside the card instead of an empty dark box.
+        _preview.Background = Theme.Track;
         _preview.Children.Add(_imageView);
         _preview.Children.Add(_overlay);
         _preview.Children.Add(new Grid { Children = { _placeholder } });
-        _preview.SizeChanged += (_, _) => Layout();
+        _preview.SizeChanged += (_, _) =>
+        {
+            ClipPreview();
+            Layout();
+        };
 
         return new Border
         {
             Background = Theme.Card,
-            CornerRadius = new CornerRadius(14),
+            CornerRadius = new CornerRadius(12),
             Padding = new Thickness(6),
+            // The spacing lives on the card, so the well fills its padding evenly on all four sides.
+            Margin = new Thickness(0, 4, 0, 10),
             Child = _preview,
         };
+    }
+
+    /// <summary>Rounds the media surface to the card's curve (the card pads it by 6 DIP).</summary>
+    private void ClipPreview()
+    {
+        var width = _preview.ActualWidth;
+        var height = _preview.ActualHeight;
+        if (width <= 0 || height <= 0)
+            return;
+        _preview.Clip = new RectangleGeometry(new Rect(0, 0, width, height), 8, 8);
     }
 
     private FrameworkElement BuildChips()

@@ -82,7 +82,7 @@ internal sealed class VideoEditPreview : IDisposable
         View = new Border
         {
             Background = Theme.Card,
-            CornerRadius = new CornerRadius(14),
+            CornerRadius = new CornerRadius(12),
             Padding = new Thickness(6),
             ClipToBounds = true,
             Child = _surface,

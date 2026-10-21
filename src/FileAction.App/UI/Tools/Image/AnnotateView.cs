@@ -372,7 +372,7 @@ internal sealed class AnnotateView
         return new Border
         {
             Background = Theme.Card,
-            CornerRadius = new CornerRadius(14),
+            CornerRadius = new CornerRadius(12),
             Padding = new Thickness(6),
             Child = _previewHost,
         };
