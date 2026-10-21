@@ -51,7 +51,7 @@ public class LockDispatcherTests
             var hold = new RecordingHoldProbe();
             var manager = new LockSessionManager(service, journal,
                 new ProtectionSettings { GraceSeconds = 3 }, hold, new SilentExplorerProbe());
-            AddSession(manager, new LockSession(record, extracted.Header, extracted.DataKey, false)
+            AddSession(manager, new LockSession(record, extracted.Header, extracted.DataKey, false, 0, 0)
             {
                 LastChange = DateTimeOffset.Now.AddMinutes(-1),
             });
