@@ -16,6 +16,7 @@
   "action.copy.dialogTitle": "نسخ إلى…",
   "action.move.dialogTitle": "نقل إلى…",
   "action.pathCopied": "تم نسخ المسار",
+  "action.folderIntoItself": "لا يمكن نسخ المجلد ⁦{0}⁩ أو نقله إلى نفسه أو إلى أحد مجلداته الفرعية.",
   "shelf.title": "الرف العائم",
   "shelf.emptyHint": "اسحب العناصر إلى الخارج، أو أفلت المزيد هنا.",
   "shelf.empty": "رف فارغ",

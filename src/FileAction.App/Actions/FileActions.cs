@@ -47,6 +47,16 @@ internal static class FileActions
             owner.Close();
         }
         var target = dialog.FolderName;
+        // Copying or moving a folder into itself (or below itself) makes the shell recurse into the copy it
+        // is still writing. Refuse the whole batch before the first item is touched, with a readable reason.
+        var invalid = items.FirstOrDefault(item =>
+            item.IsDirectory && IsSameOrInside(item.Path, target));
+        if (invalid is not null)
+        {
+            Notifications.Show(T("app.error.title"),
+                T("action.folderIntoItself", Bidi.Value(invalid.Name)), error: true);
+            return;
+        }
         if (move)
             settings.LastMoveFolder = target;
         else
@@ -79,6 +89,17 @@ internal static class FileActions
                 }
             }
         });
+    }
+
+    /// <summary>True when <paramref name="target"/> is the folder itself or a folder below it.</summary>
+    internal static bool IsSameOrInside(string folder, string target)
+    {
+        var source = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+        var destination = Path.TrimEndingDirectorySeparator(Path.GetFullPath(target));
+        // A drive root keeps its separator after trimming, so do not add a second one.
+        var prefix = source.EndsWith(Path.DirectorySeparatorChar) ? source : source + Path.DirectorySeparatorChar;
+        return destination.Equals(source, StringComparison.OrdinalIgnoreCase) ||
+               destination.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
 
     private static Task RunOnStaThread(Action action)

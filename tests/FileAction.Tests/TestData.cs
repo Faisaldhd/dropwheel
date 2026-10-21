@@ -64,6 +64,8 @@ internal static class TestData
             ("mp3", "song.mp3", false),
             ("gif", "anim.gif", false),
             ("zip", "bundle.zip", false),
+            ("7z", "bundle.7z", false),
+            ("rar", "bundle.rar", false),
             ("readonly", "read-only.jpg", true),
         };
 

@@ -16,6 +16,7 @@
   "action.copy.dialogTitle": "Copy to…",
   "action.move.dialogTitle": "Move to…",
   "action.pathCopied": "Path copied",
+  "action.folderIntoItself": "Cannot copy or move “{0}” into itself or one of its subfolders.",
   "shelf.title": "Floating shelf",
   "shelf.emptyHint": "Drag items out, or drop more here.",
   "shelf.empty": "Empty shelf",
