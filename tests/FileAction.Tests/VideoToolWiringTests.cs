@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using FileAction.App.UI.Tools.Video;
 using FileAction.Core;
 
@@ -37,7 +38,7 @@ public class VideoToolWiringTests
     }
 
     [Fact]
-    public void Gate_grid_raises_only_when_the_state_really_changes()
+    public void Gate_grid_raises_only_when_the_state_really_changes() => RunSta(() =>
     {
         var gate = new VideoGateGrid();
         var raised = 0;
@@ -57,7 +58,7 @@ public class VideoToolWiringTests
         gate.SetCanApply(false);
         Assert.False(gate.CanApply);
         Assert.Equal(2, raised);
-    }
+    });
 
     [Fact]
     public void Every_video_tool_operation_requires_ffmpeg()
@@ -75,6 +76,28 @@ public class VideoToolWiringTests
 
         Assert.All(operations, operation =>
             Assert.Contains(ExternalTool.Ffmpeg, operation.Requires));
+    }
+
+    /// <summary>WPF controls need an STA thread; xUnit runs tests on MTA.</summary>
+    private static void RunSta(Action action)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null)
+            ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     private static string RepoRoot()
