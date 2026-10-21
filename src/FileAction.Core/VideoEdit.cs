@@ -224,6 +224,21 @@ public static class VideoEdit
         return key is "mp4" or "mov" or "mkv" or "webm";
     }
 
+    /// <summary>
+    /// How far a stream-copied trim may be from the requested length before it is re-encoded. A copy
+    /// can only start at a keyframe; MP4/MOV hide the pre-roll with an edit list, but MKV/WebM cannot,
+    /// so the measured length exposes the extra content (a 1 s trim of clip.mkv came out at 2.02 s).
+    /// </summary>
+    public const double CopyLengthTolerance = 0.4;
+
+    /// <summary>True when a copied trim is close enough to the requested length to keep it.</summary>
+    public static bool CopyLengthMatches(TimeSpan expected, TimeSpan actual)
+    {
+        if (expected <= TimeSpan.Zero || actual <= TimeSpan.Zero)
+            return false;
+        return Math.Abs((actual - expected).TotalSeconds) <= CopyLengthTolerance;
+    }
+
     /// <summary>Largest even number not above <paramref name="value"/>, never below 2.</summary>
     public static int Even(int value) => value >= 2 ? value & ~1 : 2;
 

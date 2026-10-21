@@ -1,5 +1,6 @@
 using System.Globalization;
 using FileAction.Core.Backends;
+using ImageMagick;
 using static FileAction.Core.Operations.Helpers;
 using static FileAction.Core.Loc;
 
@@ -57,7 +58,7 @@ public static class Catalog
         { Requires = [ExternalTool.Ffmpeg] });
 
         ImageTool(ops, "image.compress", T("catalog.image.compress.label"), Glyphs.Shrink, T("catalog.image.compress.suffix"),
-            (item, ctx, tmp) => ImageBackend.CompressAsync(item.Path, tmp, ctx.Settings.CompressQuality, ctx.CancellationToken));
+            (item, ctx, tmp, format) => CompressImageAsync(item.Path, tmp, format, ctx.Settings.CompressQuality, ctx.CancellationToken));
         ImageEdit(ops, "image.half", T("catalog.image.half.label"), Glyphs.Shrink, "50 %", T("catalog.image.half.suffix"), img => ImageBackend.ResizePercent(img, 50));
         ImageEdit(ops, "image.max1920", T("catalog.image.max1920.label"), Glyphs.Shrink, T("catalog.image.max1920.subtitle"), "1920", img => ImageBackend.ResizeMax(img, 1920));
         ImageEdit(ops, "image.rotate.right", T("catalog.image.rotate.right.label"), Glyphs.Rotate, T("catalog.image.rotate.right.subtitle"), T("catalog.image.rotate.suffix"), img => img.Rotate(90));
@@ -66,20 +67,155 @@ public static class Catalog
         ImageEdit(ops, "image.square", T("catalog.image.square.label"), Glyphs.Crop, T("catalog.image.square.subtitle"), T("catalog.image.square.suffix"), ImageBackend.CropSquare);
         ImageEdit(ops, "image.grayscale", T("catalog.image.grayscale.label"), Glyphs.Color, null, T("catalog.image.grayscale.suffix"), ImageBackend.Grayscale);
         ImageEdit(ops, "image.strip", T("catalog.image.strip.label"), Glyphs.Clear, "GPS, EXIF", T("catalog.image.strip.suffix"), img => img.Strip());
+        // The one-click cutout. The windowed tool (tools.removebackground) is the same core with a live
+        // preview and explicit key/tolerance/feather controls; this slice uses the shipped defaults and
+        // always writes a PNG, because JPEG and BMP cannot store the alpha channel it produces.
+        ops.Add(new PerFileOperation("image.bg.remove", WheelKind.Tools, T("catalog.image.bgRemove.label"), Glyphs.Clear, Formats.Images,
+            async (item, ctx, _) => [await RemoveBackground.SaveAsync(item.Path, ctx.OutputDirFor(item.Path),
+                $"{item.BaseName} ({T("catalog.image.bgRemove.suffix")})", RemoveBackground.DefaultFormat,
+                RemoveBackground.DefaultFuzz, RemoveBackground.DefaultFeather, ctx.CancellationToken)],
+            subtitle: T("catalog.image.bgRemove.subtitle"))
+        { Preview = PreviewKind.Image });
         ops.Add(new BatchOperation("image.merge.pdf", WheelKind.Tools, T("catalog.image.mergePdf.label"), Glyphs.Merge,
             BatchOperation.AllOf(Formats.Images, min: 2),
             async (items, ctx) => [await OutputPaths.ProduceAsync(ctx.OutputDirFor(items[0].Path), items[0].BaseName, "pdf",
                 tmp => ImageBackend.ImagesToPdfAsync(items.Select(i => i.Path).OrderBy(p => p, NaturalComparer.Instance).ToList(), tmp, ctx.Settings.JpegQuality, ctx.CancellationToken))]));
     }
 
-    private static void ImageTool(List<Operation> ops, string id, string label, string glyph, string suffix, Func<FileItem, OperationContext, string, Task> run, string? subtitle = null) =>
+    /// <summary>
+    /// The container an image edit can actually write. HEIC has no HEVC encoder in the bundled
+    /// libheif, and SVG is a read-only vector input, so both are saved as a real raster copy.
+    /// </summary>
+    private static string ImageOutputFormatFor(string inputFormat) => Formats.Normalize(inputFormat) switch
+    {
+        "heic" => "jpg",
+        "svg" => "png",
+        _ => Formats.Normalize(inputFormat),
+    };
+
+    private static void ImageTool(List<Operation> ops, string id, string label, string glyph, string suffix,
+        Func<FileItem, OperationContext, string, string, Task> run, string? subtitle = null) =>
         ops.Add(new PerFileOperation(id, WheelKind.Tools, label, glyph, Formats.Images,
-            async (item, ctx, _) => [await OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), $"{item.BaseName} ({suffix})",
-                ImageBackend.OutputFormatFor(item.Format), tmp => run(item, ctx, tmp))], subtitle: subtitle)
+            async (item, ctx, _) =>
+            {
+                var format = ImageOutputFormatFor(item.Format);
+                return [await OutputPaths.ProduceAsync(ctx.OutputDirFor(item.Path), $"{item.BaseName} ({suffix})", format,
+                    tmp => run(item, ctx, tmp, format))];
+            }, subtitle: subtitle)
         { Preview = PreviewKind.Image });
 
-    private static void ImageEdit(List<Operation> ops, string id, string label, string glyph, string? subtitle, string suffix, Action<ImageMagick.MagickImage> edit) =>
-        ImageTool(ops, id, label, glyph, suffix, (item, ctx, tmp) => ImageBackend.EditAsync(item.Path, tmp, edit, ctx.Settings.JpegQuality, ctx.CancellationToken), subtitle);
+    private static void ImageEdit(List<Operation> ops, string id, string label, string glyph, string? subtitle, string suffix, Action<MagickImage> edit) =>
+        ImageTool(ops, id, label, glyph, suffix,
+            (item, ctx, tmp, format) => Task.Run(() => WriteEditedImage(item.Path, tmp, format, edit,
+                ctx.Settings.JpegQuality, ctx.CancellationToken), ctx.CancellationToken), subtitle);
+
+    /// <summary>
+    /// Loads every GIF frame, applies the edit to each one (so the animation stays intact), then writes
+    /// the target container explicitly. HEIC input becomes a JPEG; other formats keep one image, exactly
+    /// like the previous single-frame path.
+    /// </summary>
+    private static void WriteEditedImage(string input, string output, string format, Action<MagickImage> edit, int quality, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (Formats.KeyOf(input) != "gif")
+        {
+            using var image = ReadImage(input);
+            edit(image);
+            image.ResetPage();
+            PrepareImageForWrite(image, format, quality);
+            image.Write(output, ImageBackend.ToMagickFormat(format));
+            return;
+        }
+
+        using var frames = new MagickImageCollection(input);
+        if (frames.Count > 1)
+            frames.Coalesce();
+
+        foreach (var item in frames)
+        {
+            ct.ThrowIfCancellationRequested();
+            // The collection enumerates IMagickImage<byte>; the concrete frame is always MagickImage.
+            var frame = (MagickImage)item;
+            frame.AutoOrient();
+            edit(frame);
+            frame.ResetPage();
+            PrepareImageForWrite(frame, format, quality);
+        }
+
+        WriteGifFrames(frames, output);
+    }
+
+    /// <summary>Compress keeps every GIF frame; HEIC (readable only) is saved as a JPEG copy.</summary>
+    private static Task CompressImageAsync(string input, string output, string format, int quality, CancellationToken ct) =>
+        Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+            if (Formats.KeyOf(input) != "gif")
+            {
+                using var image = ReadImage(input);
+                image.Strip();
+                PrepareImageForWrite(image, format, quality);
+                image.Write(output, ImageBackend.ToMagickFormat(format));
+                return;
+            }
+
+            using var frames = new MagickImageCollection(input);
+            if (frames.Count > 1)
+                frames.Coalesce();
+
+            foreach (var item in frames)
+            {
+                ct.ThrowIfCancellationRequested();
+                var frame = (MagickImage)item;
+                frame.AutoOrient();
+                frame.Strip();
+                PrepareImageForWrite(frame, format, quality);
+            }
+
+            WriteGifFrames(frames, output);
+        }, ct);
+
+    /// <summary>SVG keeps the 192 DPI rasterization the other image backends use; other inputs default.</summary>
+    private static MagickImage ReadImage(string input)
+    {
+        var settings = new MagickReadSettings();
+        if (Formats.KeyOf(input) == "svg")
+        {
+            settings.Density = new Density(192);
+            settings.BackgroundColor = MagickColors.Transparent;
+        }
+
+        var image = new MagickImage(input, settings);
+        image.AutoOrient();
+        return image;
+    }
+
+    /// <summary>The same alpha/JPEG and ICO ≤ 256 rules as the app's image writer.</summary>
+    private static void PrepareImageForWrite(MagickImage image, string format, int quality)
+    {
+        image.Quality = (uint)Math.Clamp(quality, 1, 100);
+        if (format is "jpg" or "bmp" or "pdf" && image.HasAlpha)
+        {
+            image.BackgroundColor = MagickColors.White;
+            image.Alpha(AlphaAction.Remove);
+        }
+
+        if (format == "jpg")
+        {
+            image.Settings.SetDefine(MagickFormat.Jpeg, "sampling-factor", "4:2:0");
+            image.Settings.Interlace = Interlace.Jpeg;
+        }
+
+        if (format == "ico")
+        {
+            if (image.Width > 256 || image.Height > 256)
+                image.Resize(new MagickGeometry(256, 256));
+            image.Settings.SetDefine(MagickFormat.Ico, "auto-resize", "256,128,64,48,32,16");
+        }
+    }
+
+    private static void WriteGifFrames(MagickImageCollection frames, string output) =>
+        frames.Write(output, ImageBackend.ToMagickFormat("gif"));
 
     // ---------------------------------------------------------------- audio
 

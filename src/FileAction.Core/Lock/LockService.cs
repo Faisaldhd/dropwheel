@@ -257,7 +257,9 @@ public sealed class LockService(
         IProgress<LockProgress>? progress = null,
         CancellationToken cancellationToken = default,
         string? expectedFileHash = null,
-        string? expectedTreeHash = null)
+        string? expectedTreeHash = null,
+        int? originalAttributes = null,
+        int? originalDesktopIniAttributes = null)
     {
         ArgumentNullException.ThrowIfNull(header);
         ArgumentNullException.ThrowIfNull(dataKey);
@@ -294,6 +296,12 @@ public sealed class LockService(
         var restored = ReadStoredName(full, dataKey);
         if (!string.IsNullOrEmpty(restored))
             meta = meta with { Name = restored };
+        // The editable session copy has ReadOnly cleared so editors can save. The container must still
+        // describe the original item, so the session passes the attributes captured before that change.
+        if (originalAttributes is { } attributes)
+            meta = meta with { Attributes = attributes };
+        if (isDirectory && originalDesktopIniAttributes is { } desktopAttributes)
+            meta = meta with { PreviousDesktopIniAttributes = desktopAttributes };
 
         var temp = LockPaths.TempPath(full);
         var appearanceApplied = false;
@@ -392,14 +400,17 @@ public sealed class LockService(
     /// <summary>
     /// Decrypts a container into <paramref name="destinationDirectory"/> and returns the restored path and
     /// the data key. The plaintext is written to a staging name, verified, and then moved; the container is
-    /// never touched. The caller owns the returned key and must wipe it.
+    /// never touched. The caller owns the returned key and must wipe it. With <paramref name="editableCopy"/>
+    /// the ReadOnly bit is cleared on the extracted copy only: an editor can save, while a permanent
+    /// unprotect (the default) still restores the original attributes.
     /// </summary>
     public ExtractOutcome ExtractTo(
         string protectedPath,
         string secret,
         string destinationDirectory,
         IProgress<LockProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool editableCopy = false)
     {
         var full = LockPaths.Normalize(protectedPath);
         Directory.CreateDirectory(destinationDirectory);
@@ -410,8 +421,10 @@ public sealed class LockService(
         try
         {
             return header.IsDirectory
-                ? ExtractFolder(source, header, dataKey, destinationDirectory, progress, cancellationToken)
-                : ExtractFile(source, header, dataKey, destinationDirectory, progress, cancellationToken);
+                ? ExtractFolder(source, header, dataKey, destinationDirectory, progress, cancellationToken,
+                    editableCopy)
+                : ExtractFile(source, header, dataKey, destinationDirectory, progress, cancellationToken,
+                    editableCopy);
         }
         catch
         {
@@ -444,7 +457,8 @@ public sealed class LockService(
         byte[] dataKey,
         string destinationDirectory,
         IProgress<LockProgress>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool editableCopy)
     {
         var stagingRoot = StagingRoot(destinationDirectory);
         Directory.CreateDirectory(stagingRoot);
@@ -468,6 +482,8 @@ public sealed class LockService(
             MoveFile(staging, final);
             FolderAppearance.RestoreTimes(final, read.Meta, directory: false);
             ApplyFileAttributes(final, read.Meta.Attributes);
+            if (editableCopy)
+                ClearReadOnly(final);
             return new ExtractOutcome(final, read, header, dataKey);
         }
         catch
@@ -483,7 +499,8 @@ public sealed class LockService(
         byte[] dataKey,
         string destinationDirectory,
         IProgress<LockProgress>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool editableCopy)
     {
         var stagingRoot = StagingRoot(destinationDirectory);
         Directory.CreateDirectory(stagingRoot);
@@ -518,6 +535,8 @@ public sealed class LockService(
             MoveDirectory(staging, final);
             FolderAppearance.RestoreFolderAttributes(final, read.Meta.Attributes);
             FolderAppearance.RestoreTimes(final, read.Meta, directory: true);
+            if (editableCopy)
+                ClearReadOnlyTree(final);
             progress?.Report(new LockProgress(LockStage.Done, read.Digest.Length, read.Digest.Length));
             return new ExtractOutcome(final, read, header, dataKey);
         }
@@ -918,6 +937,27 @@ public sealed class LockService(
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+        }
+    }
+
+    /// <summary>
+    /// Clears ReadOnly across a folder restored for an editing session, deepest items first, so every file
+    /// can be saved and no directory blocks a rename or delete. Only the disposable session copy is
+    /// touched; the container still carries the original attributes for a permanent unlock or a relock.
+    /// </summary>
+    private static void ClearReadOnlyTree(string folder)
+    {
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+                ClearReadOnly(file);
+            foreach (var directory in Directory.EnumerateDirectories(folder, "*", SearchOption.AllDirectories))
+                ClearReadOnly(directory);
+            ClearReadOnly(folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A file that cannot be changed is reported by the editor; the copied bytes are still exact.
         }
     }
 

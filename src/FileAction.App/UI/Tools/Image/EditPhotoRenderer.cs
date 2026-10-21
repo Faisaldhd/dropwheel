@@ -57,20 +57,25 @@ internal static class EditPhotoRenderer
     /// </summary>
     public static string RenderFinal(FileItem item, PhotoParameters parameters, string suffix, string outputDirectory)
     {
-        var extension = Path.GetExtension(item.Path).TrimStart('.');
-        var target = OutputPaths.Unique(outputDirectory, $"{item.BaseName} {suffix}", extension);
-        if (PhotoEdit.IsNeutral(parameters))
+        // HEIC cannot be encoded by the bundled libheif, so an edit is saved as a JPEG copy and the view
+        // says so; it is never written back to a container that would fail.
+        var format = ImageOutput.FormatFor(Formats.Normalize(item.Format));
+        var baseName = $"{item.BaseName} {suffix}";
+        return ImageOutput.WriteAtomic(outputDirectory, baseName, format, target =>
         {
-            File.Copy(item.Path, target);
-            return target;
-        }
+            if (PhotoEdit.IsNeutral(parameters) && string.Equals(format, item.Format, StringComparison.OrdinalIgnoreCase))
+            {
+                // Nothing to render: copy the source bytes verbatim (no recompression, no orientation rewrite).
+                File.Copy(item.Path, target);
+                return;
+            }
 
-        using var image = new MagickImage(item.Path);
-        Prepare(image);
-        PhotoEdit.Apply(image, parameters);
-        // Write by the normalized format, not by the file name: a ".jfif" source is still a JPEG.
-        image.Write(target, ImageBackend.ToMagickFormat(item.Format));
-        return target;
+            using var image = new MagickImage(item.Path);
+            Prepare(image);
+            PhotoEdit.Apply(image, parameters);
+            // Write by the normalized format, not by the file name: a ".jfif" source is still a JPEG.
+            ImageOutput.Write(image, target, format);
+        });
     }
 
     /// <summary>

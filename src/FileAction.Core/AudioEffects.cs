@@ -81,18 +81,28 @@ public static class AudioEffects
         Math.Round(value, 3, MidpointRounding.AwayFromZero).ToString("0.###", CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// The pan filter for one channel mode. Mono folds both inputs (0.5 each at full volume) so a loud
-    /// source cannot clip; stereo keeps the two sides apart. <paramref name="solo"/> mutes the other side
-    /// so "solo left" both previews and writes only the left channel.
+    /// The pan filter for one channel mode. A stereo source keeps its two sides apart, and mono folds both
+    /// inputs (0.5 each at full volume) so a loud source cannot clip. A mono source has no second input, so
+    /// it is duplicated into both output channels at full level (stereo) or passed through unchanged
+    /// (mono); using the stereo expressions there would write a silent right channel or lose 6 dB.
+    /// <paramref name="solo"/> mutes the other side so "solo left" both previews and writes only that side.
     /// </summary>
     public static string ChannelFilter(
         AudioChannelMode mode,
         int leftVolumePercent = 100,
         int rightVolumePercent = 100,
-        AudioChannelSolo solo = AudioChannelSolo.Both)
+        AudioChannelSolo solo = AudioChannelSolo.Both,
+        bool sourceIsMono = false)
     {
         var left = Gain(leftVolumePercent) * (solo == AudioChannelSolo.Right ? 0 : 1);
         var right = Gain(rightVolumePercent) * (solo == AudioChannelSolo.Left ? 0 : 1);
+
+        if (sourceIsMono)
+        {
+            return mode == AudioChannelMode.Mono
+                ? $"pan=mono|c0={Number(left)}*c0"
+                : $"pan=stereo|c0={Number(left)}*c0|c1={Number(right)}*c0";
+        }
 
         return mode == AudioChannelMode.Mono
             ? $"pan=mono|c0={Number(0.5 * left)}*c0+{Number(0.5 * right)}*c1"
@@ -104,9 +114,10 @@ public static class AudioEffects
         AudioChannelMode mode,
         int leftVolumePercent = 100,
         int rightVolumePercent = 100,
-        AudioChannelSolo solo = AudioChannelSolo.Both) =>
+        AudioChannelSolo solo = AudioChannelSolo.Both,
+        bool sourceIsMono = false) =>
     [
-        "-af", ChannelFilter(mode, leftVolumePercent, rightVolumePercent, solo),
+        "-af", ChannelFilter(mode, leftVolumePercent, rightVolumePercent, solo, sourceIsMono),
         "-ac", mode == AudioChannelMode.Mono ? "1" : "2",
     ];
 

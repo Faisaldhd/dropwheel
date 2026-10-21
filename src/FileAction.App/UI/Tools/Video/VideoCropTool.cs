@@ -46,6 +46,7 @@ internal sealed class VideoCropOperation : Operation, IInteractiveTool
     public VideoCropOperation()
         : base("tools.videocrop", WheelKind.Tools, T("tool.videocrop.label"), Glyphs.Crop, T("tool.videocrop.subtitle"))
     {
+        Requires = [ExternalTool.Ffmpeg];
     }
 
     public override bool AppliesTo(IReadOnlyList<FileItem> items) => VideoCropTool.Instance.Applies(items);

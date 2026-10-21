@@ -335,6 +335,13 @@ public sealed class ProtectionSettings
     /// <summary>Non-secret marker: a Rescuer was created, so later sessions ask for the password and key.</summary>
     public bool RescuerConfigured { get; set; }
 
+    /// <summary>
+    /// The most recent container this install protected. It is only used to prove a re-entered Rescuer
+    /// secret against a real header before new files are wrapped with it; it is a path, never a secret.
+    /// A moved or deleted file simply removes that proof and the prompt falls back to other candidates.
+    /// </summary>
+    public string? LastContainerPath { get; set; }
+
     public static string DefaultPath => ProtectionPaths.SettingsFile;
 
     public static ProtectionSettings Load() => LoadFrom(DefaultPath);
@@ -376,6 +383,9 @@ public sealed class ProtectionSettings
                         or System.Text.Json.JsonValueKind.False:
                         settings.RescuerConfigured = property.Value.GetBoolean();
                         break;
+                    case "LastContainerPath" when property.Value.ValueKind is System.Text.Json.JsonValueKind.String:
+                        settings.LastContainerPath = property.Value.GetString();
+                        break;
                 }
             }
         }
@@ -409,6 +419,8 @@ public sealed class ProtectionSettings
             writer.WriteBoolean("RecycleContainerAfterUnlock", RecycleContainerAfterUnlock);
             writer.WriteBoolean("AssociationsRegistered", AssociationsRegistered);
             writer.WriteBoolean("RescuerConfigured", RescuerConfigured);
+            if (!string.IsNullOrWhiteSpace(LastContainerPath))
+                writer.WriteString("LastContainerPath", LastContainerPath);
             writer.WriteEndObject();
             writer.Flush();
             stream.Flush(flushToDisk: true);

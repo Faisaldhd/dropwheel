@@ -46,6 +46,7 @@ internal sealed class RedactView
     ];
 
     private readonly FileItem _item;
+    private readonly DropTargets? _targets;
     private readonly Task<(BitmapSource Bitmap, byte[] Png, int Width, int Height)> _load;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly ImageGateGrid _root = new();
@@ -105,9 +106,10 @@ internal sealed class RedactView
     private RedactionHandle _dragHandle;
     private RedactionBox? _draftBox;
 
-    public RedactView(FileItem item)
+    public RedactView(FileItem item, DropTargets? targets)
     {
         _item = item;
+        _targets = targets;
         _draft.BorderBrush = Theme.Accent;
         _placeholder = new Border
         {
@@ -839,8 +841,9 @@ internal sealed class RedactView
         if (plan.Count == 0)
             throw new ConversionException(T("tool.redact.noAreas"));
 
-        // "Next to the source", as specified for this tool; the original file is only read.
-        var directory = OutputTarget.SourceFolder(_item.Path) ?? Environment.CurrentDirectory;
+        // The same drop-folder rules as Crop and Compress: the folder under the cursor (or the one
+        // remembered during the drag) wins, otherwise the source folder. The original is only read.
+        var directory = ToolOutputFolder.For(_item, _targets);
         return await Task.Run(() => RedactRunner.Apply(_item, plan, directory));
     }
 

@@ -4,6 +4,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using FileAction.App.UI.Tools.Image;
 using FileAction.Core;
 using ImageMagick;
 using static FileAction.Core.Loc;
@@ -22,6 +23,7 @@ internal sealed class CompressView
     private readonly DropTargets? _targets;
     private readonly ToolLocator _tools = new();
     private readonly MediaKind _kind;
+    private readonly string _inputFormat;
     private readonly string _format;
     private readonly Task<SourceInfo> _probe;
     private readonly TaskCompletionSource<MediaSize?> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -57,8 +59,10 @@ internal sealed class CompressView
     {
         _item = item;
         _targets = targets;
-        _format = Formats.Normalize(item.Format);
-        _kind = Compression.KindOf(_format);
+        _inputFormat = Formats.Normalize(item.Format);
+        // HEIC cannot be written back: the plan and the estimate describe the JPEG copy it becomes.
+        _format = ImageOutput.FormatFor(_inputFormat);
+        _kind = Compression.KindOf(_inputFormat);
         _cancel = Controls.Button(T("tool.compress.cancel"), () => _cts?.Cancel());
         // Probe off the UI thread: the window opens immediately and shows the estimate when it lands.
         _probe = Task.Run(Probe);
@@ -395,6 +399,10 @@ internal sealed class CompressView
             ? T("tool.compress.hint.duration")
             : _kind switch
             {
+                // HEIC and animated GIF do not fit the generic "keeps its format" line: the first becomes
+                // a JPEG copy and the second keeps every frame.
+                MediaKind.Image when ImageOutput.IsHeic(_inputFormat) => T("tool.compress.hint.heic"),
+                MediaKind.Image when ImageOutput.IsGif(_inputFormat) => T("tool.compress.hint.gif"),
                 MediaKind.Image => T("tool.compress.hint.image"),
                 MediaKind.Audio => plan.LosslessAudio ? T("tool.compress.hint.lossless") : T("tool.compress.hint.audio"),
                 MediaKind.Video => T("tool.compress.hint.video"),
@@ -534,8 +542,8 @@ internal sealed class CompressView
             {
                 case MediaKind.Image:
                 {
-                    var info = new MagickImageInfo(_item.Path);
-                    return new SourceInfo(bytes, (int)info.Width, (int)info.Height, 0);
+                    var (width, height) = ProbeImageSize(_item.Path);
+                    return new SourceInfo(bytes, width, height, 0);
                 }
 
                 case MediaKind.Pdf:
@@ -567,6 +575,18 @@ internal sealed class CompressView
         {
             return new SourceInfo(bytes, 0, 0, 0);
         }
+    }
+
+    /// <summary>
+    /// Oriented pixel size for the resize dropdown and the estimate. Reading the dimensions without
+    /// AutoOrient reported a 4000×3000 phone photo as landscape, so a "1920" size produced a 1920×1440
+    /// landscape copy instead of the intended 1440×1920 portrait one.
+    /// </summary>
+    internal static (int Width, int Height) ProbeImageSize(string path)
+    {
+        using var image = new MagickImage(path);
+        image.AutoOrient();
+        return ((int)image.Width, (int)image.Height);
     }
 
     private readonly record struct SourceInfo(long Bytes, int Width, int Height, double Duration);

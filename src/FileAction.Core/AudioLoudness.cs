@@ -156,18 +156,33 @@ public static class AudioLoudness
     public static string MeasureFilter(LoudnessTarget target) => Filter(target, "json");
 
     /// <summary>
-    /// The second pass: normalize to the target using the first pass's measured values. Without usable
-    /// measurements (silence, or a failed pass) this falls back to loudnorm's single-pass dynamic mode.
+    /// The second pass: normalize to the target using the first pass's measured values, then bring the
+    /// signal back to <paramref name="sampleRate"/> and 16-bit. <c>loudnorm</c> works internally at
+    /// 192 kHz and leaves its output there, which makes the written file many times larger than the
+    /// source; the resample/aformat tail keeps the source rate (48 kHz when unknown) and a sane depth.
+    /// Without usable measurements (silence, or a failed pass) this falls back to loudnorm's single-pass
+    /// dynamic mode.
     /// </summary>
-    public static string ApplyFilter(LoudnessTarget target, LoudnessMeasurement? measurement)
+    public static string ApplyFilter(
+        LoudnessTarget target,
+        LoudnessMeasurement? measurement,
+        int sampleRate = AudioEffects.DefaultSampleRate)
     {
         var filter = Filter(target, "summary");
         if (measurement is null || !measurement.CanApplyMeasured)
-            return filter;
+            return filter + OutputFormat(sampleRate);
 
         return filter + string.Create(
             CultureInfo.InvariantCulture,
-            $":measured_I={measurement.Integrated:0.###}:measured_TP={measurement.TruePeak:0.###}:measured_LRA={measurement.LoudnessRange:0.###}:measured_thresh={measurement.Threshold:0.###}:offset={measurement.TargetOffset:0.###}:linear=true");
+            $":measured_I={measurement.Integrated:0.###}:measured_TP={measurement.TruePeak:0.###}:measured_LRA={measurement.LoudnessRange:0.###}:measured_thresh={measurement.Threshold:0.###}:offset={measurement.TargetOffset:0.###}:linear=true")
+            + OutputFormat(sampleRate);
+    }
+
+    /// <summary>The post-loudnorm resample and 16-bit conversion shared by both apply paths.</summary>
+    public static string OutputFormat(int sampleRate)
+    {
+        var rate = Math.Clamp(sampleRate, 8000, 192000);
+        return string.Create(CultureInfo.InvariantCulture, $",aresample={rate},aformat=sample_fmts=s16");
     }
 
     /// <summary>ffmpeg arguments for the measurement pass (output is the null muxer, nothing is written).</summary>
@@ -181,15 +196,17 @@ public static class AudioLoudness
     ];
 
     /// <summary>
-    /// ffmpeg arguments for the apply pass: the filter, the caller's encoder arguments and the output path.
-    /// The output path is last so the encoder options apply to it.
+    /// ffmpeg arguments for the apply pass: the filter (which already ends in the source-rate/16-bit
+    /// conversion), the caller's encoder arguments and the output path. The output path is last so the
+    /// encoder options apply to it.
     /// </summary>
     public static IReadOnlyList<string> ApplyArguments(
         string inputPath,
         string outputPath,
         LoudnessTarget target,
         LoudnessMeasurement? measurement,
-        IEnumerable<string> encoderArgs)
+        IEnumerable<string> encoderArgs,
+        int sampleRate = AudioEffects.DefaultSampleRate)
     {
         ArgumentNullException.ThrowIfNull(encoderArgs);
 
@@ -198,7 +215,7 @@ public static class AudioLoudness
             "-hide_banner", "-nostdin", "-nostats", "-y",
             "-i", inputPath,
             "-map", "0:a:0",
-            "-af", ApplyFilter(target, measurement),
+            "-af", ApplyFilter(target, measurement, sampleRate),
         };
         arguments.AddRange(encoderArgs);
         arguments.Add(outputPath);

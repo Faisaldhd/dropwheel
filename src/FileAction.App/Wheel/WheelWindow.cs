@@ -57,6 +57,22 @@ internal readonly record struct InnerChoice(Operation? Operation, int Hidden)
 /// </summary>
 internal sealed class WheelWindow : Window
 {
+    /// <summary>What a drag release over the wheel does.</summary>
+    internal enum DropAction
+    {
+        /// <summary>The hub, the rim, the empty background or a "+n" pager: the drop cancels.</summary>
+        Nothing,
+
+        /// <summary>An operation slice or an inner child: run that operation.</summary>
+        Run,
+
+        /// <summary>An outer category slice: open its chooser, exactly like a click.</summary>
+        OpenCategory,
+    }
+
+    /// <summary>The operation a drop targets and whether it runs directly or opens a category.</summary>
+    internal readonly record struct DropTarget(DropAction Action, Operation? Operation);
+
     public delegate IReadOnlyList<Operation> OperationSource(WheelKind wheel, IReadOnlyList<FileItem> items);
 
     // ------------------------------------------------------------------ geometry
@@ -292,12 +308,9 @@ internal sealed class WheelWindow : Window
         DragOver += OnDragOver;
         DragLeave += OnDragLeave;
         Drop += OnDrop;
-        MouseMove += (_, e) =>
-        {
-            if (Mode != WheelMode.Click)
-                return;
-            PointerMove(e.GetPosition(_canvas));
-        };
+        // Both modes follow the pointer: Click gets MouseMove, Drag gets its pointer from
+        // DragEnter/DragOver as well. Sharing the handler keeps the 450 ms dwell identical in both.
+        MouseMove += (_, e) => PointerMove(e.GetPosition(_canvas));
         MouseLeave += (_, _) =>
         {
             CancelDwell();
@@ -524,7 +537,7 @@ internal sealed class WheelWindow : Window
     internal static WheelEscape EscapeActionFor(bool innerOpen, bool dwelling) =>
         innerOpen ? WheelEscape.ClearInner : dwelling ? WheelEscape.CancelDwell : WheelEscape.Close;
 
-    /// <summary>Only the plain main wheel opens on hover, and only after the dwell.</summary>
+    /// <summary>Only the plain main wheel opens on hover, in both modes, and only after the dwell.</summary>
     internal static bool ShouldDwell(bool innerOpen, bool sameCategory, bool suppressed) =>
         !innerOpen && !sameCategory && !suppressed;
 
@@ -626,6 +639,10 @@ internal sealed class WheelWindow : Window
     {
         if (Mode != WheelMode.Drag || _finished)
             return;
+        // The button came up outside the wheel (or the release never reached the drop target): a pending
+        // dwell must not open an inner ring behind the close timer. Dropping on the wheel goes through
+        // OnDrop, which finishes the window first, so this only cancels a drop that is already leaving.
+        CancelDwell();
         _closeTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Normal, (_, _) => Finish(), Dispatcher);
         _closeTimer.Start();
     }
@@ -1381,16 +1398,23 @@ internal sealed class WheelWindow : Window
     /// <summary>
     /// The drag stopped being over the wheel. WPF raises DragLeave for child-to-child moves too (the
     /// backdrop, hub and the inner ring are separate visuals), so only a pointer that is truly past the
-    /// rim may dismiss the inner ring: moving from a category into its children keeps the ring open.
+    /// rim may dismiss the inner ring or cancel a dwell: moving from a category into its children keeps
+    /// both the ring and the 450 ms clock alive.
     /// </summary>
     private void OnDragLeave(object sender, DragEventArgs e)
     {
         e.Handled = true;
+        var point = e.GetPosition(_canvas);
+        if (!_finished && KeepsInnerRing(HitAt(point).Zone))
+        {
+            // Drag churn inside the disc: refresh the hover instead of throwing away the dwell.
+            PointerMove(point);
+            return;
+        }
         CancelDwell();
         SetHighlight(-1);
         SetInnerHighlight(-1);
-        if (!KeepsInnerRing(HitAt(e.GetPosition(_canvas)).Zone))
-            ClearInner();
+        ClearInner();
     }
 
     private void OnDragOver(object sender, DragEventArgs e)
@@ -1426,21 +1450,35 @@ internal sealed class WheelWindow : Window
         : (allowed & DragDropEffects.Link) != 0 ? DragDropEffects.Link
         : DragDropEffects.None;
 
+    /// <summary>
+    /// Resolves a drag release without touching the window: an inner child or a plain outer slice runs
+    /// its operation, an outer category opens its chooser, and the hub, the rim, a "+n" pager or an
+    /// out-of-range index cancels. Kept pure so the drop rules are tested without an OLE drag.
+    /// </summary>
+    internal static DropTarget DropTargetAt(WheelZone zone, int index,
+        IReadOnlyList<Operation> operations, IReadOnlyList<InnerChoice> choices)
+    {
+        if (zone == WheelZone.Outer && index >= 0 && index < operations.Count)
+        {
+            return operations[index] is WheelGroupOperation
+                ? new DropTarget(DropAction.OpenCategory, operations[index])
+                : new DropTarget(DropAction.Run, operations[index]);
+        }
+        if (zone == WheelZone.Inner && index >= 0 && index < choices.Count && !choices[index].IsMore)
+            return new DropTarget(DropAction.Run, choices[index].Operation);
+        return new DropTarget(DropAction.Nothing, null);
+    }
+
     private void OnDrop(object sender, DragEventArgs e)
     {
         e.Handled = true;
         var point = e.GetPosition(_canvas);
         var hit = HitAt(point);
-        Operation? op = hit.Zone switch
-        {
-            WheelZone.Inner when hit.Index >= 0 && hit.Index < _innerChoices.Count && !_innerChoices[hit.Index].IsMore =>
-                _innerChoices[hit.Index].Operation,
-            WheelZone.Outer when hit.Index >= 0 && hit.Index < _ops.Count => _ops[hit.Index],
-            _ => null,
-        };
-        e.Effects = op is null ? DragDropEffects.None : SafeEffect(e.AllowedEffects);
+        var target = DropTargetAt(hit.Zone, hit.Index, _ops, _innerChoices);
+        var op = target.Operation;
+        e.Effects = target.Action == DropAction.Nothing ? DragDropEffects.None : SafeEffect(e.AllowedEffects);
         // Virtual files and images can only be read while the drop is in progress.
-        var content = op is null ? null : DropContent.Read(e.Data, materialize: true);
+        var content = target.Action == DropAction.Nothing ? null : DropContent.Read(e.Data, materialize: true);
         var parentAngle = SliceAngle(Math.Max(0, hit.Index), hit.Zone == WheelZone.Inner ? _innerChoices.Count : _ops.Count);
         Finish();
         if (op is not null && content is { Items.Count: > 0 })
@@ -1458,7 +1496,7 @@ internal sealed class WheelWindow : Window
                     Shell.Notifications.Show(T("error.download.failed"), ex.Message, error: true);
                     return;
                 }
-                if (op is WheelGroupOperation group)
+                if (target.Action == DropAction.OpenCategory && op is WheelGroupOperation group)
                     OpenGroup?.Invoke(group, content.Items, hit.Index, parentAngle);
                 else
                     Dispatch(op, content.Items);
@@ -1602,9 +1640,10 @@ internal sealed class WheelWindow : Window
     }
 
     /// <summary>
-    /// The single hover rule of the two-ring wheel: outer slices dwell for <see cref="DwellMs"/> when no
-    /// ring is open; once it is open, moving to another category swaps immediately; over the inner ring
-    /// the child under the pointer is highlighted and the category stays put.
+    /// The single hover rule of the two-ring wheel, shared by Click and Drag mode: outer slices dwell
+    /// for <see cref="DwellMs"/> when no ring is open; once it is open, moving to another category swaps
+    /// immediately; over the inner ring the child under the pointer is highlighted and the category
+    /// stays put.
     /// </summary>
     private void PointerMove(Point point)
     {

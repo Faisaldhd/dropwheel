@@ -10,18 +10,26 @@ namespace FileAction.App.Shell.Protection;
 /// <summary>One unlocked plaintext copy that the panel is watching.</summary>
 internal sealed class LockSession : IDisposable
 {
-    public LockSession(LockSessionRecord record, LockHeader header, byte[] dataKey, bool isDirectory)
+    public LockSession(LockSessionRecord record, LockHeader header, byte[] dataKey, bool isDirectory,
+        int originalAttributes, int originalDesktopIniAttributes)
     {
         Record = record;
         Header = header;
         DataKey = dataKey;
         IsDirectory = isDirectory;
+        OriginalAttributes = originalAttributes;
+        OriginalDesktopIniAttributes = originalDesktopIniAttributes;
     }
 
     public LockSessionRecord Record { get; set; }
     public LockHeader Header { get; }
     public byte[] DataKey { get; }
     public bool IsDirectory { get; }
+
+    /// <summary>Attributes the original item had before the editable copy cleared ReadOnly.</summary>
+    public int OriginalAttributes { get; }
+
+    public int OriginalDesktopIniAttributes { get; }
     public DateTimeOffset LastChange { get; set; }
     public bool Busy { get; set; }
     public FileSystemWatcher? Watcher { get; set; }
@@ -145,7 +153,7 @@ internal sealed class LockSessionManager
             // worker, and the continuation returns to the UI thread before any window or journal work.
             (extracted, treeHash) = await Task.Run(() =>
             {
-                var outcome = _service.ExtractTo(containerPath, secret, tempRoot);
+                var outcome = _service.ExtractTo(containerPath, secret, tempRoot, editableCopy: true);
                 var hash = outcome.Read.Meta.IsDirectory ? LockArchive.TreeHash(outcome.Path) : null;
                 return (outcome, hash);
             });
@@ -182,7 +190,8 @@ internal sealed class LockSessionManager
                 : Convert.ToHexString(extracted.Read.Digest.Sha256),
         };
         _journal.Write(record);
-        var session = new LockSession(record, extracted.Header, extracted.DataKey, extracted.Read.Meta.IsDirectory)
+        var session = new LockSession(record, extracted.Header, extracted.DataKey, extracted.Read.Meta.IsDirectory,
+            extracted.Read.Meta.Attributes, extracted.Read.Meta.PreviousDesktopIniAttributes)
         {
             LastChange = DateTimeOffset.Now,
         };
@@ -248,7 +257,9 @@ internal sealed class LockSessionManager
                 await Task.Run(() => _service.RelockFromSession(session.Record.ContainerPath, session.Header,
                     session.DataKey, session.Record.PlaintextPath,
                     expectedFileHash: wasError ? session.Record.FileHash : null,
-                    expectedTreeHash: wasError ? session.Record.TreeHash : null)).ConfigureAwait(true);
+                    expectedTreeHash: wasError ? session.Record.TreeHash : null,
+                    originalAttributes: session.OriginalAttributes,
+                    originalDesktopIniAttributes: session.OriginalDesktopIniAttributes)).ConfigureAwait(true);
                 _journal.Delete(session.Record.Id);
                 NotifyLocked(session.Record);
                 lock (_gate)
@@ -621,7 +632,8 @@ internal sealed class LockSessionManager
             try
             {
                 _service.RelockFromSession(session.Record.ContainerPath, session.Header, session.DataKey,
-                    session.Record.PlaintextPath);
+                    session.Record.PlaintextPath, originalAttributes: session.OriginalAttributes,
+                    originalDesktopIniAttributes: session.OriginalDesktopIniAttributes);
                 _journal.Delete(session.Record.Id);
                 lock (_gate)
                     _sessions.Remove(session.Record.Id);

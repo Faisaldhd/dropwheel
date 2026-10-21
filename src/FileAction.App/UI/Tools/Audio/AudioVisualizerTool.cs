@@ -69,6 +69,7 @@ internal sealed class AudioVisualizerView
     private bool _useImage;
     private string? _imagePath;
     private BitmapSource? _image;
+    private AudioWaveform? _waveform;
 
     public AudioVisualizerView(FileItem item, DropTargets? targets)
     {
@@ -93,11 +94,29 @@ internal sealed class AudioVisualizerView
         return new ToolContent(root, Reset, ApplyAsync, _ready.Task, ActivateAsync);
     }
 
-    /// <summary>Nothing to decode: the frame size is all the adaptive sizer needs.</summary>
-    public Task ActivateAsync()
+    /// <summary>
+    /// Decodes the source envelope (and a spread of signed sample pairs for the scope) so the preview
+    /// draws this file instead of an invented wave. A decode failure still lets the window size itself.
+    /// </summary>
+    public async Task ActivateAsync()
     {
+        try
+        {
+            var ffmpeg = _tools.Require(ExternalTool.Ffmpeg);
+            _waveform = await AudioWaveform.LoadAsync(ffmpeg, _item.Path, _life.Token);
+            Paint();
+        }
+        catch (OperationCanceledException)
+        {
+            _ready.TrySetResult(null);
+            return;
+        }
+        catch (Exception ex)
+        {
+            _status.Text = ex.Message;
+        }
+
         _ready.TrySetResult(new MediaSize(484, 360));
-        return Task.CompletedTask;
     }
 
     private void FillControls()
@@ -248,7 +267,7 @@ internal sealed class AudioVisualizerView
             ? Bidi.Value(Path.GetFileName(_imagePath))
             : string.Empty;
 
-        _preview.Show(_orientation, _style, _useImage ? _image : null);
+        _preview.Show(_orientation, _style, _useImage ? _image : null, _waveform);
         _outputName.Text = Bidi.Value($"{_item.BaseName} {T("tool.audiovisualizer.suffix")}.mp4");
     }
 
@@ -317,7 +336,10 @@ internal sealed class AudioVisualizerView
     }
 }
 
-/// <summary>Draws the chosen video frame with a sample of the animation; it never runs ffmpeg.</summary>
+/// <summary>
+/// Draws the chosen frame with this file's real waveform (or signed sample pairs for the scope), so the
+/// preview reflects the source rather than a decorative shape. It never runs ffmpeg itself.
+/// </summary>
 internal sealed class VisualizerPreview : FrameworkElement
 {
     private static readonly Brush Backdrop = AudioTheme.VisualizerBackdrop;
@@ -328,12 +350,18 @@ internal sealed class VisualizerPreview : FrameworkElement
     private AudioVisualizerOrientation _orientation = AudioVisualizerOrientation.Landscape;
     private AudioVisualizerStyle _style = AudioVisualizerStyle.Waveform;
     private ImageSource? _image;
+    private AudioWaveform? _waveform;
 
-    public void Show(AudioVisualizerOrientation orientation, AudioVisualizerStyle style, ImageSource? image)
+    public void Show(
+        AudioVisualizerOrientation orientation,
+        AudioVisualizerStyle style,
+        ImageSource? image,
+        AudioWaveform? waveform)
     {
         _orientation = orientation;
         _style = style;
         _image = image;
+        _waveform = waveform;
         InvalidateVisual();
     }
 
@@ -373,19 +401,36 @@ internal sealed class VisualizerPreview : FrameworkElement
         drawingContext.DrawRectangle(null, FramePen, frame);
     }
 
-    private static void DrawScope(DrawingContext dc, Rect frame)
+    private void DrawScope(DrawingContext dc, Rect frame)
     {
+        var waveform = _waveform;
+        if (waveform is null || waveform.ScopeLeft.Length == 0)
+            return;
+
         var center = new Point(frame.Left + frame.Width / 2, frame.Top + frame.Height / 2);
-        var radius = Math.Min(frame.Width, frame.Height) * 0.32;
-        for (var i = 0; i < 3; i++)
+        var radius = Math.Min(frame.Width, frame.Height) * 0.40;
+        var count = Math.Min(waveform.ScopeLeft.Length, waveform.ScopeRight.Length);
+        // A few hundred pairs are enough to show the stereo shape and keep the render cheap.
+        var step = Math.Max(1, count / 400);
+        for (var i = 0; i < count; i += step)
         {
-            var shrink = 1 - i * 0.22;
-            dc.DrawEllipse(null, WavePen, center, radius * shrink, radius * 0.82 * shrink);
+            var point = new Point(
+                center.X + waveform.ScopeLeft[i] * radius,
+                center.Y - waveform.ScopeRight[i] * radius);
+            dc.DrawEllipse(WaveFill, null, point, 1.2, 1.2);
         }
     }
 
-    private static void DrawWave(DrawingContext dc, Rect frame)
+    private void DrawWave(DrawingContext dc, Rect frame)
     {
+        var waveform = _waveform;
+        if (waveform is null)
+            return;
+
+        var peaks = waveform.Combined();
+        if (peaks.Length == 0)
+            return;
+
         const int points = 96;
         var middle = frame.Top + frame.Height / 2;
         var amplitude = frame.Height * 0.3;
@@ -396,8 +441,8 @@ internal sealed class VisualizerPreview : FrameworkElement
             var envelope = new double[points];
             for (var i = 0; i < points; i++)
             {
-                var t = i / (double)(points - 1);
-                envelope[i] = 0.12 + 0.88 * Math.Abs(Math.Sin(t * 21.0) * (0.35 + 0.65 * Math.Abs(Math.Sin(t * 3.1))));
+                var bucket = (int)Math.Min(peaks.Length - 1, (long)i * peaks.Length / points);
+                envelope[i] = Math.Clamp(peaks[bucket], 0, 1);
             }
 
             var first = new Point(frame.Left, middle - envelope[0] * amplitude);

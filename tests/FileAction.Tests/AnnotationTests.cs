@@ -556,6 +556,7 @@ public class AnnotationTests
             "tool.annotate.title",
             "tool.annotate.subtitle",
             "tool.annotate.suffix",
+            "tool.annotate.gifNote",
             "tool.annotate.empty",
             "tool.annotate.colors",
             "tool.annotate.stroke",

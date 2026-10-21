@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -21,6 +20,9 @@ internal sealed class AudioNormalizeTool : IToolWindowSpec
     public string Id => "tools.audionormalize";
 
     public string TitleKey => "tool.audionormalize.title";
+
+    /// <summary>The shared chrome action is the only write path; it carries this tool's verb.</summary>
+    public string PrimaryLabelKey => "tool.audionormalize.primary";
 
     public ToolSpecLayout Layout => AudioToolLayout.Window;
 
@@ -77,13 +79,12 @@ internal sealed class AudioNormalizeView
     private readonly TextBlock _afterPeak = ValueCell();
     private readonly TextBlock _afterRange = ValueCell();
 
-    private FrameworkElement? _root;
     private Border? _playButton;
-    private Border? _primary;
     private LoudnessTarget _measuredTarget;
     private LoudnessMeasurement? _measurement;
     private CancellationTokenSource? _analysis;
     private int _analysisId;
+    private int _sampleRate = AudioEffects.DefaultSampleRate;
     private double _duration;
     private bool _applying;
 
@@ -129,7 +130,6 @@ internal sealed class AudioNormalizeView
         root.Children.Add(header);
         root.Children.Add(body);
         root.Children.Add(footer);
-        _root = root;
 
         _status.Text = T("tool.audionormalize.analyzing");
         root.Loaded += (_, _) => AudioTheme.Watch(root);
@@ -285,14 +285,8 @@ internal sealed class AudioNormalizeView
             Foreground = Theme.Muted,
             TextWrapping = TextWrapping.Wrap,
         });
-
-        _primary = Controls.Button(T("tool.audionormalize.primary"), () => _ = RunPrimaryAsync(), primary: true);
-        _primary.VerticalAlignment = VerticalAlignment.Center;
-        var actions = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
-        DockPanel.SetDock(_primary, Dock.Right);
-        actions.Children.Add(_primary);
-        actions.Children.Add(_status);
-        footer.Children.Add(actions);
+        // The chrome's primary button is the only way to write: no second in-window Apply action.
+        footer.Children.Add(_status);
         return footer;
     }
 
@@ -400,6 +394,8 @@ internal sealed class AudioNormalizeView
         try
         {
             var ffmpeg = AudioRunner.RequireFfmpeg(_tools);
+            var probe = await AudioRunner.ProbeAsync(ffmpeg, _item.Path, _lifetime.Token).ConfigureAwait(true);
+            _sampleRate = probe?.SampleRate ?? AudioEffects.DefaultSampleRate;
             var waveform = await AudioRunner.WaveformAsync(ffmpeg, _item.Path, _lifetime.Token).ConfigureAwait(true);
             _duration = waveform.Duration;
             _waveform.SetWaveform(waveform.Peaks, _duration);
@@ -469,34 +465,6 @@ internal sealed class AudioNormalizeView
         StartAnalysis();
     }
 
-    private async Task RunPrimaryAsync()
-    {
-        if (_applying || _primary is null)
-            return;
-        _primary.IsEnabled = false;
-        try
-        {
-            var created = await ApplyAsync().ConfigureAwait(true);
-            if (string.IsNullOrEmpty(created))
-                return;
-            Notifications.Show(T("tool.window.done.title"), T("tool.window.done", Bidi.Value(Path.GetFileName(created))));
-            if (_root is not null)
-                Window.GetWindow(_root)?.Close();
-        }
-        catch (OperationCanceledException)
-        {
-            // The window is closing.
-        }
-        catch (Exception ex)
-        {
-            Notifications.Show(T("app.error.title"), ex.Message, error: true);
-        }
-        finally
-        {
-            _primary.IsEnabled = true;
-        }
-    }
-
     private async Task<string?> ApplyAsync()
     {
         if (_applying)
@@ -529,6 +497,7 @@ internal sealed class AudioNormalizeView
                 target,
                 measurement,
                 AudioRunner.OutputDirectory(_item, _targets),
+                _sampleRate,
                 _lifetime.Token).ConfigureAwait(true);
         }
         finally

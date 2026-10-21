@@ -53,6 +53,7 @@ internal sealed class VideoTrimOperation : Operation, IInteractiveTool
     public VideoTrimOperation()
         : base("tools.videotrim", WheelKind.Tools, T("tool.videotrim.label"), Glyphs.Split, T("tool.videotrim.subtitle"))
     {
+        Requires = [ExternalTool.Ffmpeg];
     }
 
     public override bool AppliesTo(IReadOnlyList<FileItem> items) => VideoTrimTool.Instance.Applies(items);

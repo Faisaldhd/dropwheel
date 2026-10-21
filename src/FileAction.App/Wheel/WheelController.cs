@@ -95,6 +95,7 @@ internal sealed class WheelController
         new UI.Tools.Image.AnnotateOperation(),
         new UI.Tools.Image.RedactOperation(),
         new UI.Tools.Image.Frame.AddBackgroundOperation(),
+        new UI.Tools.Image.RemoveBackgroundOperation(),
         new UI.Tools.Image.EditPhotosOperation(),
         new UI.Tools.Collage.CollageOperation(),
         new UI.Tools.Video.VideoFramesOperation(),
@@ -264,7 +265,27 @@ internal sealed class WheelController
             .ToList();
         if (items.Count == 0)
             return;
-        Open(WheelMode.Click, WheelKind.Convert, items, at);
+        Open(WheelMode.Click, InitialWheel(items, AllOperations, _tools, _settings), items, at);
+    }
+
+    /// <summary>
+    /// The wheel to show for a selection: Convert when it has anything, otherwise Tools (a folder only has
+    /// pack there, grouped under Archive) and then Actions. The Convert ring used to open empty for folders
+    /// and unknown extensions, which looked like a broken wheel rather than a deliberate "nothing to convert".
+    /// </summary>
+    internal static WheelKind InitialWheel(
+        IReadOnlyList<FileItem> items,
+        IReadOnlyList<Operation> operations,
+        ToolLocator tools,
+        AppSettings settings)
+    {
+        foreach (var wheel in new[] { WheelKind.Convert, WheelKind.Tools, WheelKind.Actions })
+        {
+            if (Offered(wheel, items, tools, settings, operations).Count > 0)
+                return wheel;
+        }
+        // No wheel has a slice: the window's own "Nothing for this selection" state is the clearest answer.
+        return WheelKind.Convert;
     }
 
     /// <summary>Runs a wheel choice: a floating tool opens its window, everything else becomes a job.</summary>

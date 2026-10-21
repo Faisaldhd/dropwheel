@@ -72,9 +72,11 @@ internal static class AnnotateRunner
             throw new ConversionException(T("error.image.process", ex.Message));
         }
 
-        var extension = Path.GetExtension(item.Path).TrimStart('.');
+        // Annotate renders one still bitmap, so an animated GIF becomes an explicit PNG still instead of
+        // a GIF with only frame 1 left. The view shows that conversion as a note before Apply.
+        var format = ImageOutput.StillFormatFor(Formats.Normalize(item.Format));
         var baseName = $"{item.BaseName} {T("tool.annotate.suffix")}";
-        return await Task.Run(() =>
+        return await ImageOutput.WriteAtomicAsync(outputDirectory, baseName, format, target => Task.Run(() =>
         {
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(rendered));
@@ -82,12 +84,9 @@ internal static class AnnotateRunner
             encoder.Save(png);
             png.Position = 0;
 
-            // Magick keeps the source format: the PNG render is written back as JPG/WebP/… by extension,
-            // exactly like the crop tool does.
+            // The PNG render is written back as JPG/WebP/… by explicit format, never by the temp name.
             using var image = new MagickImage(png);
-            var target = OutputPaths.Unique(outputDirectory, baseName, extension);
-            image.Write(target);
-            return target;
-        });
+            ImageOutput.Write(image, target, format);
+        }));
     }
 }

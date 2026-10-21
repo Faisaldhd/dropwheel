@@ -18,7 +18,7 @@ internal static class WheelCategories
         new("category.optimize", "wheel.category.optimize",
             ["tools.compress", "image.compress", "image.half", "image.max1920", "image.strip", "image.grayscale"], []),
         new("category.annotate", "wheel.category.annotate",
-            ["tools.annotate", "tools.redact", "tools.editphotos", "tools.addbackground", "tools.collage"], []),
+            ["tools.annotate", "tools.redact", "tools.editphotos", "tools.addbackground", "tools.removebackground", "image.bg.remove", "tools.collage"], []),
         new("category.metadata", "wheel.category.metadata",
             ["tools.metadata", "tools.qr"], []),
         new("category.video", "wheel.category.video", [], ["tools.video"]),

@@ -109,6 +109,39 @@ internal static class Theme
 
     public static Brush LockBadgeHighlight => Solid(LockBadgeHighlightColor);
 
+    /// <summary>
+    /// Protection windows paint cards on <see cref="Panel"/> (dialogs) or on <see cref="Card"/> (the tool
+    /// window content host). Both pairs were almost invisible: 1.05:1 and 1.00:1. The lock card is a
+    /// separate surface — 1.44:1 against the dark panel and 1.32:1 against the dark content card, 1.24:1
+    /// and 1.30:1 in light — and its 3:1 border keeps the edges readable without a shadow.
+    /// </summary>
+    public static Brush LockCard => IsDark ? LockCardDark : LockCardLight;
+
+    public static Brush LockCardBorder => IsDark ? LockCardBorderDark : LockCardBorderLight;
+
+    /// <summary>
+    /// Secondary text on a lock card. The shared <see cref="Muted"/> is tuned for the near-white card;
+    /// on the tinted lock surface it drops under 4.5:1 in light mode, so the protection windows use this
+    /// pair (6.62:1 dark, 5.60:1 light).
+    /// </summary>
+    public static Brush LockMuted => IsDark ? LockMutedDark : LockMutedLight;
+
+    /// <summary>
+    /// The purple as foreground text/icon. <see cref="LockBadge"/> is a fill colour for the badge pill
+    /// (white text sits on it); on a card its 2.36:1 fails the 3:1 minimum. These variants are 5.81:1 on
+    /// the dark card and 7.02:1 on the light card.
+    /// </summary>
+    public static Brush LockBadgeText => IsDark ? LockBadgeTextDark : LockBadgeTextLight;
+
+    private static readonly SolidColorBrush LockCardDark = Freeze(new SolidColorBrush(Color.FromRgb(0x3A, 0x32, 0x54)));
+    private static readonly SolidColorBrush LockCardLight = Freeze(new SolidColorBrush(Color.FromRgb(0xE7, 0xDE, 0xF4)));
+    private static readonly SolidColorBrush LockCardBorderDark = Freeze(new SolidColorBrush(Color.FromRgb(0x9A, 0x84, 0xBE)));
+    private static readonly SolidColorBrush LockCardBorderLight = Freeze(new SolidColorBrush(Color.FromRgb(0x8B, 0x6F, 0xB8)));
+    private static readonly SolidColorBrush LockMutedDark = Freeze(new SolidColorBrush(Color.FromRgb(0xC6, 0xBD, 0xD8)));
+    private static readonly SolidColorBrush LockMutedLight = Freeze(new SolidColorBrush(Color.FromRgb(0x5B, 0x52, 0x70)));
+    private static readonly SolidColorBrush LockBadgeTextDark = Freeze(new SolidColorBrush(Color.FromRgb(0xC9, 0xA6, 0xF5)));
+    private static readonly SolidColorBrush LockBadgeTextLight = Freeze(new SolidColorBrush(Color.FromRgb(0x63, 0x20, 0xA8)));
+
     public static readonly FontFamily Icons = new("Segoe Fluent Icons, Segoe MDL2 Assets");
     public static readonly FontFamily UiFont = new("Segoe UI Variable Text, Segoe UI");
     public static readonly FontFamily DisplayFont = new("Segoe UI Variable Display, Segoe UI");

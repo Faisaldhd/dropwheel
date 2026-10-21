@@ -6,7 +6,8 @@ namespace FileAction.Core.Backends;
 /// <summary>Image conversions and edits through Magick.NET (ImageMagick, runs in-process).</summary>
 public static class ImageBackend
 {
-    private static MagickImage Load(string path)
+    /// <summary>Reads the first frame, applies EXIF orientation and keeps the alpha channel.</summary>
+    public static MagickImage Load(string path)
     {
         var settings = new MagickReadSettings();
         if (Formats.KeyOf(path) == "svg")
@@ -59,6 +60,17 @@ public static class ImageBackend
             PrepareFor(image, format, settings.JpegQuality);
             image.Write(output, ToMagickFormat(format));
         }, ct);
+
+    /// <summary>
+    /// Writes an image that was already loaded and edited, applying the same quality, alpha-stripping and
+    /// icon-resize rules as the other writers. <paramref name="format"/> is a normalized format key.
+    /// </summary>
+    public static void Save(MagickImage image, string output, string format, int quality = 92)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        PrepareFor(image, format, quality);
+        image.Write(output, ToMagickFormat(format));
+    }
 
     /// <summary>Applies <paramref name="edit"/> and saves in the source format.</summary>
     public static Task EditAsync(string input, string output, Action<MagickImage> edit, int? quality, CancellationToken ct) =>

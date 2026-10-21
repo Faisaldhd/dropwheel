@@ -4,7 +4,14 @@ namespace FileAction.Core;
 
 public static class OutputPaths
 {
-    /// <summary>"dir/name.ext", or "dir/name (2).ext" … if that already exists.</summary>
+    /// <summary>Windows' maximum length for one file or folder name, in UTF-16 code units.</summary>
+    public const int MaxComponentLength = 255;
+
+    /// <summary>
+    /// "dir/name.ext", or "dir/name (2).ext" … if that already exists. A stem that cannot fit beside its
+    /// extension and numbering is refused here with a readable message, instead of returning a path that
+    /// only fails after the expensive work is done.
+    /// </summary>
     public static string Unique(string dir, string baseName, string ext)
     {
         ext = ext.TrimStart('.');
@@ -12,6 +19,8 @@ public static class OutputPaths
         var candidate = Path.Combine(dir, baseName + suffix);
         for (var i = 2; File.Exists(candidate) || Directory.Exists(candidate); i++)
             candidate = Path.Combine(dir, $"{baseName} ({i}){suffix}");
+        if (Path.GetFileName(candidate).Length > MaxComponentLength)
+            throw new ConversionException(T("error.output.nameTooLong", MaxComponentLength));
         return candidate;
     }
 
@@ -24,7 +33,12 @@ public static class OutputPaths
     public static async Task<string> ProduceAsync(string dir, string baseName, string ext, Func<string, Task> produce)
     {
         Directory.CreateDirectory(dir);
-        var temp = Path.Combine(dir, $".{baseName}.{Guid.NewGuid().ToString("N")[..8]}.part.{ext}");
+        // Fail before producing anything when no final name can exist. The temporary name is internal and
+        // is shortened when needed, so only the final component decides the limit.
+        _ = Unique(dir, baseName, ext);
+        var extension = ext.TrimStart('.');
+        var tempStem = Fit(baseName, MaxComponentLength - extension.Length - ".part.".Length - 12);
+        var temp = Path.Combine(dir, $".{tempStem}.{Guid.NewGuid().ToString("N")[..8]}.part.{extension}");
         try
         {
             await produce(temp).ConfigureAwait(false);
@@ -38,6 +52,13 @@ public static class OutputPaths
         {
             TryDelete(temp);
         }
+    }
+
+    private static string Fit(string name, int maximum)
+    {
+        if (maximum <= 0)
+            return string.Empty;
+        return name.Length <= maximum ? name : name[..maximum];
     }
 
     public static string TempDirectory()

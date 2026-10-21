@@ -45,7 +45,7 @@ internal sealed class LockOpenWindow : Window
         _error = new TextBlock
         {
             FontSize = 11.5,
-            Foreground = Theme.Error,
+            Foreground = Theme.BadgeErrorText,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 6, 0, 0),
         };
@@ -54,7 +54,7 @@ internal sealed class LockOpenWindow : Window
         {
             Text = T("tool.lock.unlock.ladder"),
             FontSize = 11.5,
-            Foreground = Theme.Muted,
+            Foreground = Theme.LockMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 10, 0, 0),
         });

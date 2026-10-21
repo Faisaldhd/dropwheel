@@ -4,11 +4,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using SharpCompress.Archives;
-using SharpCompress.Common;
 using SharpCompress.Readers;
-using SharpCompress.Writers;
-using SharpCompress.Writers.Zip;
-using ZipArchive = SharpCompress.Archives.Zip.ZipArchive;
 
 namespace FileAction.Core;
 
@@ -492,7 +488,8 @@ public static class ZipPasswordUnlocker
         try
         {
             using var archive = ArchiveFactory.OpenArchive(sourcePath, new ReaderOptions { Password = password });
-            var fileEntries = archive.Entries.Where(entry => !entry.IsDirectory).ToList();
+            var entries = archive.Entries.ToList();
+            var fileEntries = entries.Where(entry => !entry.IsDirectory && !string.IsNullOrEmpty(entry.Key)).ToList();
             if (fileEntries.Count == 0)
                 throw new PasswordProtectionException(PasswordProtectionFailure.Empty, "tool.unlock.error.empty");
             if (!fileEntries.Any(entry => entry.IsEncrypted))
@@ -500,24 +497,36 @@ public static class ZipPasswordUnlocker
 
             using var output = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             outputCreated = true;
-            using var writer = new ZipWriter(
-                output,
-                new ZipWriterOptions(CompressionType.Deflate)
-                {
-                    ArchiveEncoding = new ArchiveEncoding { Default = Encoding.UTF8 },
-                });
+            // Directory entries are carried over so empty folders survive the round trip; a ZipWriter write
+            // of a zero-byte entry would turn them into files.
+            using var writer = new System.IO.Compression.ZipArchive(output, ZipArchiveMode.Create);
 
             var done = 0;
-            foreach (var entry in fileEntries)
+            foreach (var entry in entries)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (string.IsNullOrEmpty(entry.Key))
+                var key = entry.Key;
+                if (string.IsNullOrEmpty(key))
                     continue;
-                using var raw = entry.OpenEntryStream();
-                writer.Write(entry.Key, raw, new ZipWriterEntryOptions
+                if (entry.IsDirectory)
                 {
-                    ModificationDateTime = entry.LastModifiedTime,
-                });
+                    writer.CreateEntry(key.EndsWith('/') ? key : key + "/");
+                    continue;
+                }
+
+                var target = writer.CreateEntry(key, CompressionLevel.Optimal);
+                // ZIP's DOS timestamp cannot represent every DateTime; a broken timestamp must not fail the
+                // unlock, so only set it inside the representable range.
+                if (entry.LastModifiedTime is { } modified &&
+                    modified >= new DateTime(1980, 1, 1) &&
+                    modified <= new DateTime(2107, 12, 31, 23, 59, 58))
+                {
+                    target.LastWriteTime = new DateTimeOffset(
+                        DateTime.SpecifyKind(modified, DateTimeKind.Unspecified), TimeSpan.Zero);
+                }
+                using var raw = entry.OpenEntryStream();
+                using var destination = target.Open();
+                raw.CopyTo(destination);
                 done++;
                 progress?.Report((double)done / fileEntries.Count);
             }

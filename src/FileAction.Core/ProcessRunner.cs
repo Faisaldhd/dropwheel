@@ -87,6 +87,9 @@ public static class ProcessRunner
             catch (InvalidOperationException) { }
             throw;
         }
+        // A process can exit normally just after the caller cancelled. Honour the cancellation
+        // instead of reporting a successful run (the video cancel test hits this race).
+        ct.ThrowIfCancellationRequested();
         // Make sure the async readers drained.
         process.WaitForExit();
 
