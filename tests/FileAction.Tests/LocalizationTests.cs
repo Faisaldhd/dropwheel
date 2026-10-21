@@ -196,7 +196,7 @@ public class LocalizationTests
         Assert.NotEmpty(Loc.PluralBaseKeys);
         foreach (var baseKey in Loc.PluralBaseKeys)
         {
-            Assert.True(baseKey is "items.count" or "job.doneCount", baseKey);
+            Assert.True(baseKey is "items.count" or "job.doneCount" or "pages.count", baseKey);
             foreach (var category in PluralCategories)
             {
                 Assert.True(Loc.HasKey($"{baseKey}.{category}", Language.English), $"en {baseKey}.{category}");
