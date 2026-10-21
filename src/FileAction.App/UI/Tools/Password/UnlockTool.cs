@@ -99,7 +99,7 @@ internal sealed class UnlockView
 
     public ToolContent Build()
     {
-        var content = new StackPanel { Margin = new Thickness(1, 0, 5, 0) };
+        var content = new StackPanel();
         content.Children.Add(PasswordViewParts.Note("tool.unlock.intro"));
         content.Children.Add(new TextBlock
         {

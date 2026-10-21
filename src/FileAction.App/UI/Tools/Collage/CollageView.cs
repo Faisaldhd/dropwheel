@@ -150,7 +150,7 @@ internal sealed class CollageView
         return new Border
         {
             Background = Theme.Card,
-            CornerRadius = new CornerRadius(14),
+            CornerRadius = new CornerRadius(12),
             Padding = new Thickness(6),
             Margin = new Thickness(0, 0, 0, 10),
             Child = _host,

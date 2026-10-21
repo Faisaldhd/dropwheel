@@ -51,7 +51,7 @@ internal sealed class MetadataView
 
     public ToolContent Build()
     {
-        var root = new Grid { Margin = new Thickness(18, 6, 18, 6) };
+        var root = new Grid { Margin = new Thickness(0, 6, 0, 6) };
         for (var i = 0; i < 5; i++)
             root.RowDefinitions.Add(new RowDefinition { Height = i == 2 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
 

@@ -128,8 +128,8 @@ internal sealed class QrView
 
     public ToolContent Build()
     {
-        // The window's title and bottom bars already inset their content by 18 DIP; the view matches them.
-        var root = new Grid { Margin = new Thickness(18, 0, 18, 0) };
+        // The shared chrome applies the 18 DIP gutter; the view adds none or the content would double-inset.
+        var root = new Grid();
         for (var index = 0; index < 5; index++)
             root.RowDefinitions.Add(new RowDefinition { Height = index == 1 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
 
@@ -190,7 +190,7 @@ internal sealed class QrView
         return new Border
         {
             Background = Theme.Card,
-            CornerRadius = new CornerRadius(14),
+            CornerRadius = new CornerRadius(12),
             Padding = new Thickness(6),
             Child = surface,
         };

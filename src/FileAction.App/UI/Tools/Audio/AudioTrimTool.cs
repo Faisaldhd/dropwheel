@@ -119,7 +119,7 @@ internal sealed class AudioTrimView
 
     public ToolContent Build()
     {
-        var root = new Grid { Margin = new Thickness(18, 2, 18, 0) };
+        var root = new Grid { Margin = new Thickness(0, 2, 0, 0) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -132,7 +132,7 @@ internal sealed class AudioTrimView
             Background = Theme.Card,
             BorderBrush = Theme.PanelBorder,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(14),
+            CornerRadius = new CornerRadius(12),
             Padding = new Thickness(10, 16, 10, 16),
             Margin = new Thickness(0, 0, 0, 10),
             Child = _strip,
@@ -232,7 +232,7 @@ internal sealed class AudioTrimView
     {
         Width = 104,
         Padding = new Thickness(8, 5, 8, 6),
-        Background = Theme.Page,
+        Background = Theme.Card,
         Foreground = Theme.Text,
         BorderBrush = Theme.PanelBorder,
         BorderThickness = new Thickness(1),

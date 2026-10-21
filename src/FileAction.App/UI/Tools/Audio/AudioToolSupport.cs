@@ -263,7 +263,7 @@ internal static class AudioToolChrome
     public static Border PreviewSurface(FrameworkElement content) => new()
     {
         Background = Theme.Card,
-        CornerRadius = new CornerRadius(14),
+        CornerRadius = new CornerRadius(12),
         Padding = new Thickness(6),
         Margin = new Thickness(0, 4, 0, 10),
         Child = content,
