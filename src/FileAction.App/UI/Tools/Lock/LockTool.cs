@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
@@ -719,12 +721,26 @@ internal sealed class LockUnlockView
             if (!outcome.ContainerRemoved)
                 text += Environment.NewLine + T("tool.lock.removeLeftover", Bidi.Value(outcome.ContainerError ?? ""));
             Dialogs.Show(owner, text, T("tool.lock.title"), MessageBoxButton.OK, MessageBoxImage.Information);
+            OpenRestored(outcome.RestoredPath);
             Reset();
         }
         catch (Exception ex) when (ex is LockException or IOException or UnauthorizedAccessException
                                        or LockPolicyException or ArgumentException)
         {
             _error.Text = LockRuntime.Describe(ex);
+        }
+    }
+
+    /// <summary>Unlock is also an open: the restored item is handed to the shell after the confirmation.</summary>
+    private static void OpenRestored(string path)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
+        {
+            // The file is already restored; a missing default handler must not turn that into an error.
         }
     }
 }
