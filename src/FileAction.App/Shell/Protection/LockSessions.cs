@@ -219,6 +219,28 @@ internal sealed class LockSessionManager
     }
 
     /// <summary>
+    /// Relocks and closes the open session for a container before it is unprotected. Without this,
+    /// "Remove protection" is refused whenever the file was just opened, even with the right password.
+    /// </summary>
+    public async Task<bool> CloseForRemovalAsync(string containerPath)
+    {
+        var record = _journal.FindByContainer(containerPath);
+        if (record is null)
+            return true;
+        LockSession? session;
+        lock (_gate)
+            _sessions.TryGetValue(record.Id, out session);
+        if (session is null)
+        {
+            _journal.Delete(record.Id);
+            return true;
+        }
+        await RelockAsync(session);
+        lock (_gate)
+            return !_sessions.ContainsKey(record.Id);
+    }
+
+    /// <summary>
     /// Re-encrypts the edited content into the same container, verifies it, removes the plaintext and only
     /// then deletes the journal.
     /// </summary>

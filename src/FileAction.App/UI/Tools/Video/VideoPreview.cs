@@ -35,6 +35,9 @@ internal sealed class VideoEditPreview : IDisposable
     private readonly TextBlock _messageText;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly string? _ffmpeg;
+    private readonly Border _playButton;
+    private readonly Border _playNote;
+    private readonly TextBlock _playNoteText;
 
     private CancellationTokenSource _seekCts = new();
     private MediaPlayer? _player;
@@ -42,6 +45,9 @@ internal sealed class VideoEditPreview : IDisposable
     private TimeSpan _playStart;
     private TimeSpan _playEnd;
     private int _seekGeneration;
+    private bool _externalPlayback;
+    private bool _openingPlayback;
+    private bool _playbackUnavailable;
     private bool _disposed;
 
     public VideoEditPreview(FileItem item, string keyPrefix)
@@ -73,10 +79,39 @@ internal sealed class VideoEditPreview : IDisposable
             Child = _messageText,
         };
 
+        _playNoteText = VideoControls.Hint(T("tool.videotrim.scrubOnly"));
+        _playNote = new Border
+        {
+            Background = Theme.Page,
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(10, 6, 10, 7),
+            Margin = new Thickness(12, 12, 12, 52),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            MaxWidth = 520,
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false,
+            Child = _playNoteText,
+        };
+        Panel.SetZIndex(_playNote, 11);
+
+        // One shared control for every view that uses this preview. Trim has its own external button
+        // and hides this one as soon as it calls EnablePlaybackAsync.
+        _playButton = Controls.Button(T("tool.videotrim.play"), () => _ = ToggleFromControlAsync(), glyph: Glyphs.Play);
+        _playButton.HorizontalAlignment = HorizontalAlignment.Left;
+        _playButton.VerticalAlignment = VerticalAlignment.Bottom;
+        _playButton.Margin = new Thickness(14);
+        _playButton.Visibility = Visibility.Collapsed;
+        Panel.SetZIndex(_playButton, 12);
+        PlayingChanged += playing =>
+            Controls.SetText(_playButton, T(playing ? "tool.videotrim.pause" : "tool.videotrim.play"));
+
         _surface.Children.Add(_image);
         _surface.Children.Add(_overlay);
         _surface.Children.Add(_placeholder);
         _surface.Children.Add(_message);
+        _surface.Children.Add(_playNote);
+        _surface.Children.Add(_playButton);
         _surface.SizeChanged += (_, _) => SurfaceChanged?.Invoke();
         MediaSurface.Round(_surface);
 
@@ -112,6 +147,12 @@ internal sealed class VideoEditPreview : IDisposable
 
     public event Action<bool>? PlayingChanged;
 
+    internal Border PlaybackButton => _playButton;
+
+    internal Border PlaybackNote => _playNote;
+
+    internal TextBlock PlaybackNoteText => _playNoteText;
+
     /// <summary>Probes the file and shows its first frame. False when the preview cannot be built.</summary>
     public async Task<bool> LoadAsync()
     {
@@ -141,6 +182,7 @@ internal sealed class VideoEditPreview : IDisposable
             _image.Source = frame;
             _image.Visibility = Visibility.Visible;
             _placeholder.Visibility = Visibility.Collapsed;
+            ShowPlaybackControl();
             return true;
         }
         catch (OperationCanceledException)
@@ -235,13 +277,79 @@ internal sealed class VideoEditPreview : IDisposable
 
     /// <summary>
     /// Tries WPF Media Foundation playback. Returns false for containers/codecs it cannot open, and the
-    /// caller then hides the play button and shows the scrub-only note.
+    /// caller then hides the play button and shows the scrub-only note. A tool that already has its own
+    /// play button calls this; the shared control is hidden so the two buttons never compete.
     /// </summary>
     public async Task<bool> EnablePlaybackAsync(TimeSpan start, TimeSpan end)
     {
-        if (_ffmpeg is null || Info is null || !PlayableFormats.Contains(_item.Format))
+        _externalPlayback = true;
+        _playButton.Visibility = Visibility.Collapsed;
+        _playNote.Visibility = Visibility.Collapsed;
+        var available = await EnablePlaybackCoreAsync(start, end);
+        if (!available)
+            _playbackUnavailable = true;
+        return available;
+    }
+
+    /// <summary>True when the format is one WPF Media Foundation may open; used by tests too.</summary>
+    internal static bool IsPlayableFormat(string? format) =>
+        format is not null && PlayableFormats.Contains(format);
+
+    /// <summary>Shown only after the preview has a probe result and a first frame.</summary>
+    private void ShowPlaybackControl()
+    {
+        if (_externalPlayback || _disposed || Info is null)
+            return;
+        if (IsPlayableFormat(_item.Format))
+            _playButton.Visibility = Visibility.Visible;
+        else
+            _playNote.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>The shared button's first click opens the player lazily; later clicks only toggle.</summary>
+    private async Task ToggleFromControlAsync()
+    {
+        if (_disposed || _externalPlayback || _playbackUnavailable || Info is null)
+            return;
+
+        if (_player is null)
+        {
+            var opened = await EnablePlaybackCoreAsync(TimeSpan.Zero, Info.Duration);
+            if (_disposed || _externalPlayback)
+                return;
+            if (!opened)
+            {
+                MarkPlaybackUnavailable();
+                return;
+            }
+            SetPlayRange(TimeSpan.Zero, Info.Duration);
+        }
+
+        TogglePlayback();
+    }
+
+    private void MarkPlaybackUnavailable()
+    {
+        _playbackUnavailable = true;
+        _playButton.Visibility = Visibility.Collapsed;
+        if (!_externalPlayback)
+            _playNote.Visibility = Visibility.Visible;
+    }
+
+    private async Task<bool> EnablePlaybackCoreAsync(TimeSpan start, TimeSpan end)
+    {
+        if (_ffmpeg is null || Info is null || !IsPlayableFormat(_item.Format) || _playbackUnavailable)
+            return false;
+        if (_player is not null)
+        {
+            _playStart = start;
+            _playEnd = end;
+            return true;
+        }
+        if (_openingPlayback)
             return false;
 
+        _openingPlayback = true;
         try
         {
             var player = new MediaPlayer { Volume = 0.7 };
@@ -267,6 +375,10 @@ internal sealed class VideoEditPreview : IDisposable
         catch (Exception)
         {
             return false;
+        }
+        finally
+        {
+            _openingPlayback = false;
         }
     }
 
@@ -411,8 +523,11 @@ internal sealed class VideoEditPreview : IDisposable
         {
         }
 
+        // Close must never leave a player running; pause first so PlayingChanged settles.
+        StopPlayback();
         _playTimer?.Stop();
         _playTimer = null;
+        _playButton.Visibility = Visibility.Collapsed;
         try
         {
             _player?.Close();

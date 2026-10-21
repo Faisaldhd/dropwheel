@@ -111,6 +111,13 @@ internal sealed class WheelWindow : Window
     /// <summary>Hovering a category opens it only after the pointer rests on it this long.</summary>
     internal const double DwellMs = 450;
 
+    /// <summary>
+    /// With an inner ring open, crossing another outer slice must not swap the category on a single
+    /// mouse sample: the pointer often crosses the rim/hub on its way to the far inner tools. Swap only
+    /// after this short rest.
+    /// </summary>
+    internal const double SwapDwellMs = 180;
+
     /// <summary>First frame of an inner ring is already visible; the entrance finishes inside 120 ms.</summary>
     internal const double InnerEnterMs = 90;
 
@@ -198,6 +205,8 @@ internal sealed class WheelWindow : Window
     private Storyboard? _reveal;
     private Storyboard? _innerStoryboard;
     private DispatcherTimer? _dwellTimer;
+    private DispatcherTimer? _swapTimer;
+    private int _swapIndex = -1;
     private Path? _dwellArc;
     private PathFigure? _dwellFigure;
     private ArcSegment? _dwellArcSegment;
@@ -655,6 +664,7 @@ internal sealed class WheelWindow : Window
             return;
         _finished = true;
         _closeTimer?.Stop();
+        CancelSwapDwell();
         CancelDwell();
         if (_closing)
             return;
@@ -1384,6 +1394,40 @@ internal sealed class WheelWindow : Window
         RemoveDwellArc();
     }
 
+    /// <summary>Starts the short rest needed before an open ring swaps to another outer category.</summary>
+    private void BeginSwapDwell(int index)
+    {
+        if (_innerGroupId is null || index < 0 || index >= _ops.Count)
+            return;
+        if (_swapIndex == index && _swapTimer is { IsEnabled: true })
+            return;
+        CancelSwapDwell();
+        _swapIndex = index;
+        _swapTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(SwapDwellMs),
+            DispatcherPriority.Input, (_, _) => SwapTick(), Dispatcher);
+        _swapTimer.Start();
+    }
+
+    private void SwapTick()
+    {
+        var index = _swapIndex;
+        CancelSwapDwell();
+        if (_finished || _switching || _innerGroupId is null || index < 0 || index >= _ops.Count)
+            return;
+        var hit = HitAt(Mouse.GetPosition(_canvas));
+        if (hit.Zone != WheelZone.Outer || hit.Index != index)
+            return;
+        if (_ops[index] is not WheelGroupOperation group || group.GroupId == _innerGroupId)
+            return;
+        SwapInner(index, SliceAngle(index, _ops.Count));
+    }
+
+    private void CancelSwapDwell()
+    {
+        _swapTimer?.Stop();
+        _swapIndex = -1;
+    }
+
     private void RemoveDwellArc()
     {
         if (_dwellArc is not null)
@@ -1658,6 +1702,7 @@ internal sealed class WheelWindow : Window
         {
             case WheelZone.Inner:
                 CancelDwell();
+                CancelSwapDwell();
                 _suppressIndex = -1;
                 SetInnerHighlight(hit.Index);
                 break;
@@ -1670,20 +1715,25 @@ internal sealed class WheelWindow : Window
                 {
                     CancelDwell();
                     if (ShouldSwap(innerOpen: true, sameCategory: group.GroupId == open))
-                        SwapInner(hit.Index, SliceAngle(hit.Index, _ops.Count));
+                        BeginSwapDwell(hit.Index);
+                    else
+                        CancelSwapDwell();
                 }
                 else if (hit.Index >= 0 && hit.Index < _ops.Count && _ops[hit.Index] is WheelGroupOperation
                     && ShouldDwell(innerOpen: false, sameCategory: false, suppressed: hit.Index == _suppressIndex))
                 {
+                    CancelSwapDwell();
                     BeginDwell(hit.Index);
                 }
                 else
                 {
                     CancelDwell();
+                    CancelSwapDwell();
                 }
                 break;
             default:
                 CancelDwell();
+                CancelSwapDwell();
                 SetInnerHighlight(-1);
                 SetHighlight(-1);
                 break;
