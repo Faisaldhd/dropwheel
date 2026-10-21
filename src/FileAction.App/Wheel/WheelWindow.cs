@@ -1758,10 +1758,11 @@ internal sealed class WheelWindow : Window
                 CancelDwell();
                 CancelSwapDwell();
                 // Crossing the hub is how the pointer reaches the far side of the small inner ring.
-                // Keep the last child highlighted instead of blanking it on every pass through the
-                // centre; a click on the hub still clears the ring explicitly.
-                if (_innerGroupId is null)
-                    SetInnerHighlight(-1);
+                // Keep following the nearest child there instead of blanking the ring or freezing the
+                // old child; a click on the hub is inert.
+                SetInnerHighlight(_innerGroupId is null
+                    ? -1
+                    : InnerHoverIndex(AngleAt(point), _innerChoices.Count, _innerHighlight));
                 SetHighlight(-1);
                 break;
         }
