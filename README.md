@@ -8,29 +8,35 @@ Downloads are built and tested by GitHub Actions (`.github/workflows/ci.yml`): e
 
 DropWheel is based on [FileAction](https://github.com/Metamorfolog/file_action) by Metamorfolog (MIT). It is an independent Windows take on the idea and is not affiliated with Tangerine.
 
-## What's new in 2.4.0
+## What's new in 2.4.9
 
-- **26 floating tool windows.** The Tools wheel (Ctrl) no longer runs a job for the work that needs eyes
-  on it: dropping a file on a tool slice opens a card over the file, and nothing is written until you
-  press its own button ("Create Collage", "Merge PDFs", "Save Edited Copy", "Encrypt"…). Images, video,
-  audio, PDF, compression, metadata, password protection and a QR reader are all in there.
-- **Every window fits its media.** A tool opens at its default size, probes the file in the background
-  and animates to the media's aspect ratio inside its own preview bounds, clamped to the screen under the
-  cursor and DPI-aware. Tiny media is never blown up past 200 %.
-- **One motion vocabulary.** A single token set owns every duration and easing; only transforms and
-  opacity are animated, nothing polls, and **Settings → General → Animations** (or Windows' own animation
-  setting) turns every transition off.
-- **Protection in the app.** AES-256 ZIP or PDF copies with **Password protection**, **Remove password**
-  to get back in, and **Lock** (Beta) that turns a file into one self-contained `.dwenc` container or a
-  folder into `.dwdir` — in place, with a Rescuer password and a recovery key.
-- **Light and fast, and measured.** The `--self-test` motion gate fails CI above 16.7 ms UI frame p95,
-  5 % idle CPU or 12 MB retained. Run `39376236166` drove the wheel + 11 image-family tool windows (the
-  15 media-family tools are skipped and named in `motion/report.md`, en-LTR, runner theme): UI p95
-  0.02-0.04 ms, idle CPU 0.00 %, retention 0.0 MB ([docs/PERF.md](docs/PERF.md)).
+- **A calmer Tools wheel.** The seven category slices stay put, and hovering one for 450 ms opens its
+  tools in an inner ring; Esc clears the ring first and closes the wheel on the second press. The close
+  button now follows the reading direction (right in English, left in Arabic).
+- **Tool windows open where you click.** The first visible frame is anchored at the cursor, the window
+  keeps the rounded Settings frame with a fully transparent halo, and Apply stays disabled until the
+  media is ready.
+- **PDF tools fixed.** Page previews render again, palette PNGs merge, page tiles are clipped to their
+  rounded cards, Optimize no longer grows a file, and the page count uses correct plural forms.
+- **Image fixes.** Annotate opens Annotate, Crop aligns its saved rectangle with the preview, Add BG fits
+  portrait photos, HEIC edits write JPEG, animated GIF frames survive, EXIF orientation is respected,
+  Redact honours the drop folder, and ICO writes are atomic and capped at 256.
+- **Audio, video and archives.** Mono-to-stereo keeps both channels at full level, Normalize resamples
+  back to the source rate, MKV trims verify their copied length, frame counts no longer include phantom
+  frames, Pack skips junctions and keeps empty folders, and folder drops open the archive family.
+- **New: Remove background.** A colour-key tool with a checkerboard preview, tolerance/feather controls
+  and a transparent PNG result — the 27th floating tool.
+- **Lock (Beta) has a complete Rescuer flow.** The first Lock asks only for the file password, then opens
+  the Protection setup for the Rescuer password and 24-character key; later locks ask only for the file
+  password. Existing files open with either the file password or the Rescuer password. Changing the
+  Rescuer password needs the old password or current key; a new key needs the current password and a key
+  that has already opened a file. The pair is stored with current-user DPAPI, so it is not re-asked after
+  restart; see [SECURITY.md](SECURITY.md) for the same-Windows-user caveat. Batch drops with identical
+  names into one folder still fail on the second item (F-12).
 
 The full tool list — id, English and Arabic title, inputs, output names and controls — is in
-[docs/TOOLS.md](docs/TOOLS.md), and the user-facing summary is in the
-[2.4.0 release notes](docs/release-notes-2.4.0.md) ([العربية](docs/release-notes-2.4.0.ar.md)).
+[docs/TOOLS.md](docs/TOOLS.md); the user-facing downloads are on the
+[2.4.9 release page](https://github.com/Faisaldhd/dropwheel/releases/tag/v2.4.9).
 
 ## How it works
 
@@ -42,7 +48,7 @@ The drag-and-tap gesture is **off on a fresh install** (company-safe default). T
    | Key | Wheel | What it offers |
    |---|---|---|
    | **Shift** | Convert | JPG, PNG, WebP, MP4, MP3, DOCX, PDF, XLSX… depending on the file type |
-   | **Ctrl** | Tools | 26 floating tools: crop, annotate, edit photos, background, collage, redact, video trim/crop/speed/split/join/frames/redact, audio trim/normalize/channels/bleep/visualizer, PDF merge/organize, compress, metadata, password protect/unlock, Lock, QR |
+   | **Ctrl** | Tools | 27 floating tools: crop, annotate, edit photos, background, remove background, collage, redact, video trim/crop/speed/split/join/frames/redact, audio trim/normalize/channels/bleep/visualizer, PDF merge/organize, compress, metadata, password protect/unlock, Lock, QR |
    | **Alt** | Actions | copy to…, move to…, copy path, terminal, floating shelf, share |
 
 3. Drop the file on a slice. The result is saved next to the original (the original is never changed). Drop it in the middle of the wheel to cancel. A **tool** slice (Ctrl) opens its window instead of running: apply inside the window to write the result.
@@ -72,7 +78,7 @@ Progress shows up in the corner of the screen, where you can open the result, sh
 | Subtitles | SRT, VTT | SRT, VTT, TXT |
 | Archives | ZIP, TAR, TAR.GZ, GZ, BZ2, XZ, RAR, 7z | extract, ZIP, TAR, TAR.GZ |
 
-**Tools (Ctrl) — 26 floating windows.** Dropping a file on one of these slices opens its window; the
+**Tools (Ctrl) — 27 floating windows.** Dropping a file on one of these slices opens its window; the
 source is only read and a new file is written when you apply it (Lock is the exception: it transforms the
 item in place). Each tool states its own verb on the primary button, **Reset** restores its defaults,
 **Esc** closes without writing and **Enter** applies. Video and audio tools need FFmpeg
@@ -158,7 +164,7 @@ src/FileAction.Core      conversions and tools (shared library)
 src/FileAction.App       the Windows app (WPF)
   Input/GlobalInput.cs   global mouse and keyboard hooks (the “drag + tap” gesture)
   Wheel/                 the radial menu and when it opens
-  UI/Tools/              the 26 floating tool windows (one file per tool, self-registering)
+  UI/Tools/              the 27 floating tool windows (one file per tool, self-registering)
   Actions/               the Actions wheel, floating shelf, sharing
   Jobs/                  background jobs and progress cards
   Shell/                 tray icon, hotkey, context menu, single instance, IT policy
