@@ -1,5 +1,8 @@
+using FileAction.App;
+using FileAction.App.Jobs;
 using FileAction.App.UI.Tools;
 using FileAction.App.Wheel;
+using FileAction.Core;
 
 namespace FileAction.Tests;
 
@@ -12,14 +15,20 @@ namespace FileAction.Tests;
 /// The match is by identity — the operation id equals the tool id, and the operation must be an
 /// <see cref="IInteractiveTool"/> so the wheel opens the window instead of starting a job — never by
 /// <c>ToolRegistry.For(items)</c>, which is first-match and ambiguous when two tools accept the same file.
+///
+/// Grouped parents are checked through <see cref="WheelGroups.Flatten"/>: folding Crop with Crop Square
+/// may change the slice, never the set of reachable operation ids.
 /// </summary>
 public class ToolDispatchTests
 {
+    /// <summary>The slices the wheels actually render, after hiding, favourites and grouping.</summary>
+    private static IReadOnlyList<Operation> WheelSlices() =>
+        WheelGroups.Arrange(WheelLayout.Arrange(WheelController.BuildOperations(), [], []));
+
     [Fact]
     public void EveryRegisteredToolWindowIsReachableFromTheWheel()
     {
-        var operations = WheelController.BuildOperations();
-        var byId = operations
+        var byId = WheelGroups.Flatten(WheelSlices())
             .GroupBy(operation => operation.Id, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
 
@@ -50,7 +59,7 @@ public class ToolDispatchTests
     [Fact]
     public void WheelOperationIdsAreUnique()
     {
-        var duplicates = WheelController.BuildOperations()
+        var duplicates = WheelSlices()
             .GroupBy(operation => operation.Id, StringComparer.Ordinal)
             .Where(group => group.Count() > 1)
             .Select(group => $"'{group.Key}' x{group.Count()}")
@@ -59,5 +68,71 @@ public class ToolDispatchTests
         Assert.True(duplicates.Length == 0,
             "two wheel operations share an id (last-used-operation memory and the wheel editor key on it): "
             + string.Join(", ", duplicates));
+    }
+
+    [Fact]
+    public void GroupingKeepsEveryOperationReachableExactlyOnce()
+    {
+        var operations = WheelLayout.Arrange(WheelController.BuildOperations(), [], []);
+        var flattened = WheelGroups.Flatten(WheelGroups.Arrange(operations));
+
+        Assert.Equal(
+            operations.Select(operation => operation.Id).Order(StringComparer.Ordinal),
+            flattened.Select(operation => operation.Id).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void CropRotateAndResizeAreOneParentSliceWithAllTheirChoices()
+    {
+        var groups = WheelSlices().OfType<WheelGroupOperation>().ToArray();
+
+        var crop = Assert.Single(groups, group => group.GroupId == "image.crop");
+        Assert.Equal("Crop", crop.Label);
+        Assert.Equal(new[] { "tools.crop", "image.square" }, crop.Children.Select(child => child.Id).ToArray());
+
+        var rotate = Assert.Single(groups, group => group.GroupId == "image.rotate");
+        Assert.Equal("Rotate", rotate.Label);
+        Assert.Equal(
+            new[] { "image.rotate.right", "image.rotate.left" },
+            rotate.Children.Select(child => child.Id).ToArray());
+
+        var resize = Assert.Single(groups, group => group.GroupId == "image.resize");
+        Assert.Equal("Resize", resize.Label);
+        Assert.Equal(
+            new[] { "image.half", "image.max1920" },
+            resize.Children.Select(child => child.Id).ToArray());
+
+        Assert.All(groups, group => Assert.True(group.Children.Count >= 2));
+    }
+
+    [Fact]
+    public void HidingOneChildCollapsesTheGroupToTheRemainingOperation()
+    {
+        var operations = WheelLayout.Arrange(
+            WheelController.BuildOperations(), ["image.rotate.left"], []);
+        var slices = WheelGroups.Arrange(operations);
+
+        Assert.DoesNotContain(slices,
+            slice => slice is WheelGroupOperation group && group.GroupId == "image.rotate");
+        Assert.Contains(slices, slice => slice.Id == "image.rotate.right");
+        Assert.DoesNotContain(slices, slice => slice.Id == "image.rotate.left");
+    }
+
+    [Fact]
+    public void GroupParentIsNeverDispatchedAsAJob()
+    {
+        var crop = WheelSlices().OfType<WheelGroupOperation>().Single(group => group.GroupId == "image.crop");
+        var settings = new AppSettings();
+        var jobs = new JobRunner(settings, new ToolLocator());
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            WheelController.Dispatch(
+                crop,
+                [new FileItem(Path.Combine(Path.GetTempPath(), "group-parent.png"))],
+                null,
+                jobs));
+
+        Assert.Contains("chooser", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(settings.LastOperationId);
     }
 }

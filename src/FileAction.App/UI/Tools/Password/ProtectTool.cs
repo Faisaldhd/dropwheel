@@ -146,7 +146,7 @@ internal sealed class ProtectView
 
     public ToolContent Build()
     {
-        var content = new StackPanel { Margin = new Thickness(1, 0, 5, 0) };
+        var content = new StackPanel();
         content.Children.Add(PasswordViewParts.Note("tool.protect.intro"));
         content.Children.Add(Summary());
         content.Children.Add(new TextBlock

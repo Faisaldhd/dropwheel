@@ -19,16 +19,19 @@ internal static class ToolSizes
         DefaultPreviewWidth: 350,
         DefaultPreviewHeight: 450);
 
-    /// <summary>Crop: title + chips/boxes + bottom bar take about 270 DIP of height.</summary>
+    /// <summary>
+    /// Crop opens on a comfortable 4:3 canvas instead of a tall portrait placeholder, so the first frame
+    /// does not show large empty bands above and below a landscape photo.
+    /// </summary>
     public static readonly ToolSpecLayout Crop = new(
         ChromeWidth: 36,
         ChromeHeight: 270,
-        PreviewMinWidth: 300,
-        PreviewMinHeight: 320,
+        PreviewMinWidth: 320,
+        PreviewMinHeight: 240,
         PreviewMaxWidth: 640,
         PreviewMaxHeight: 640,
-        DefaultPreviewWidth: 350,
-        DefaultPreviewHeight: 450);
+        DefaultPreviewWidth: 520,
+        DefaultPreviewHeight: 390);
 
     public static ToolSpecLayout For(string toolId) => toolId switch
     {

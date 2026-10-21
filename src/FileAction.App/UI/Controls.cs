@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -13,7 +14,7 @@ namespace FileAction.App.UI;
 /// </summary>
 internal static class Controls
 {
-    public static TextBlock Text(string text, double size = 14, FontWeight? weight = null, Brush? brush = null, bool wrap = true) => new()
+    public static TextBlock Text(string text, double size = Design.Type.Body, FontWeight? weight = null, Brush? brush = null, bool wrap = true) => new()
     {
         Text = text,
         FontSize = size,
@@ -27,21 +28,21 @@ internal static class Controls
     {
         Text = text,
         FontFamily = Theme.DisplayFont,
-        FontSize = 15,
+        FontSize = Design.Type.Heading,
         FontWeight = FontWeights.SemiBold,
         Foreground = Theme.Text,
-        Margin = new Thickness(2, 26, 0, 8),
+        Margin = new Thickness(Design.Space.Xs, Design.Space.Xxxl, 0, Design.Space.Md),
     };
 
     /// <summary>A rounded card with a title/description on the left and a control on the right.</summary>
     public static Border Card(string title, string? description, UIElement? control, UIElement? below = null, string? glyph = null)
     {
         var left = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        left.Children.Add(Text(title, 14, FontWeights.Normal));
+        left.Children.Add(Text(title, Design.Type.Body, FontWeights.Normal));
         if (!string.IsNullOrEmpty(description))
         {
-            var d = Text(description, 12, brush: Theme.Muted);
-            d.Margin = new Thickness(0, 2, 0, 0);
+            var d = Text(description, Design.Type.Caption, brush: Theme.Muted);
+            d.Margin = new Thickness(0, Design.Space.Xs, 0, 0);
             left.Children.Add(d);
         }
 
@@ -52,10 +53,10 @@ internal static class Controls
             {
                 Text = glyph,
                 FontFamily = Theme.Icons,
-                FontSize = 18,
+                FontSize = Design.Icon.Header,
                 Foreground = Theme.Text,
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 16, 0),
+                Margin = new Thickness(0, 0, Design.Space.Xl, 0),
             };
             DockPanel.SetDock(icon, Dock.Left);
             row.Children.Add(icon);
@@ -79,9 +80,9 @@ internal static class Controls
             Background = Theme.Card,
             BorderBrush = Theme.PanelBorder,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(10),
-            Padding = new Thickness(18, 14, 18, 14),
-            Margin = new Thickness(0, 0, 0, 4),
+            CornerRadius = new CornerRadius(Design.Radius.Card),
+            Padding = Design.CardPadding,
+            Margin = new Thickness(0, 0, 0, Design.Space.Sm),
             Child = content,
         };
     }

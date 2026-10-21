@@ -178,6 +178,9 @@ internal sealed class WheelWindow : Window
     /// <summary>Runs the last operation again with the values it used last time.</summary>
     public Action<IReadOnlyList<FileItem>>? RunRepeat { get; init; }
 
+    /// <summary>Opens the chooser for a grouped parent slice; groups are never dispatched themselves.</summary>
+    public Action<WheelGroupOperation, IReadOnlyList<FileItem>>? OpenGroup { get; init; }
+
     public bool IsFinished => _finished;
 
     private IntPtr Handle => new WindowInteropHelper(this).Handle;
@@ -577,7 +580,10 @@ internal sealed class WheelWindow : Window
                     Shell.Notifications.Show(T("error.download.failed"), ex.Message, error: true);
                     return;
                 }
-                Dispatch(op, content.Items);
+                if (op is WheelGroupOperation group)
+                    OpenGroup?.Invoke(group, content.Items);
+                else
+                    Dispatch(op, content.Items);
             });
         }
     }
@@ -657,6 +663,17 @@ internal sealed class WheelWindow : Window
     {
         var op = _ops[index];
         var items = _items;
+        if (op is WheelGroupOperation group)
+        {
+            // Keep the wheel open when there is nothing to open the chooser with, rather than losing the
+            // drop on a parent that cannot expand.
+            if (OpenGroup is { } open)
+            {
+                Finish();
+                open(group, items);
+            }
+            return;
+        }
         Finish();
         Dispatch(op, items);
     }
@@ -906,6 +923,19 @@ internal sealed class WheelWindow : Window
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 1, 0, 0),
+            });
+        }
+        if (op is WheelGroupOperation)
+        {
+            // The chevron says this slice opens a chooser instead of running something itself.
+            panel.Children.Add(new TextBlock
+            {
+                Text = "\uE76C",
+                FontFamily = Theme.Icons,
+                FontSize = 12,
+                Foreground = Theme.Muted,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 2, 0, 0),
             });
         }
         return panel;

@@ -61,10 +61,22 @@ internal static class Theme
     private static Palette _palette = DarkPalette;
 
     public static readonly Color AccentColor = Color.FromRgb(0x82, 0x24, 0xD4);
-    public static readonly Color AccentColor2 = Color.FromRgb(0xB4, 0x8A, 0xE0);
+    public static readonly Color AccentColor2 = Color.FromRgb(0x8E, 0x3B, 0xE0);
 
-    /// <summary>Violet → lavender, used for the selected slice, active tab and progress bars.</summary>
-    public static readonly LinearGradientBrush AccentGradient = Freeze(new LinearGradientBrush(AccentColor, AccentColor, new Point(0, 0), new Point(1, 1)));
+    /// <summary>
+    /// A real violet → brighter violet ramp. Both stops keep white label text above 4.5:1, unlike the
+    /// old lavender token, so primary buttons and selected pills stay readable.
+    /// </summary>
+    public static readonly LinearGradientBrush AccentGradient = Freeze(new LinearGradientBrush
+    {
+        StartPoint = new Point(0, 0),
+        EndPoint = new Point(1, 1),
+        GradientStops =
+        {
+            new GradientStop(AccentColor, 0),
+            new GradientStop(AccentColor2, 1),
+        },
+    });
 
     public static readonly SolidColorBrush Accent = Freeze(new SolidColorBrush(AccentColor));
     public static readonly SolidColorBrush TextOnAccent = Freeze(new SolidColorBrush(Colors.White));

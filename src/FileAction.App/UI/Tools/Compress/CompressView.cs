@@ -66,7 +66,7 @@ internal sealed class CompressView
 
     public ToolContent Build()
     {
-        var root = new Grid { Margin = new Thickness(18, 6, 18, 6) };
+        var root = new Grid { Margin = new Thickness(0, 6, 0, 6) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

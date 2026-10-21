@@ -118,33 +118,50 @@ internal sealed class WheelController
     ];
 
     /// <summary>
-    /// What fits these items. Conversions that need FFmpeg or Pandoc stay on the wheel even before those are
-    /// downloaded; choosing one offers the download first.
+    /// What fits these items. A conversion whose backend is missing stays visible as a dimmed "get …"
+    /// slice, including backends installed outside the app (LibreOffice), so it never silently disappears;
+    /// choosing it explains what to install.
     /// </summary>
-    private IReadOnlyList<Operation> Operations(WheelKind wheel, IReadOnlyList<FileItem> items)
+    private IReadOnlyList<Operation> Operations(WheelKind wheel, IReadOnlyList<FileItem> items) =>
+        Offered(wheel, items, _tools, _settings, wheel == WheelKind.Actions ? _actions : _coreOperations);
+
+    /// <summary>The visible slices for a wheel, including the dimmed install/download variants.</summary>
+    internal static IReadOnlyList<Operation> Offered(
+        WheelKind wheel,
+        IReadOnlyList<FileItem> items,
+        ToolLocator tools,
+        AppSettings settings,
+        IReadOnlyList<Operation> operations)
     {
         var offered = new List<Operation>();
-        foreach (var op in wheel == WheelKind.Actions ? _actions : _coreOperations)
+        foreach (var op in operations)
         {
             if (op.Wheel != wheel || !op.AppliesTo(items))
                 continue;
-            if (op.IsAvailable(_tools, items))
+            if (op.IsAvailable(tools, items))
                 offered.Add(op);
-            else if (MissingDownloads(op, items) is { } missing)
+            else if (MissingDownloads(op, items, tools) is { } missing)
                 offered.Add(new NeedsToolOperation(op, missing));
         }
-        return WheelLayout.Arrange(offered, _settings.HiddenOperations, _settings.FavoriteOperations);
+        return WheelGroups.Arrange(WheelLayout.Arrange(offered, settings.HiddenOperations, settings.FavoriteOperations));
     }
 
-    /// <summary>The smallest set of downloadable tools that would make <paramref name="op"/> work, or null.</summary>
-    private IReadOnlyList<ExternalTool>? MissingDownloads(Operation op, IReadOnlyList<FileItem> items)
+    /// <summary>The smallest set of tools that would make <paramref name="op"/> work, or null.</summary>
+    internal static IReadOnlyList<ExternalTool>? MissingDownloads(Operation op, IReadOnlyList<FileItem> items, ToolLocator tools)
     {
-        var missing = ToolInstaller.Installable.Where(t => !_tools.Has(t)).ToList();
+        // LibreOffice is not downloaded by DropWheel, but it is still a backend an operation can need
+        // (documents to PDF). Including it keeps that slice visible and says what to install instead of
+        // silently dropping the conversion.
+        var missing = ToolInstaller.Installable
+            .Append(ExternalTool.LibreOffice)
+            .Distinct()
+            .Where(t => !tools.Has(t))
+            .ToList();
         if (missing.Count == 0)
             return null;
         foreach (var candidate in missing.Select(t => new[] { t }).Append(missing.ToArray()))
         {
-            if (op.IsAvailable(_tools.Assuming(candidate), items))
+            if (op.IsAvailable(tools.Assuming(candidate), items))
                 return candidate;
         }
         return null;
@@ -263,6 +280,8 @@ internal sealed class WheelController
         JobRunner jobs,
         bool saveSettings = true)
     {
+        if (op is WheelGroupOperation)
+            throw new InvalidOperationException("A wheel group opens its chooser; it never runs as a job.");
         if (op is UI.Tools.IInteractiveTool tool)
         {
             jobs.Remember(op, null, saveSettings);
@@ -288,6 +307,42 @@ internal sealed class WheelController
             ? OutputTarget.SourceFolder(items[0].Path)
             : _dragOriginFolder;
         var window = new WheelWindow(mode, wheel, items, _settings, Operations,
+            (op, list, dropTargets) => RunOperation(op, list, dropTargets), targets)
+        {
+            LastOperation = LastFor,
+            OpenGroup = (group, groupItems) => ShowGroupChooser(group, groupItems, at, targets),
+            RunRepeat = repeatItems =>
+            {
+                if (LastFor(repeatItems) is { } last)
+                    RunOperation(last, repeatItems, targets);
+            },
+        };
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_wheel, window))
+                _wheel = null;
+        };
+        _wheel = window;
+        UpdateDestination(targets.UnderCursor);
+        window.ShowAt(at);
+    }
+
+    /// <summary>
+    /// Opens the compact chooser for one grouped parent. It is an ordinary click wheel restricted to the
+    /// group's children, so it inherits the same highlighting, keyboard handling and job/tool dispatch.
+    /// </summary>
+    private void ShowGroupChooser(
+        WheelGroupOperation group,
+        IReadOnlyList<FileItem> items,
+        Win32.POINT at,
+        DropTargets targets)
+    {
+        if (items.Count == 0)
+            return;
+        var window = new WheelWindow(WheelMode.Click, group.Wheel, items, _settings,
+            (_, groupItems) => Operations(group.Wheel, groupItems)
+                .OfType<WheelGroupOperation>()
+                .FirstOrDefault(candidate => candidate.GroupId == group.GroupId)?.Children ?? [],
             (op, list, dropTargets) => RunOperation(op, list, dropTargets), targets)
         {
             LastOperation = LastFor,

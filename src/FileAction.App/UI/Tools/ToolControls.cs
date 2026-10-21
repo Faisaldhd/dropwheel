@@ -12,7 +12,7 @@ namespace FileAction.App.UI.Tools;
 internal static class ToolControls
 {
     /// <summary>A muted caption or hint.</summary>
-    public static TextBlock Label(string text, double size = 12) => new()
+    public static TextBlock Label(string text, double size = Design.Type.Caption) => new()
     {
         Text = text,
         FontSize = size,
@@ -27,8 +27,8 @@ internal static class ToolControls
         {
             Text = text,
             Width = multiline ? double.NaN : width,
-            Padding = new Thickness(8, 6, 8, 6),
-            FontSize = 13,
+            Padding = new Thickness(Design.Space.Md, Design.Space.Xs + Design.Space.Sm, Design.Space.Md, Design.Space.Xs + Design.Space.Sm),
+            FontSize = Design.Type.Body,
             Background = Theme.Card,
             Foreground = Theme.Text,
             CaretBrush = Theme.Text,
@@ -50,8 +50,8 @@ internal static class ToolControls
         Background = Theme.Card,
         BorderBrush = Theme.PanelBorder,
         BorderThickness = new Thickness(1),
-        CornerRadius = new CornerRadius(10),
-        Padding = new Thickness(12, 10, 12, 10),
+        CornerRadius = new CornerRadius(Design.Radius.Card),
+        Padding = Design.CompactCardPadding,
         Child = child,
     };
 
@@ -98,9 +98,9 @@ internal static class ToolControls
             Child = tick,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        var text = Controls.Text(label, 12.5);
+        var text = Controls.Text(label, Design.Type.Label);
         text.VerticalAlignment = VerticalAlignment.Center;
-        text.Margin = new Thickness(8, 0, 0, 0);
+        text.Margin = new Thickness(Design.Space.Md, 0, 0, 0);
 
         var row = new StackPanel
         {
@@ -160,12 +160,12 @@ internal static class ToolControls
 
         foreach (var (label, value) in options)
         {
-            var text = new TextBlock { Text = label, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+            var text = new TextBlock { Text = label, FontSize = Design.Type.Label, VerticalAlignment = VerticalAlignment.Center };
             var pill = new Border
             {
-                CornerRadius = new CornerRadius(7),
-                Padding = new Thickness(11, 5, 11, 6),
-                Margin = new Thickness(0, 0, 4, 0),
+                CornerRadius = new CornerRadius(Design.Radius.Pill),
+                Padding = new Thickness(Design.Space.Lg, 5, Design.Space.Lg, 6),
+                Margin = new Thickness(0, 0, Design.Space.Sm, 0),
                 Background = Brushes.Transparent,
                 Cursor = Cursors.Hand,
                 Child = text,
