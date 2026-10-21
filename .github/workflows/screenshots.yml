@@ -1,0 +1,57 @@
+name: Screenshots
+
+# Website assets only: this workflow never blocks Build + test or Package. It uses the
+# capture-only --screenshots mode, so the performance/cold-start gate cannot stop it.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: Capture 2.4.1 UI screenshots
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure .NET 10 SDK
+        shell: pwsh
+        run: |
+          $sdks = dotnet --list-sdks
+          $sdks | Write-Host
+          if (-not ($sdks -match '^10\.')) {
+            choco install dotnet-10.0-sdk --no-progress -y
+            refreshenv
+          }
+          dotnet --version
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          dotnet publish src/FileAction.App/FileAction.App.csproj -c Release -r win-x64 --self-contained false -o release/DropWheel
+          if ($LASTEXITCODE -ne 0) { throw "publish failed" }
+
+      - name: Capture
+        shell: pwsh
+        run: |
+          $out = 'release/screenshots'
+          if (Test-Path $out) { Remove-Item -LiteralPath $out -Recurse -Force }
+          $process = Start-Process -FilePath release/DropWheel/DropWheel.exe `
+            -ArgumentList '--screenshots', $out -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "--screenshots failed with $($process.ExitCode)" }
+          if (-not (Test-Path (Join-Path $out 'screenshots.txt'))) { throw "no screenshots.txt" }
+          Get-Content (Join-Path $out 'screenshots.txt') -Tail 20
+          $pngs = @(Get-ChildItem $out -Recurse -File -Filter '*.png')
+          Write-Host "screenshots: $($pngs.Count) PNGs"
+          if ($pngs.Count -lt 100) { throw "only $($pngs.Count) screenshots; expected the full matrix" }
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-2.4.1
+          path: release/screenshots/**
+          if-no-files-found: warn
+          retention-days: 14
