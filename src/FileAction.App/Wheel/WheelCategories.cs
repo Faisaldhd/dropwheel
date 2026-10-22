@@ -62,15 +62,13 @@ internal static class WheelCategories
                     .Cast<Operation>()
                     .Concat(buckets[category].Where(operation => !category.Ids.Contains(operation.Id, StringComparer.Ordinal)))
                     .ToList();
-            if (children.Count >= 2)
+            // Keep even a one-tool category as a category: every outer category opens a ring, so a
+            // single tool no longer looks like a category that failed to open.
+            if (children.Count >= 1)
             {
                 var definition = new WheelGroupDefinition(
                     category.Id, children[0].Id, children.Select(child => child.Id).ToArray(), category.LabelKey);
                 slices.Add(new WheelGroupOperation(definition, children[0], children));
-            }
-            else if (children.Count == 1)
-            {
-                slices.Add(children[0]);
             }
         }
         slices.AddRange(unmatched);
