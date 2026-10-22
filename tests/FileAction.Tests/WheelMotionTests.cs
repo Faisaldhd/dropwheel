@@ -166,6 +166,97 @@ public class WheelMotionTests
     }
 
     [Fact]
+    public void A_hub_click_uses_the_highlighted_child_or_the_nearest_one()
+    {
+        Assert.Equal(1, WheelWindow.HubChildIndex(1, 3, 200));
+        Assert.Equal(-1, WheelWindow.HubChildIndex(-1, 0, 0));
+        Assert.Equal(2, WheelWindow.HubChildIndex(-1, 3, WheelWindow.SliceAngle(2, 3)));
+    }
+
+    [Fact]
+    public void Moving_from_a_category_straight_to_the_hub_opens_its_ring_immediately()
+    {
+        RunOnSta(() =>
+        {
+            var child = new FakeOperation("child");
+            var group = Group("category.test", child);
+            Operation[] outer = [group, new FakeOperation("direct")];
+            var window = new WheelWindow(
+                WheelMode.Drag,
+                WheelKind.Tools,
+                [new FileItem("photo.png")],
+                new AppSettings(),
+                (_, _) => outer,
+                (_, _, _) => { });
+            try
+            {
+                var size = (double)typeof(WheelWindow)
+                    .GetField("Size", BindingFlags.NonPublic | BindingFlags.Static)!
+                    .GetRawConstantValue()!;
+                var category = new Point(size / 2, size / 2 - WheelWindow.OuterLabelRadius);
+                var hub = new Point(size / 2, size / 2);
+
+                Invoke(window, "PointerMove", category);
+                Assert.Equal(0, Field<int>(window, "_dwellIndex"));
+
+                Invoke(window, "PointerMove", hub);
+
+                Assert.Equal(-1, Field<int>(window, "_dwellIndex"));
+                Assert.Equal(group.GroupId, Field<string?>(window, "_innerGroupId"));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public void A_pending_swap_commits_when_the_pointer_heads_inward()
+    {
+        RunOnSta(() =>
+        {
+            var a = Group("category.a", new FakeOperation("a-child"));
+            var b = Group("category.b", new FakeOperation("b-child"));
+            Operation[] outer = [a, b];
+            var window = new WheelWindow(
+                WheelMode.Drag,
+                WheelKind.Tools,
+                [new FileItem("photo.png")],
+                new AppSettings(),
+                (_, _) => outer,
+                (_, _, _) => { });
+            try
+            {
+                var size = (double)typeof(WheelWindow)
+                    .GetField("Size", BindingFlags.NonPublic | BindingFlags.Static)!
+                    .GetRawConstantValue()!;
+                var top = new Point(size / 2, size / 2 - WheelWindow.OuterLabelRadius);
+                var bottom = new Point(size / 2, size / 2 + WheelWindow.OuterLabelRadius);
+                var hub = new Point(size / 2, size / 2);
+
+                // Open A through its dwell, then hover B and head for the hub before the swap timer.
+                Invoke(window, "PointerMove", top);
+                SetField(window, "_dwellStarted", Environment.TickCount64 - (long)WheelWindow.DwellMs - 1);
+                Invoke(window, "DwellTick");
+                Assert.Equal(a.GroupId, Field<string?>(window, "_innerGroupId"));
+
+                Invoke(window, "PointerMove", bottom);
+                Assert.Equal(1, Field<int>(window, "_swapIndex"));
+
+                Invoke(window, "PointerMove", hub);
+
+                Assert.Equal(b.GroupId, Field<string?>(window, "_innerGroupId"));
+                Assert.Equal(-1, Field<int>(window, "_swapIndex"));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
     public void The_inner_ring_never_waits_visibly_or_exceeds_its_motion_budget()
     {
         // Owner's budget: a short 450 ms dwell with a visible progress arc, entrance <= 120 ms,

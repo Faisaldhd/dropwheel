@@ -1608,9 +1608,12 @@ internal sealed class WheelWindow : Window
         var hit = HitAt(point);
         switch (hit.Zone)
         {
-            case WheelZone.Hub:
-                // The hub is a crossing pad, not a button. Clicking it does nothing; Escape or a
-                // click outside the wheel is the way out.
+            case WheelZone.Hub when _innerGroupId is not null && _innerChoices.Count > 0:
+                // The hub is part of the inner ring: a click runs the highlighted child, or the child
+                // nearest the pointer if nothing is highlighted yet.
+                var child = HubChildIndex(_innerHighlight, _innerChoices.Count, AngleAt(point));
+                if (child >= 0 && !_innerChoices[child].IsMore)
+                    RunInner(child);
                 break;
             case WheelZone.Inner when hit.Index >= 0 && hit.Index < _innerChoices.Count:
                 // Match the sticky hover: the child the user sees highlighted is the child that runs.
@@ -1753,6 +1756,10 @@ internal sealed class WheelWindow : Window
         return delta <= step / 2 + InnerHysteresisDeg ? current : SliceIndexAt(angle, count);
     }
 
+    /// <summary>Hub click/drop target: the sticky highlight if valid, otherwise the nearest child.</summary>
+    internal static int HubChildIndex(int highlight, int count, double angle) =>
+        highlight >= 0 && highlight < count ? highlight : InnerHoverIndex(angle, count, -1);
+
     /// <summary>
     /// The single hover rule of the two-ring wheel, shared by Click and Drag mode: outer slices dwell
     /// for <see cref="DwellMs"/> when no ring is open; once it is open, moving to another category swaps
@@ -1822,6 +1829,24 @@ internal sealed class WheelWindow : Window
                 }
                 break;
             default:
+                if (hit.Zone is WheelZone.Inner or WheelZone.Hub)
+                {
+                    // Moving inward commits work that was still on a timer: a pending category swap
+                    // must not leave the previous category's children under the pointer, and a pending
+                    // first open must not be cancelled just because the user headed for the centre.
+                    if (_swapIndex >= 0)
+                    {
+                        var swap = _swapIndex;
+                        CancelSwapDwell();
+                        SwapInner(swap, SliceAngle(swap, _ops.Count));
+                    }
+                    else if (_dwellIndex >= 0)
+                    {
+                        var pendingOpen = _dwellIndex;
+                        CancelDwell();
+                        OpenInner(pendingOpen, SliceAngle(pendingOpen, _ops.Count));
+                    }
+                }
                 CancelDwell();
                 CancelSwapDwell();
                 // Crossing the hub is how the pointer reaches the far side of the small inner ring.
