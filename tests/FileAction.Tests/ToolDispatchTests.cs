@@ -106,7 +106,9 @@ public class ToolDispatchTests
         Assert.Contains(annotate.Children, child => child.Id == "tools.removebackground");
         Assert.Contains(annotate.Children, child => child.Id == "image.bg.remove");
 
-        Assert.All(groups, group => Assert.True(group.Children.Count >= 2));
+        // A category with one applicable tool stays a category (one-slice ring) instead of turning into
+        // a direct operation that silently has no children.
+        Assert.All(groups, group => Assert.True(group.Children.Count >= 1));
         Assert.All(slices, slice => Assert.DoesNotContain("image.to.", slice.Id));
     }
 
