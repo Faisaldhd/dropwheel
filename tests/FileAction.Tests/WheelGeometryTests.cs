@@ -178,11 +178,11 @@ public class WheelGeometryTests
             WheelController.BuildOperations());
 
         Assert.Equal(
-            ["Crop & rotate", "Optimize", "Annotate", "Metadata", "Protect", "Archive", "Extract text"],
+            ["Crop & rotate", "Optimize", "Annotate", "Metadata", "Protect", "Archive", "Other"],
             slices.Select(slice => slice.Label).ToArray());
-        // Extract text is a direct operation, not a category that replaces the outer ring.
-        Assert.Equal(6, slices.OfType<WheelGroupOperation>().Count());
-        Assert.Equal("tools.ocr", slices[^1].Id);
+        // Every slice opens a ring; unmatched tools (Extract text) live under Other.
+        Assert.Equal(7, slices.OfType<WheelGroupOperation>().Count());
+        Assert.Equal("wheel.group.category.other", slices[^1].Id);
     }
 
     private static string RepoRoot()

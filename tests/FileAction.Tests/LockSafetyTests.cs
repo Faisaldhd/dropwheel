@@ -988,6 +988,7 @@ public class LockSafetyTests
                 GraceSeconds = 12,
                 RecycleContainerAfterUnlock = false,
                 AssociationsRegistered = true,
+                RescuerSetupDismissed = true,
                 LastContainerPath = @"C:\protected\report.pdf.dwenc",
             };
             settings.SaveTo(path);
@@ -1000,6 +1001,7 @@ public class LockSafetyTests
             Assert.Equal(12, loaded.GraceSeconds);
             Assert.False(loaded.RecycleContainerAfterUnlock);
             Assert.True(loaded.AssociationsRegistered);
+            Assert.True(loaded.RescuerSetupDismissed);
             Assert.Equal(@"C:\protected\report.pdf.dwenc", loaded.LastContainerPath);
         }
         finally

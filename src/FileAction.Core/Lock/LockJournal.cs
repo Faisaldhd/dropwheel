@@ -362,6 +362,12 @@ public sealed class ProtectionSettings
     public bool RescuerConfigured { get; set; }
 
     /// <summary>
+    /// The first-Lock setup was already offered (or cancelled). It is never opened automatically again;
+    /// Protection settings remains the place to create or replace the Rescuer.
+    /// </summary>
+    public bool RescuerSetupDismissed { get; set; }
+
+    /// <summary>
     /// The most recent container this install protected. It is only used to prove a re-entered Rescuer
     /// secret against a real header before new files are wrapped with it; it is a path, never a secret.
     /// A moved or deleted file simply removes that proof and the prompt falls back to other candidates.
@@ -425,6 +431,10 @@ public sealed class ProtectionSettings
                         or System.Text.Json.JsonValueKind.False:
                         settings.RescuerConfigured = property.Value.GetBoolean();
                         break;
+                    case "RescuerSetupDismissed" when property.Value.ValueKind is System.Text.Json.JsonValueKind.True
+                        or System.Text.Json.JsonValueKind.False:
+                        settings.RescuerSetupDismissed = property.Value.GetBoolean();
+                        break;
                     case "LastContainerPath" when property.Value.ValueKind is System.Text.Json.JsonValueKind.String:
                         settings.LastContainerPath = property.Value.GetString();
                         break;
@@ -485,6 +495,7 @@ public sealed class ProtectionSettings
             writer.WriteBoolean("RecycleContainerAfterUnlock", RecycleContainerAfterUnlock);
             writer.WriteBoolean("AssociationsRegistered", AssociationsRegistered);
             writer.WriteBoolean("RescuerConfigured", RescuerConfigured);
+        writer.WriteBoolean("RescuerSetupDismissed", RescuerSetupDismissed);
             if (!string.IsNullOrWhiteSpace(LastContainerPath))
                 writer.WriteString("LastContainerPath", LastContainerPath);
             WritePaths(writer, "KnownContainerPaths", KnownContainerPaths);
