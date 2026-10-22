@@ -97,8 +97,19 @@ internal static class LockRuntime
     public static void ShowFirstRescuerSetup(IReadOnlyList<string> containers, RescuerSecrets provisional)
     {
         Initialize();
-        if (containers.Count == 0 || provisional.Password is null)
+        if (containers.Count == 0 || provisional.Password is null || Settings.RescuerSetupDismissed)
             return;
+        // The first-Lock setup is offered once. Cancelling it must not make every later Lock reopen the
+        // same dialog; Protection settings is always available to create or replace the Rescuer.
+        Settings.RescuerSetupDismissed = true;
+        try
+        {
+            Settings.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The dialog still opens this once; a failed marker only costs one extra offer next run.
+        }
         // Persist the paths before the dialog opens: a crash between saving the real pair and adopting
         // these files must leave evidence of the provisional-pair containers.
         RememberPendingAdoption(containers);
@@ -133,10 +144,28 @@ internal static class LockRuntime
         if (!Settings.RescuerConfigured)
             return null;
 
+        var verifiers = FindVerifierContainers(nearbyPath);
+        if (verifiers.Count == 0)
+        {
+            // Nothing on this device can prove an old Rescuer, so this is a stale marker rather than a
+            // recovery case. Clear it and use the provisional pair: no dialog on every Lock/startup.
+            Settings.RescuerConfigured = false;
+            Settings.RescuerSetupDismissed = true;
+            try
+            {
+                Settings.Save();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A failed marker write only costs one extra silent check next run.
+            }
+            return null;
+        }
+
         // Re-entry: the prompt proves both slots against a real header before these values are baked into
-        // new containers. When no container exists at all the user must explicitly acknowledge that this
-        // is a new installation; a format-valid pair alone is never saved silently.
-        var prompt = new RescuerSessionWindow(FindVerifierContainers(nearbyPath)) { Owner = owner };
+        // new containers. When no container exists at all the marker is cleared above; a format-valid
+        // pair alone is never saved silently.
+        var prompt = new RescuerSessionWindow(verifiers) { Owner = owner };
         if (prompt.ShowDialog() != true || string.IsNullOrEmpty(prompt.Password))
             return null;
         var keyUsed = stored?.KeyUsed == true && LockSecrets.SameSecret(stored.Key, prompt.RecoveryKey);
