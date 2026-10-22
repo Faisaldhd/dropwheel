@@ -1098,6 +1098,12 @@ internal sealed class WheelWindow : Window
     private void SwapInnerChildren(double fromAngle)
     {
         StopInnerStoryboard();
+        // A rapid second category change can interrupt a held fade at opacity 0. Reset both layers
+        // before rebuilding; otherwise the ring can stay invisible until the pointer leaves and re-enters.
+        _innerLayer.BeginAnimation(OpacityProperty, null);
+        _innerLayer.Opacity = 1;
+        _innerFadeLayer.BeginAnimation(OpacityProperty, null);
+        _innerFadeLayer.Opacity = 1;
         _innerFadeLayer.Children.Clear();
         while (_innerLayer.Children.Count > 0)
         {
