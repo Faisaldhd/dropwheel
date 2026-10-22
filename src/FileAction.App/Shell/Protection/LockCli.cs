@@ -156,11 +156,18 @@ internal sealed class LockOpenWindow : Window
     {
         try
         {
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            // Never execute a restored file: a .exe/.bat/.ps1/.lnk could run. Reveal it in Explorer,
+            // selected, and let the user decide what to open.
+            var isFolder = Directory.Exists(path);
+            var folder = isFolder ? path : Path.GetDirectoryName(path);
+            if (string.IsNullOrEmpty(folder))
+                return;
+            var arguments = isFolder ? $"\"{folder}\"" : $"/select,\"{path}\"";
+            Process.Start(new ProcessStartInfo("explorer.exe", arguments) { UseShellExecute = true });
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
         {
-            // The file is already restored; a missing default handler is not a lock failure.
+            // The file is already restored; failing to reveal it is not a lock failure.
         }
     }
 }
