@@ -140,11 +140,25 @@ internal sealed class WaveformView : FrameworkElement
     private double _rightGain = 1;
     private bool _showTone;
     private double _toneAmplitude = AudioEffects.DefaultToneVolume / 100.0;
+    private double? _playhead;
 
     public AudioWaveform? Waveform { get; set; }
 
     /// <summary>Two lanes (left/right) instead of one combined envelope.</summary>
     public bool Stereo { get; set; }
+
+    /// <summary>Current preview position in seconds; draws a vertical line across both lanes.</summary>
+    public double? Playhead
+    {
+        get => _playhead;
+        set
+        {
+            if (_playhead == value)
+                return;
+            _playhead = value;
+            InvalidateVisual();
+        }
+    }
 
     /// <summary>Ranges the bleep tool is replacing; drawn as a translucent block for context.</summary>
     public IReadOnlyList<AudioRange> Ranges { get; set; } = [];
@@ -202,6 +216,12 @@ internal sealed class WaveformView : FrameworkElement
             var gain = Stereo ? (lane == 0 ? _leftGain : _rightGain) : Math.Max(_leftGain, _rightGain);
             var peaks = Stereo ? (lane == 0 ? waveform.Left : waveform.Right) : waveform.Combined();
             DrawLane(drawingContext, peaks, top, laneHeight, width, duration, gain);
+        }
+
+        if (duration > 0 && _playhead is { } playhead && playhead >= 0 && playhead <= duration)
+        {
+            var x = Math.Clamp(playhead / duration, 0, 1) * width;
+            drawingContext.DrawLine(new Pen(Theme.Text, 1.5), new Point(x, 0), new Point(x, height));
         }
     }
 

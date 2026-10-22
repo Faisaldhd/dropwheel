@@ -19,9 +19,10 @@ internal sealed class EditPhotosTool : IToolWindowSpec
 
     /// <summary>
     /// Default window 500×745 DIP: 440 DIP of preview plus 60 of side margin, 225 of preview plus 520 of
-    /// chrome (title bar, the six-row slider panel of the Light tab and the bottom bar). The preview then
-    /// follows the photo's own aspect inside its min/max bounds, and the sizer clamps the whole window to
-    /// the monitor. Portrait photos keep a 360 DIP wide panel, so the sliders stay usable.
+    /// chrome (title bar, the Light tab's slider panel and the bottom bar). The panel scrolls when a tab
+    /// has more rows than fit, so adding sliders never grows the window past a 720p work area. The preview
+    /// then follows the photo's own aspect inside its min/max bounds, and the sizer clamps the whole
+    /// window to the monitor. Portrait photos keep a 360 DIP wide panel, so the sliders stay usable.
     /// </summary>
     public static readonly ToolSpecLayout ToolLayout = new(
         ChromeWidth: 60,

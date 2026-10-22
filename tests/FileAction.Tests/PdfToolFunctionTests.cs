@@ -178,6 +178,68 @@ public sealed class PdfToolFunctionTests : IDisposable
     }
 
     [Fact]
+    public void Merge_takes_a_page_range_in_document_order()
+    {
+        var alpha = CreatePdf("range-alpha.pdf", ("AlphaText", 0, 300, 400));
+        var beta = CreatePdf("range-beta.pdf",
+            ("BetaOne", 0, 300, 400), ("BetaTwo", 0, 300, 400),
+            ("BetaThree", 0, 300, 400), ("BetaFour", 0, 300, 400));
+        var output = Output("Ranged.pdf");
+
+        PdfMergeWriter.Write(
+            [
+                new PdfMergeSource(alpha, PdfPlanKind.Pdf),
+                // "4, 2-3" names the pages out of order on purpose: the document order must win.
+                new PdfMergeSource(beta, PdfPlanKind.Pdf) { PageRange = "4, 2-3" },
+            ],
+            output);
+
+        var texts = PageTexts(output);
+        Assert.Equal(4, texts.Length);
+        Assert.Contains("AlphaText", texts[0], StringComparison.Ordinal);
+        Assert.Contains("BetaTwo", texts[1], StringComparison.Ordinal);
+        Assert.Contains("BetaThree", texts[2], StringComparison.Ordinal);
+        Assert.Contains("BetaFour", texts[3], StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("3")]
+    [InlineData("2-1")]
+    [InlineData("last")]
+    public void Merge_fails_on_an_unusable_page_range_without_a_partial_file(string range)
+    {
+        var source = CreatePdf("two-pages.pdf", ("One", 0, 300, 400), ("Two", 0, 300, 400));
+        var directory = Directory.CreateDirectory(Output("range-out-" + Guid.NewGuid().ToString("N"))).FullName;
+
+        var error = Assert.Throws<ConversionException>(() =>
+            WriteAsync(directory, "Merged", temporary => PdfMergeWriter.Write(
+                [new PdfMergeSource(source, PdfPlanKind.Pdf) { PageRange = range }],
+                temporary)).GetAwaiter().GetResult());
+
+        Assert.Contains("two-pages.pdf", error.Message, StringComparison.Ordinal);
+        Assert.Empty(Directory.GetFiles(directory));
+    }
+
+    [Fact]
+    public void Merge_ignores_a_page_range_on_an_image()
+    {
+        var pdf = CreatePdf("range-image-source.pdf", ("WithImage", 0, 300, 400));
+        var image = Output("range-image.png");
+        using (var bitmap = new ImageMagick.MagickImage(ImageMagick.MagickColors.RebeccaPurple, 320, 200))
+            bitmap.Write(image);
+        var output = Output("RangedWithImage.pdf");
+
+        PdfMergeWriter.Write(
+            [
+                new PdfMergeSource(pdf, PdfPlanKind.Pdf),
+                new PdfMergeSource(image, PdfPlanKind.Image) { PageRange = "not a range" },
+            ],
+            output);
+
+        Assert.Equal(2, PageTexts(output).Length);
+    }
+
+    [Fact]
     public void Merge_keeps_the_rotation_of_each_source_page()
     {
         var portrait = CreatePdf("upright.pdf", ("Upright", 0, 300, 400));

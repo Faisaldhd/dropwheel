@@ -15,8 +15,9 @@ namespace FileAction.App.UI.Tools.Image;
 
 /// <summary>
 /// The editor's content: the preview card with a hold-to-compare original, one tab per slider group, and
-/// the five (or fewer) sliders of the selected tab. Slider moves are debounced by 150 ms and rendered
-/// asynchronously on a downsampled copy; Apply re-runs the very same parameters on the original.
+/// the sliders of the selected tab (the Light tab scrolls when its eight rows do not fit). Slider moves
+/// are debounced by 150 ms and rendered asynchronously on a downsampled copy; Apply re-runs the very same
+/// parameters on the original.
 /// </summary>
 internal sealed class EditPhotosView
 {
@@ -282,7 +283,19 @@ internal sealed class EditPhotosView
         });
         tabs.Margin = new Thickness(0, 0, 0, 12);
         panel.Children.Add(tabs);
-        panel.Children.Add(_rows);
+
+        // Light now has eight sliders (brightness and gamma joined the six tone controls), which is
+        // taller than the panel the window was sized for. Scrolling the rows keeps the 500x745 default
+        // window instead of growing past a 720p work area; the other tabs still fit without a scrollbar.
+        var rowsScroll = new ScrollViewer
+        {
+            Content = _rows,
+            MaxHeight = 320,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Focusable = false,
+        };
+        panel.Children.Add(rowsScroll);
 
         var hint = Controls.Text(T("tool.editphotos.hint"), 11.5, brush: Theme.Muted);
         hint.Margin = new Thickness(2, 10, 2, 0);

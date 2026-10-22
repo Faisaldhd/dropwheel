@@ -63,6 +63,43 @@ public class CompressMetadataFunctionTests
         }
     }
 
+    [Fact]
+    public async Task Compress_image_honours_the_target_size_in_the_written_file()
+    {
+        var dir = OutputPaths.TempDirectory();
+        try
+        {
+            var source = NoisyJpeg(dir, "noise.jpg", 1600, 1200);
+            var sourceBytes = new FileInfo(source).Length;
+            var before = Hash(source);
+            const double targetMegabytes = 0.2;
+            var plan = Compression.Plan(
+                new CompressionRequest(MediaKind.Image, "jpg", CompressionMode.TargetSize, targetMegabytes, 50,
+                    CompressionPreset.Medium, 0),
+                sourceBytes, 1600, 1200, 0);
+
+            var output = await CompressRunner.ImageAsync(new FileItem(source), plan, dir, CancellationToken.None, new Progress<double>());
+
+            var target = Compression.BytesFromMegabytes(targetMegabytes);
+            var outputBytes = new FileInfo(output).Length;
+            _output.WriteLine($"source {sourceBytes} bytes, target {target} bytes, output {outputBytes} bytes, " +
+                              $"{plan.Width}x{plan.Height} q{plan.Quality}");
+            Assert.True(outputBytes <= target,
+                $"expected at most {target} bytes, got {outputBytes} in {Path.GetFileName(output)}");
+            // The estimate under-shot this high-quality noisy source to 18 % of the target; the measured
+            // retry must spend most of the allowed size instead of throwing image quality away.
+            Assert.True(outputBytes >= target * Compression.AcceptableImageShare,
+                $"expected at least {target * Compression.AcceptableImageShare:0} bytes, got {outputBytes}");
+
+            Assert.Equal(before, Hash(source));
+            Assert.Empty(Directory.GetFiles(dir, "*.part.*"));
+        }
+        finally
+        {
+            OutputPaths.TryDelete(dir);
+        }
+    }
+
     // ------------------------------------------------------------------ video
 
     [Fact]

@@ -144,6 +144,79 @@ public class CompressionPlanTests
     }
 
     [Fact]
+    public void Goal_bytes_are_the_target_or_the_kept_percentage()
+    {
+        Assert.Equal(Compression.BytesFromMegabytes(1.5),
+            Compression.GoalBytes(Request(MediaKind.Image, "jpg", CompressionMode.TargetSize, 1.5), 10_000_000));
+        Assert.Equal(5_000_000,
+            Compression.GoalBytes(Request(MediaKind.Image, "jpg", CompressionMode.Percentage, percentage: 50), 10_000_000));
+        Assert.Equal(0, Compression.GoalBytes(Request(MediaKind.Image, "jpg"), 10_000_000));
+    }
+
+    [Fact]
+    public void Refine_image_plan_shrinks_a_result_over_the_goal()
+    {
+        var plan = new ImagePlan(1000, 800, 72, 4000, 3200);
+        var next = Compression.RefineImagePlan(plan, "jpg", 3_000_000, 1_000_000, attemptsMade: 1, maxLongSide: 0);
+
+        Assert.NotNull(next);
+        var refined = next.Value;
+        Assert.True(refined.Width <= plan.Width);
+        Assert.True(refined.Height <= plan.Height);
+        Assert.True(refined.Quality < plan.Quality);
+        Assert.Equal(4000, refined.SourceWidth);
+        Assert.Equal(3200, refined.SourceHeight);
+
+        var qualityRatio = Compression.ImageBytesRatio("jpg", refined.Quality)
+                           / Compression.ImageBytesRatio("jpg", plan.Quality);
+        var predicted = 3_000_000 * qualityRatio
+                        * (refined.Width * (double)refined.Height) / (plan.Width * (double)plan.Height);
+        Assert.True(predicted <= 1_000_000, $"predicted {predicted:0} bytes");
+    }
+
+    [Fact]
+    public void Refine_image_plan_grows_a_result_far_under_the_goal()
+    {
+        var plan = new ImagePlan(485, 364, 72, 1600, 1200);
+        var next = Compression.RefineImagePlan(plan, "jpg", 38_000, 209_715, attemptsMade: 1, maxLongSide: 0);
+
+        Assert.NotNull(next);
+        var refined = next.Value;
+        Assert.True(refined.Width > plan.Width);
+        Assert.True(refined.Height > plan.Height);
+        Assert.True(refined.Quality > plan.Quality);
+        Assert.True(refined.Width <= 1600 && refined.Height <= 1200);
+    }
+
+    [Fact]
+    public void Refine_image_plan_stops_at_the_floors_caps_and_attempt_budget()
+    {
+        var plan = new ImagePlan(1000, 800, 72, 4000, 3200);
+
+        // A result already within the acceptable band, or with no edge to cut, is not re-encoded.
+        Assert.Null(Compression.RefineImagePlan(plan, "jpg", 900_000, 1_000_000, 1, 0));
+        Assert.Null(Compression.RefineImagePlan(plan, "jpg", 3_000_000, 1_000_000,
+            attemptsMade: Compression.MaxImageAttempts, maxLongSide: 0));
+
+        // At the 64 px / quality floor there is no legal shrink left.
+        Assert.Null(Compression.RefineImagePlan(
+            new ImagePlan(64, 52, Compression.MinRetryQuality, 64, 52), "jpg", 2_000_000, 1_000_000, 1, 0));
+
+        // Growing never passes the user's long-side cap or the source dimensions.
+        var capped = Compression.RefineImagePlan(
+            new ImagePlan(320, 240, 86, 4000, 3000), "jpg", 10_000, 2_000_000, 1, maxLongSide: 320);
+        Assert.NotNull(capped);
+        Assert.True(Math.Max(capped.Value.Width, capped.Value.Height) <= 320);
+        Assert.True(capped.Value.Quality > 86);
+        Assert.Null(Compression.RefineImagePlan(capped.Value, "jpg", 10_000, 2_000_000, 2, maxLongSide: 320));
+
+        var grown = Compression.RefineImagePlan(
+            new ImagePlan(800, 600, 86, 4000, 3000), "jpg", 10_000, 2_000_000, 1, maxLongSide: 1000);
+        Assert.NotNull(grown);
+        Assert.True(Math.Max(grown.Value.Width, grown.Value.Height) <= 1000);
+    }
+
+    [Fact]
     public void Percentage_mode_keeps_the_quality_and_scales_the_pixels()
     {
         var plan = Compression.PlanImage(1000, 1000, 2 * 1024 * 1024, "jpg", CompressionMode.Percentage, 1.0, 50,
@@ -824,5 +897,13 @@ public class CompressMetadataToolTests
         Assert.False(CompressTool.Instance.Applies([]));
         Assert.False(MetadataTool.Instance.Applies([]));
         Assert.False(CompressTool.Instance.Applies([new FileItem(Temp("a.jpg")), new FileItem(Temp("b.jpg"))]));
+        Assert.True(MetadataTool.Instance.Applies([new FileItem(Temp("a.jpg")), new FileItem(Temp("b.jpg"))]),
+            "metadata should accept several images");
+        Assert.True(MetadataTool.Instance.Applies([new FileItem(Temp("a.pdf")), new FileItem(Temp("b.pdf"))]),
+            "metadata should accept several PDFs");
+        Assert.False(MetadataTool.Instance.Applies([new FileItem(Temp("a.jpg")), new FileItem(Temp("b.pdf"))]),
+            "metadata should not mix file kinds");
+        Assert.False(MetadataTool.Instance.Applies([new FileItem(Temp("a.jpg")), new FileItem(Temp("b.docx"))]),
+            "metadata should not accept a batch with an unsupported file");
     }
 }

@@ -49,9 +49,10 @@ public class PhotoEditTests
             Assert.InRange(spec.Default, spec.Min, spec.Max);
         }
 
-        // All sixteen sliders are neutral, and the light group is the five/six the window shows first.
-        Assert.Equal(6, PhotoEdit.InGroup(PhotoEditGroup.Light).Count);
-        Assert.Equal(4, PhotoEdit.InGroup(PhotoEditGroup.Color).Count);
+        // All nineteen sliders are neutral, and the Light tab has the eight Tangerine-parity rows
+        // (exposure/brightness/contrast/highlights/shadows/whites/blacks/gamma).
+        Assert.Equal(8, PhotoEdit.InGroup(PhotoEditGroup.Light).Count);
+        Assert.Equal(5, PhotoEdit.InGroup(PhotoEditGroup.Color).Count);
         Assert.Equal(3, PhotoEdit.InGroup(PhotoEditGroup.Detail).Count);
         Assert.Equal(2, PhotoEdit.InGroup(PhotoEditGroup.Effects).Count);
         Assert.Single(PhotoEdit.InGroup(PhotoEditGroup.Noise));
@@ -138,6 +139,31 @@ public class PhotoEditTests
     }
 
     [Fact]
+    public void Brightness_is_an_additive_percentage_with_a_zero_neutral()
+    {
+        Assert.Equal(0.0, PhotoEdit.BrightnessAmount(0), 9);
+        Assert.Equal(-25.0, PhotoEdit.BrightnessAmount(-100), 9);
+        Assert.Equal(25.0, PhotoEdit.BrightnessAmount(100), 9);
+
+        var values = Enumerable.Range(-100, 201).Select(PhotoEdit.BrightnessAmount).ToArray();
+        AssertStrictlyIncreasing(values);
+
+        // The additive lift is symmetric around zero, unlike the exposure multiplier.
+        Assert.Equal(-PhotoEdit.BrightnessAmount(50), PhotoEdit.BrightnessAmount(-50), 9);
+    }
+
+    [Fact]
+    public void Gamma_is_neutral_at_zero_and_lifts_the_midtones_on_the_positive_side()
+    {
+        Assert.Equal(1.0, PhotoEdit.GammaValue(0), 9);
+        Assert.Equal(0.5, PhotoEdit.GammaValue(-100), 9);
+        Assert.Equal(2.0, PhotoEdit.GammaValue(100), 9);
+
+        var values = Enumerable.Range(-100, 201).Select(PhotoEdit.GammaValue).ToArray();
+        AssertStrictlyIncreasing(values);
+    }
+
+    [Fact]
     public void Contrast_is_monotonic_and_neutral_at_zero()
     {
         Assert.Equal(1.0, PhotoEdit.ContrastFactor(0), 9);
@@ -176,6 +202,17 @@ public class PhotoEditTests
 
         var values = Enumerable.Range(-100, 201).Select(PhotoEdit.TintGreen).ToArray();
         AssertStrictlyDecreasing(values);
+    }
+
+    [Fact]
+    public void Hue_is_neutral_at_one_hundred_percent_and_turns_both_ways()
+    {
+        Assert.Equal(100, PhotoEdit.HuePercentage(0), 9);
+        Assert.Equal(0, PhotoEdit.HuePercentage(-100), 9);
+        Assert.Equal(200, PhotoEdit.HuePercentage(100), 9);
+
+        var values = Enumerable.Range(-100, 201).Select(PhotoEdit.HuePercentage).ToArray();
+        AssertStrictlyIncreasing(values);
     }
 
     [Fact]
@@ -296,7 +333,9 @@ public class PhotoEditTests
         var parameters = new PhotoParameters
         {
             Exposure = 50,
+            Brightness = 50,
             Contrast = 50,
+            Gamma = 50,
             Highlights = 50,
             Shadows = 50,
             Whites = 50,
@@ -305,6 +344,7 @@ public class PhotoEditTests
             Vibrance = 50,
             Temperature = 50,
             Tint = 50,
+            Hue = 50,
             Sharpness = 50,
             Clarity = 50,
             Dehaze = 50,
@@ -319,9 +359,12 @@ public class PhotoEditTests
             [
                 PhotoEditOperation.ToneCurve,
                 PhotoEditOperation.Exposure,
+                PhotoEditOperation.Brightness,
                 PhotoEditOperation.Contrast,
+                PhotoEditOperation.Gamma,
                 PhotoEditOperation.WhiteBalance,
                 PhotoEditOperation.Tint,
+                PhotoEditOperation.Hue,
                 PhotoEditOperation.Saturation,
                 PhotoEditOperation.Vibrance,
                 PhotoEditOperation.Dehaze,
@@ -360,6 +403,54 @@ public class PhotoEditTests
     }
 
     [Fact]
+    public void Apply_with_brightness_moves_the_midtones_in_both_directions()
+    {
+        using var up = new MagickImage(MagickColors.Gray, 32, 24);
+        using var down = new MagickImage(MagickColors.Gray, 32, 24);
+        using var untouched = new MagickImage(MagickColors.Gray, 32, 24);
+
+        PhotoEdit.Apply(up, new PhotoParameters { Brightness = 50 });
+        PhotoEdit.Apply(down, new PhotoParameters { Brightness = -50 });
+
+        Assert.True(up.Compare(untouched, ErrorMetric.RootMeanSquared) > 0.01);
+        Assert.True(down.Compare(untouched, ErrorMetric.RootMeanSquared) > 0.01);
+        Assert.True(up.GetPixels().GetPixel(0, 0).ToColor()!.R > untouched.GetPixels().GetPixel(0, 0).ToColor()!.R);
+        Assert.True(down.GetPixels().GetPixel(0, 0).ToColor()!.R < untouched.GetPixels().GetPixel(0, 0).ToColor()!.R);
+    }
+
+    [Fact]
+    public void Apply_with_gamma_lifts_the_midtones_without_touching_the_black_point()
+    {
+        using var edited = new MagickImage(MagickColors.Gray, 32, 24);
+        using var untouched = new MagickImage(MagickColors.Gray, 32, 24);
+
+        PhotoEdit.Apply(edited, new PhotoParameters { Gamma = 50 });
+
+        Assert.True(edited.Compare(untouched, ErrorMetric.RootMeanSquared) > 0.01);
+        Assert.True(edited.GetPixels().GetPixel(0, 0).ToColor()!.R > untouched.GetPixels().GetPixel(0, 0).ToColor()!.R);
+
+        // A dark pixel stays dark: gamma is a curve through the midtones, not an offset.
+        using var black = new MagickImage(MagickColors.Black, 8, 8);
+        PhotoEdit.Apply(black, new PhotoParameters { Gamma = 50 });
+        Assert.Equal(0, black.GetPixels().GetPixel(0, 0).ToColor()!.R);
+    }
+
+    [Fact]
+    public void Apply_with_hue_rotates_the_colour_wheel()
+    {
+        using var edited = new MagickImage(MagickColors.Red, 16, 16);
+        using var untouched = new MagickImage(MagickColors.Red, 16, 16);
+
+        PhotoEdit.Apply(edited, new PhotoParameters { Hue = 33 });
+
+        var before = untouched.GetPixels().GetPixel(0, 0).ToColor()!;
+        var after = edited.GetPixels().GetPixel(0, 0).ToColor()!;
+        Assert.Equal(255, before.R);
+        Assert.True(after.G > before.G, $"red should gain green after a third of a turn: {after}");
+        Assert.True(edited.Compare(untouched, ErrorMetric.RootMeanSquared) > 0.1);
+    }
+
+    [Fact]
     public void Apply_survives_a_full_pipeline()
     {
         // Every operation at a strong setting runs without throwing, including the LUT, the vignette
@@ -368,7 +459,9 @@ public class PhotoEditTests
         var parameters = new PhotoParameters
         {
             Exposure = 20,
+            Brightness = 15,
             Contrast = 30,
+            Gamma = 20,
             Highlights = -40,
             Shadows = 60,
             Whites = 10,
@@ -377,6 +470,7 @@ public class PhotoEditTests
             Vibrance = 30,
             Temperature = 25,
             Tint = -20,
+            Hue = 30,
             Sharpness = 70,
             Clarity = 40,
             Dehaze = 30,

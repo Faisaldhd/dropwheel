@@ -14,6 +14,11 @@ namespace FileAction.App.UI.Tools.Meta;
 /// <summary>The metadata read from one file, plus the duration the chapter sidecar needs.</summary>
 internal readonly record struct MetadataRead(MetadataDocument Document, double DurationSeconds);
 
+/// <summary>The documents for a multi-file edit, in the same order as the selected files.</summary>
+internal readonly record struct MetadataBatchRead(
+    IReadOnlyList<MetadataDocument> Documents,
+    IReadOnlyList<double> Durations);
+
 /// <summary>
 /// Reads and writes metadata per file kind: EXIF/IPTC/XMP profiles through Magick.NET for images, the
 /// <c>-i</c> banner and <c>-c copy</c> through FFmpeg for audio/video, and the info dictionary through
@@ -30,6 +35,26 @@ internal static class MetadataRunner
             MetadataKind.Media => ReadMediaAsync(item, tools, ct),
             _ => Task.FromResult(new MetadataRead(MetadataDocument.Empty(kind), 0)),
         };
+
+    /// <summary>Reads every selected file in order, so the batch editor can show the tags they share.</summary>
+    public static async Task<MetadataBatchRead> ReadManyAsync(
+        IReadOnlyList<FileItem> items,
+        MetadataKind kind,
+        ToolLocator tools,
+        CancellationToken ct)
+    {
+        var documents = new List<MetadataDocument>(items.Count);
+        var durations = new List<double>(items.Count);
+        foreach (var item in items)
+        {
+            ct.ThrowIfCancellationRequested();
+            var read = await ReadAsync(item, kind, tools, ct).ConfigureAwait(false);
+            documents.Add(read.Document);
+            durations.Add(read.DurationSeconds);
+        }
+
+        return new MetadataBatchRead(documents, durations);
+    }
 
     public static Task<string> WriteAsync(
         FileItem item,
@@ -48,6 +73,44 @@ internal static class MetadataRunner
             MetadataKind.Media => WriteMediaAsync(item, edit, chapters, durationSeconds, directory, tools, ct),
             _ => throw new ConversionException(T("tool.metadata.error.unsupported")),
         };
+
+    /// <summary>
+    /// Writes one copy per selected file with the same tag edit. Chapters are per file, so batch mode
+    /// leaves every chapter track exactly as it was. The overall progress is split evenly over the files.
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> WriteManyAsync(
+        IReadOnlyList<FileItem> items,
+        MetadataKind kind,
+        MetadataEdit edit,
+        IReadOnlyList<double> durations,
+        DropTargets? targets,
+        ToolLocator tools,
+        CancellationToken ct,
+        IProgress<double> progress)
+    {
+        var outputs = new List<string>(items.Count);
+        for (var i = 0; i < items.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var index = i;
+            var local = new Progress<double>(value =>
+                progress.Report((index + Math.Clamp(value, 0, 1)) / items.Count));
+            var duration = index < durations.Count ? durations[index] : 0;
+            var directory = ToolOutputFolder.For(items[index], targets);
+            outputs.Add(await WriteAsync(
+                items[index],
+                kind,
+                edit,
+                Array.Empty<MetadataChapter>(),
+                duration,
+                directory,
+                tools,
+                ct,
+                local).ConfigureAwait(false));
+        }
+
+        return outputs;
+    }
 
     /// <summary>"song Edited metadata" — the base name every write uses.</summary>
     private static string OutputName(FileItem item) => $"{item.BaseName} {T("tool.metadata.suffix")}";

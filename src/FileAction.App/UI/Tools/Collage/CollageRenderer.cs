@@ -33,7 +33,8 @@ internal static class CollageRenderer
     private static void Write(IReadOnlyList<string> paths, CollageOptions options, string target)
     {
         var size = CollagePresets.Clamp(options.Size.Width, options.Size.Height);
-        var cells = CollageMath.Cells(paths.Count, options.Layout, size.Width, size.Height, options.Spacing);
+        var cells = CollageMath.Cells(
+            paths.Count, options.Layout, size.Width, size.Height, options.Spacing, options.Columns);
 
         using var canvas = new MagickImage(ToMagick(options.Background.Start), (uint)size.Width, (uint)size.Height);
         PaintBackground(canvas, options.Background, size);

@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using FileAction.Core;
+using FileAction.Core.Backends;
 using PdfDocument = PdfSharp.Pdf.PdfDocument;
 using PdfDocumentOpenMode = PdfSharp.Pdf.IO.PdfDocumentOpenMode;
 using PdfReader = PdfSharp.Pdf.IO.PdfReader;
@@ -19,9 +20,10 @@ using static FileAction.Core.Loc;
 namespace FileAction.App.UI.Tools.Pdf;
 
 /// <summary>
-/// "Merge to PDF" on the Tools wheel: every dropped PDF contributes all of its pages and every dropped
-/// image contributes exactly one page. The rows are the order the pages will have; drag a row or use its
-/// up/down arrows to move it and remove the ones that should not be included.
+/// "Merge to PDF" on the Tools wheel: every dropped PDF contributes the pages its range names (all pages
+/// by default) and every dropped image contributes exactly one page. The rows are the order the pages will
+/// have; drag a row or use its up/down arrows to move it, type a range such as "1-3, 5" for a PDF, and
+/// remove the files that should not be included.
 /// <para>
 /// The initial order is the order the app received the files — Explorer's selection order when the shell
 /// provides it, which a drag or a context-menu selection normally does. Paths collected without a
@@ -77,6 +79,8 @@ internal sealed class PdfMergeView
     private readonly DropTargets? _targets;
     private readonly PdfMergePlan _plan;
     private readonly Dictionary<string, BitmapSource?> _thumbnails = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _pageCounts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<(PdfMergeSource Source, TextBox Box)> _rangeBoxes = [];
     private readonly List<(Border Row, WpfImage Image, TextBlock Fallback, string Path)> _rows = [];
     private readonly Grid _root = new();
     private StackPanel _list = new();
@@ -171,11 +175,25 @@ internal sealed class PdfMergeView
         _root.Children.Add(scroll);
     }
 
-    /// <summary>Fills in the row thumbnails one by one; the window is usable while they load.</summary>
+    /// <summary>Fills in the row thumbnails and page counts one by one; the window is usable while they load.</summary>
     public async Task ActivateAsync()
     {
         foreach (var source in _plan.Sources.ToList())
         {
+            // A range can only be checked against a real count, which is cheap but still off the UI thread.
+            if (!source.IsImage && !_pageCounts.ContainsKey(source.Path))
+            {
+                try
+                {
+                    _pageCounts[source.Path] = await Task.Run(() => PdfBackend.PageCount(source.Path));
+                    RepaintRanges();
+                }
+                catch
+                {
+                    // Keep the range box neutral; the writer re-checks the real count and reports a clear error.
+                }
+            }
+
             if (_thumbnails.ContainsKey(source.Path))
                 continue;
             BitmapSource? bitmap = null;
@@ -199,6 +217,7 @@ internal sealed class PdfMergeView
     {
         _list.Children.Clear();
         _rows.Clear();
+        _rangeBoxes.Clear();
 
         if (_plan.IsEmpty)
         {
@@ -286,6 +305,7 @@ internal sealed class PdfMergeView
             _plan.RemoveAt(index);
             Rebuild();
         });
+        var range = BuildRange(source);
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -295,13 +315,15 @@ internal sealed class PdfMergeView
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(number, 0);
         Grid.SetColumn(thumbnail, 1);
         Grid.SetColumn(icon, 2);
         Grid.SetColumn(name, 3);
-        Grid.SetColumn(up, 4);
-        Grid.SetColumn(down, 5);
-        Grid.SetColumn(remove, 6);
+        Grid.SetColumn(range, 4);
+        Grid.SetColumn(up, 5);
+        Grid.SetColumn(down, 6);
+        Grid.SetColumn(remove, 7);
         up.VerticalAlignment = VerticalAlignment.Center;
         down.VerticalAlignment = VerticalAlignment.Center;
         remove.VerticalAlignment = VerticalAlignment.Center;
@@ -309,6 +331,7 @@ internal sealed class PdfMergeView
         grid.Children.Add(thumbnail);
         grid.Children.Add(icon);
         grid.Children.Add(name);
+        grid.Children.Add(range);
         grid.Children.Add(up);
         grid.Children.Add(down);
         grid.Children.Add(remove);
@@ -329,6 +352,9 @@ internal sealed class PdfMergeView
         // Drag the row to a new position; dropping on the empty area below moves it to the end.
         row.PreviewMouseLeftButtonDown += (_, e) =>
         {
+            // Typing in a range box must not start a row drag.
+            if (IsTextInput(e.OriginalSource))
+                return;
             _dragStart = e.GetPosition(row);
             _dragFrom = index;
         };
@@ -362,6 +388,75 @@ internal sealed class PdfMergeView
 
         _rows.Add((row, image, fallback, source.Path));
         return row;
+    }
+
+    /// <summary>
+    /// The page-range box of a PDF row. Images get no box because they are always exactly one page. The
+    /// text is stored on the source as it is typed, so an unfinished or wrong range survives a rebuild and
+    /// can be reported instead of silently merging every page.
+    /// </summary>
+    private FrameworkElement BuildRange(PdfMergeSource source)
+    {
+        if (source.IsImage)
+            return new Border { Width = 76 };
+
+        var box = ToolControls.Box(source.PageRange, 64);
+        box.FontSize = 12;
+        box.Padding = new Thickness(6, 3, 6, 3);
+        // A range is technical text: keep the digits and the dash left-to-right in Arabic too.
+        box.FlowDirection = FlowDirection.LeftToRight;
+        box.TextAlignment = TextAlignment.Left;
+        box.TextChanged += (_, _) =>
+        {
+            source.PageRange = box.Text;
+            PaintRange(source, box);
+        };
+
+        _rangeBoxes.Add((source, box));
+        PaintRange(source, box);
+
+        var label = ToolControls.Label(T("tool.pdfmerge.pages"), 10);
+        label.Margin = new Thickness(0, 0, 0, 2);
+        var panel = new StackPanel
+        {
+            Margin = new Thickness(6, 0, 6, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        panel.Children.Add(label);
+        panel.Children.Add(box);
+        return panel;
+    }
+
+    /// <summary>Red border and the error in the tooltip while the typed range cannot be used.</summary>
+    private void PaintRange(PdfMergeSource source, TextBox box)
+    {
+        var known = _pageCounts.TryGetValue(source.Path, out var pageCount);
+        var valid = PdfPageSelection.TryParse(source.PageRange, out var selection)
+            && (!known || selection.Fits(pageCount));
+        // The page count tells the user which range can be valid without opening the document.
+        var count = known ? $" \u00B7 {Loc.Plural("pages.count", pageCount)}" : "";
+        box.BorderBrush = valid ? Theme.PanelBorder : Theme.Error;
+        box.ToolTip = valid
+            ? T("tool.pdfmerge.pagesHint") + count
+            : T("tool.pdfmerge.error.range", source.FileName) + count;
+    }
+
+    private void RepaintRanges()
+    {
+        foreach (var (source, box) in _rangeBoxes)
+            PaintRange(source, box);
+    }
+
+    private static bool IsTextInput(object? origin)
+    {
+        var node = origin as DependencyObject;
+        while (node is not null)
+        {
+            if (node is TextBox)
+                return true;
+            node = node is Visual ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node);
+        }
+        return false;
     }
 
     private void MoveRow(int from, int to)
@@ -405,6 +500,8 @@ internal sealed class PdfMergeView
     {
         if (_plan.IsEmpty)
             return null;
+        if (_plan.FirstInvalidPageRange(_pageCounts) is { } invalid)
+            throw new ConversionException(T("tool.pdfmerge.error.range", invalid.FileName));
         if (!_plan.Validate().IsValid)
             throw new ConversionException(T("tool.pdfmerge.error.plan"));
 
@@ -416,8 +513,9 @@ internal sealed class PdfMergeView
 }
 
 /// <summary>
-/// Writes the merge plan: every PDF contributes all its pages in file order, every image becomes one page
-/// sized from its pixels (96 DPI â†’ points). The sources are only read; the output is a new file.
+/// Writes the merge plan: every PDF contributes the pages its range names (all pages when the range is
+/// empty), every image becomes one page sized from its pixels (96 DPI â†’ points). The sources are only
+/// read; the output is a new file.
 /// </summary>
 internal static class PdfMergeWriter
 {
@@ -432,7 +530,7 @@ internal static class PdfMergeWriter
                 if (source.IsImage)
                     AppendImagePage(document, source.Path, images);
                 else
-                    AppendPdfPages(document, source.Path);
+                    AppendPdfPages(document, source);
             }
             document.Save(output);
         }
@@ -446,17 +544,22 @@ internal static class PdfMergeWriter
         }
     }
 
-    private static void AppendPdfPages(PdfDocument output, string path)
+    private static void AppendPdfPages(PdfDocument output, PdfMergeSource source)
     {
         try
         {
-            using var input = PdfReader.Open(path, PdfDocumentOpenMode.Import);
-            for (var index = 0; index < input.PageCount; index++)
+            using var input = PdfReader.Open(source.Path, PdfDocumentOpenMode.Import);
+            if (!PdfPageSelection.TryParse(source.PageRange, out var selection)
+                || !selection.TryResolve(input.PageCount, out var pages))
+            {
+                throw new ConversionException(T("tool.pdfmerge.error.range", Path.GetFileName(source.Path)));
+            }
+            foreach (var index in pages)
                 output.AddPage(input.Pages[index]);
         }
         catch (Exception ex) when (ex is not ConversionException and not OutOfMemoryException)
         {
-            throw new ConversionException(T("tool.pdfmerge.error.pdf", Path.GetFileName(path)), ex);
+            throw new ConversionException(T("tool.pdfmerge.error.pdf", Path.GetFileName(source.Path)), ex);
         }
     }
 

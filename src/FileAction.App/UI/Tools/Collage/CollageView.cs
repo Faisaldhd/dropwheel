@@ -71,10 +71,13 @@ internal sealed class CollageView
     private ChipSet<CollageBackgroundKind> _backgroundChips = null!;
     private SliderRow _spacingSlider = null!;
     private SliderRow _radiusSlider = null!;
+    private Grid? _columnsRow;
+    private TextBlock? _columnsValue;
 
     private CollageLayout _layout = CollageLayout.Grid;
     private CollageFit _fit = CollageFit.Fill;
     private CollageSize _size = CollagePresets.Square;
+    private int _columns;
     private int _spacing = 12;
     private int _radius = 16;
     private CollageBackgroundKind _backgroundKind = CollageBackgroundKind.Solid;
@@ -132,6 +135,7 @@ internal sealed class CollageView
         {
             _loaded = await _loadTask;
             _placeholder.Visibility = Visibility.Collapsed;
+            UpdateColumns();
             RebuildStrip();
             Paint();
             _root.Ready();
@@ -167,8 +171,14 @@ internal sealed class CollageView
         _layoutChips = new ChipSet<CollageLayout>(
             Layouts.Select(option => (T(option.Key), option.Value)).ToList(),
             _layout,
-            value => { _layout = value; Paint(); });
+            value =>
+            {
+                _layout = value;
+                UpdateColumns();
+                Paint();
+            });
         panel.Children.Add(Row(T("tool.collage.layout"), _layoutChips.View));
+        panel.Children.Add(BuildColumnsRow());
 
         _sizeChips = new ChipSet<CollageSize>(
             CollagePresets.All.Select(size => (Label(size), size)).ToList(),
@@ -224,6 +234,95 @@ internal sealed class CollageView
 
         panel.Margin = new Thickness(0, 0, 0, 6);
         return panel;
+    }
+
+    /// <summary>
+    /// The grid's column count. It is hidden for the row/column/featured layouts, which have no columns to
+    /// choose, and shows the effective count while the automatic near-square count is still in force.
+    /// </summary>
+    private FrameworkElement BuildColumnsRow()
+    {
+        _columnsValue = new TextBlock
+        {
+            Width = 30,
+            FontSize = 12.5,
+            Foreground = Theme.Text,
+            TextAlignment = TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var track = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        track.Children.Add(StepButton("\u2212", -1));
+        track.Children.Add(_columnsValue);
+        track.Children.Add(StepButton("+", 1));
+
+        _columnsRow = Row(
+            T("tool.collage.columns"),
+            new Border
+            {
+                Background = Theme.Track,
+                CornerRadius = new CornerRadius(9),
+                Padding = new Thickness(2),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Child = track,
+            });
+        _columnsRow.Visibility = Visibility.Collapsed;
+        return _columnsRow;
+    }
+
+    private FrameworkElement StepButton(string glyph, int delta)
+    {
+        var button = new Border
+        {
+            Width = 26,
+            Height = 24,
+            CornerRadius = new CornerRadius(7),
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            Child = new TextBlock
+            {
+                Text = glyph,
+                FontSize = 13,
+                Foreground = Theme.Text,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+        button.MouseLeftButtonUp += (_, _) => StepColumns(delta);
+        return button;
+    }
+
+    /// <summary>Steps the grid columns by one, inside 1..image count; the first step leaves auto mode.</summary>
+    private void StepColumns(int delta)
+    {
+        var count = _loaded?.Length ?? 0;
+        if (count <= 0)
+            return;
+
+        var current = CollageMath.GridColumns(count, _columns);
+        var next = Math.Clamp(current + delta, 1, count);
+        if (next == current)
+            return;
+
+        _columns = next;
+        UpdateColumns();
+        Paint();
+    }
+
+    private void UpdateColumns()
+    {
+        if (_columnsRow is null || _columnsValue is null)
+            return;
+
+        var count = _loaded?.Length ?? 0;
+        _columnsValue.Text = CollageMath.GridColumns(count, _columns).ToString(CultureInfo.InvariantCulture);
+        _columnsRow.Visibility = _layout == CollageLayout.Grid && count > 1
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private FrameworkElement BackgroundControl()
@@ -400,7 +499,7 @@ internal sealed class CollageView
         _canvas.Background = BackgroundBrush();
         _canvas.Children.Clear();
 
-        var cells = CollageMath.Cells(_loaded.Length, _layout, _size.Width, _size.Height, _spacing);
+        var cells = CollageMath.Cells(_loaded.Length, _layout, _size.Width, _size.Height, _spacing, _columns);
         for (var position = 0; position < cells.Count && position < _order.Count; position++)
         {
             var source = _order[position];
@@ -457,6 +556,7 @@ internal sealed class CollageView
         _layout = CollageLayout.Grid;
         _fit = CollageFit.Fill;
         _size = CollagePresets.Square;
+        _columns = 0;
         _spacing = 12;
         _radius = 16;
         _backgroundKind = CollageBackgroundKind.Solid;
@@ -469,6 +569,7 @@ internal sealed class CollageView
         _spacingSlider.Set(_spacing);
         _radiusSlider.Set(_radius);
         SyncSize();
+        UpdateColumns();
         PaintSwatches();
         RebuildStrip();
         Paint();
@@ -488,6 +589,7 @@ internal sealed class CollageView
             Layout = _layout,
             Fit = _fit,
             Size = _size,
+            Columns = _columns,
             Spacing = _spacing,
             Radius = _radius,
             Background = CollageBackground.For(CollagePalette.Colors[_paletteIndex], _backgroundKind),
@@ -673,7 +775,7 @@ internal sealed class CollageView
 
     private static Color ToWpf(CollageColor colour) => Color.FromRgb(colour.R, colour.G, colour.B);
 
-    private static FrameworkElement Row(string label, FrameworkElement control)
+    private static Grid Row(string label, FrameworkElement control)
     {
         var grid = new Grid { Margin = new Thickness(0, 0, 0, 6) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(92) });

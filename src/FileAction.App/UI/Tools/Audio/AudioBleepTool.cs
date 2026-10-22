@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -12,7 +13,8 @@ namespace FileAction.App.UI.Tools.Audio;
 /// <summary>
 /// "Bleep" on the Tools wheel: a Bleep layer above the real waveform. Dragging across the layer adds a
 /// section, dragging a clip moves it and dragging either edge resizes it (all clamped to the audio by
-/// <see cref="AudioEffects"/>). "With Bleeps" previews the tone that will replace each section.
+/// <see cref="AudioEffects"/>). The two view toggles show the original or the replaced sections, and Play
+/// compares them by ear: the source file or a temporary bleeped render of the same ranges and tone.
 /// Apply writes "&lt;name&gt; Bleeped.ext" next to the source.
 /// </summary>
 internal sealed class AudioBleepTool : IToolWindowSpec
@@ -72,10 +74,19 @@ internal sealed class AudioBleepView
 
     private PreviewButton? _originalPreview;
     private PreviewButton? _bleepedPreview;
+    private Border? _playButton;
+    private readonly AudioPreview _originalPlayer;
+    private AudioPreview? _bleepedPlayer;
+    private CancellationTokenSource? _previewRender;
+    private string? _renderedFile;
+    private string? _renderedKey;
+    private string? _renderedDirectory;
     private AudioWaveform? _waveform;
     private Grid? _root;
     private double _duration;
     private bool _bleeped;
+    private bool _preparing;
+    private bool _originalAvailable = true;
     private double _toneHz = AudioEffects.DefaultToneHz;
     private int _toneVolume = AudioEffects.DefaultToneVolume;
     private int _stepMs = 100;
@@ -84,6 +95,11 @@ internal sealed class AudioBleepView
     {
         _item = item;
         _targets = targets;
+        _originalPlayer = new AudioPreview(item.Path);
+        _originalPlayer.PositionChanged += OnPlaybackPosition;
+        _originalPlayer.Stopped += OnPlaybackStopped;
+        _originalPlayer.StateChanged += UpdatePlayButton;
+        _originalPlayer.Failed += OnOriginalPreviewFailed;
         _bleepLane.Changed += OnModelChanged;
         _placeholder = new Border
         {
@@ -118,6 +134,11 @@ internal sealed class AudioBleepView
                 _bleepLane.RemoveSelected();
                 e.Handled = true;
             }
+            else if (e.Key == Key.Space)
+            {
+                _ = TogglePlaybackAsync();
+                e.Handled = true;
+            }
         };
         root.Unloaded += (_, _) => Cancel();
 
@@ -141,6 +162,7 @@ internal sealed class AudioBleepView
             _placeholder.Visibility = Visibility.Collapsed;
             UpdateTimes();
             RefreshFromModel();
+            UpdatePlayButton();
             _ready.TrySetResult(new MediaSize(560, 170));
         }
         catch (OperationCanceledException)
@@ -297,7 +319,7 @@ internal sealed class AudioBleepView
             value =>
             {
                 _toneHz = value;
-                RefreshFromModel();
+                OnPreviewSettingsChanged();
             }));
 
         _controls.Children.Add(SliderRow(
@@ -308,7 +330,7 @@ internal sealed class AudioBleepView
             value =>
             {
                 _toneVolume = value;
-                RefreshFromModel();
+                OnPreviewSettingsChanged();
             }));
 
         _outputName.FontSize = 11.5;
@@ -322,8 +344,10 @@ internal sealed class AudioBleepView
     }
 
     /// <summary>
-    /// Two view toggles: the untouched waveform, or the waveform with the sections drawn as the tone that
-    /// will replace them. This window has no audio playback; the note below says so and points at Save.
+    /// Two view toggles (the untouched waveform, or the waveform with the sections drawn as the tone that
+    /// will replace them) plus one play button. Play follows the selected view: the source file for
+    /// "Original", a temporary bleeped render for "With bleeps". That is the A/B comparison Tangerine
+    /// offers, without writing a result next to the source.
     /// </summary>
     private void BuildPreviewRow()
     {
@@ -334,8 +358,14 @@ internal sealed class AudioBleepView
         _originalPreview.SetSelected(!_bleeped);
         _bleepedPreview.SetSelected(_bleeped);
 
+        _playButton = Controls.Button(T("tool.audiobleep.play"), () => { _ = TogglePlaybackAsync(); }, glyph: Glyphs.Play);
+        _playButton.Margin = new Thickness(8, 0, 0, 0);
+        _playButton.VerticalAlignment = VerticalAlignment.Center;
+
         _previewRow.Children.Add(_originalPreview.Root);
         _previewRow.Children.Add(_bleepedPreview.Root);
+        _previewRow.Children.Add(_playButton);
+        UpdatePlayButton();
     }
 
     private FrameworkElement BuildToolbar()
@@ -384,10 +414,12 @@ internal sealed class AudioBleepView
 
     private void SetPreview(bool bleeped)
     {
+        StopPlayback();
         _bleeped = bleeped;
         _originalPreview?.SetSelected(!bleeped);
         _bleepedPreview?.SetSelected(bleeped);
         RefreshFromModel();
+        UpdatePlayButton();
     }
 
     private void NudgeSelected(bool start, int direction)
@@ -418,10 +450,205 @@ internal sealed class AudioBleepView
             element.Opacity = hasSelection ? 1 : 0.45;
     }
 
-    private void OnModelChanged() => RefreshFromModel();
+    private void OnModelChanged()
+    {
+        StopBleepedPlayback();
+        RefreshFromModel();
+    }
+
+    private void OnPreviewSettingsChanged()
+    {
+        StopBleepedPlayback();
+        RefreshFromModel();
+    }
+
+    private void StopBleepedPlayback()
+    {
+        if (_bleepedPlayer?.IsPlaying == true)
+            _bleepedPlayer.Stop();
+    }
+
+    private void StopPlayback()
+    {
+        _originalPlayer.Stop();
+        _bleepedPlayer?.Stop();
+    }
+
+    /// <summary>Play follows the selected view; switching views always stops what is currently audible.</summary>
+    private async Task TogglePlaybackAsync()
+    {
+        if (_preparing || _waveform is null || _duration <= 0)
+            return;
+
+        var active = _bleeped ? _bleepedPlayer : _originalPlayer;
+        if (active?.IsPlaying == true)
+        {
+            active.Stop();
+            return;
+        }
+
+        StopPlayback();
+        if (!_bleeped)
+        {
+            if (_originalAvailable)
+                _originalPlayer.Play(0, _duration);
+            return;
+        }
+
+        var plan = BleepPreviewPlan.Create(_bleepLane.Ranges, _duration, _toneHz, _toneVolume);
+        if (plan is null)
+        {
+            _status.Text = T("tool.audiobleep.error.noRanges");
+            return;
+        }
+
+        try
+        {
+            _preparing = true;
+            UpdatePlayButton();
+            var file = await EnsurePreviewAsync(plan.Value).ConfigureAwait(true);
+            if (file is null || !_bleeped)
+                return;
+            _bleepedPlayer?.Play(0, _duration);
+        }
+        catch (OperationCanceledException)
+        {
+            // Closed the window, changed a range or started a newer render.
+        }
+        catch (Exception ex)
+        {
+            _status.Text = AudioRunner.Message(ex, "tool.audiobleep.error.decode");
+        }
+        finally
+        {
+            _preparing = false;
+            UpdatePlayButton();
+        }
+    }
+
+    /// <summary>
+    /// Renders the bleeped comparison to a temporary M4A, reusing it while the ranges, tone and volume are
+    /// unchanged so moving the playhead or pressing play twice is instant.
+    /// </summary>
+    private async Task<string?> EnsurePreviewAsync(BleepPreviewPlan plan)
+    {
+        if (_renderedFile is not null
+            && _renderedKey == plan.Key
+            && File.Exists(_renderedFile))
+            return _renderedFile;
+
+        _previewRender?.Cancel();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(_life.Token);
+        _previewRender = cts;
+        var directory = OutputPaths.TempDirectory();
+        var file = Path.Combine(directory, $"bleeped-preview.{BleepPreviewPlan.Extension}");
+        _status.Text = T("tool.audiobleep.preview.preparing");
+        try
+        {
+            var context = new OperationContext
+            {
+                Tools = _tools,
+                CancellationToken = cts.Token,
+                OutputDirectory = directory,
+            };
+            await FfmpegBackend.RunAsync(
+                context,
+                [_item.Path],
+                AudioBleepPreview.Arguments(plan),
+                file,
+                new Progress<double>(ReportPreview),
+                knownDuration: _duration).ConfigureAwait(true);
+            if (!File.Exists(file))
+                throw new ConversionException(T("tool.audiobleep.error.decode"));
+
+            var oldDirectory = _renderedDirectory;
+            _bleepedPlayer?.Stop();
+            _bleepedPlayer?.Close();
+            _bleepedPlayer = new AudioPreview(file);
+            _bleepedPlayer.PositionChanged += OnPlaybackPosition;
+            _bleepedPlayer.Stopped += OnPlaybackStopped;
+            _bleepedPlayer.StateChanged += UpdatePlayButton;
+            _bleepedPlayer.Failed += OnBleepedPreviewFailed;
+            _renderedFile = file;
+            _renderedKey = plan.Key;
+            _renderedDirectory = directory;
+            if (oldDirectory is not null)
+                OutputPaths.TryDelete(oldDirectory);
+            _status.Text = string.Empty;
+            return file;
+        }
+        catch
+        {
+            OutputPaths.TryDelete(directory);
+            throw;
+        }
+        finally
+        {
+            if (ReferenceEquals(_previewRender, cts))
+                _previewRender = null;
+        }
+    }
+
+    private void ReportPreview(double value) =>
+        _status.Text = ((int)Math.Round(Math.Clamp(value, 0, 1) * 100))
+            .ToString(System.Globalization.CultureInfo.InvariantCulture) + " %";
+
+    private void OnPlaybackPosition(double seconds)
+    {
+        _bleepStart.Text = Bidi.Value(AudioEffects.FormatTimecode(seconds));
+        _audioStart.Text = Bidi.Value(AudioEffects.FormatTimecode(seconds));
+        _bleepLane.Playhead = seconds;
+        _audioLane.Playhead = seconds;
+    }
+
+    private void OnPlaybackStopped()
+    {
+        _bleepLane.Playhead = null;
+        _audioLane.Playhead = null;
+        UpdateTimes();
+        UpdatePlayButton();
+    }
+
+    private void OnOriginalPreviewFailed()
+    {
+        _originalAvailable = false;
+        _status.Text = T("tool.audiobleep.preview.failed");
+        UpdatePlayButton();
+    }
+
+    private void OnBleepedPreviewFailed()
+    {
+        _status.Text = T("tool.audiobleep.preview.failed");
+        UpdatePlayButton();
+    }
+
+    private void UpdatePlayButton()
+    {
+        if (_playButton is null)
+            return;
+        var playing = _bleeped ? _bleepedPlayer?.IsPlaying == true : _originalPlayer.IsPlaying;
+        Controls.SetText(_playButton, T(playing ? "tool.audiobleep.pause" : "tool.audiobleep.play"));
+        _playButton.IsEnabled = !_preparing && _waveform is not null && (_bleeped || _originalAvailable);
+        _playButton.Opacity = _playButton.IsEnabled ? 1 : 0.5;
+    }
+
+    private void CleanupPreview()
+    {
+        var directory = _renderedDirectory;
+        _renderedFile = null;
+        _renderedKey = null;
+        _renderedDirectory = null;
+        if (directory is not null)
+            OutputPaths.TryDelete(directory);
+    }
 
     private void Reset()
     {
+        _previewRender?.Cancel();
+        StopPlayback();
+        _bleepedPlayer?.Close();
+        _bleepedPlayer = null;
+        CleanupPreview();
         _bleeped = false;
         _toneHz = AudioEffects.DefaultToneHz;
         _toneVolume = AudioEffects.DefaultToneVolume;
@@ -430,6 +657,7 @@ internal sealed class AudioBleepView
         _bleepLane.SetModel([], -1);
         FillControls();
         UpdateTimes();
+        UpdatePlayButton();
     }
 
     private void ShowProblem(string message)
@@ -496,6 +724,14 @@ internal sealed class AudioBleepView
         if (ranges.Count == 0)
             throw new ConversionException(T("tool.audiobleep.error.noRanges"));
 
+        // Release the preview players before FFmpeg reads the same source, and never leave the temporary
+        // comparison file behind after the real save starts.
+        _previewRender?.Cancel();
+        StopPlayback();
+        _originalPlayer.Close();
+        _bleepedPlayer?.Close();
+        CleanupPreview();
+
         var directory = AudioToolOutput.DirectoryFor(_item, _targets);
         var format = FfmpegBackend.SafeContainer(_item.Format);
         var suffix = T("tool.audiobleep.suffix");
@@ -540,6 +776,10 @@ internal sealed class AudioBleepView
     {
         try
         {
+            _previewRender?.Cancel();
+            _originalPlayer.Close();
+            _bleepedPlayer?.Close();
+            CleanupPreview();
             if (!_life.IsCancellationRequested)
                 _life.Cancel();
         }
