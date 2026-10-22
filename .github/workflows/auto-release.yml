@@ -1,0 +1,58 @@
+name: Auto release
+
+# A version bump merged to main becomes a release without a manual tag step:
+# read <Version> from the app project, create v<version> if missing, and dispatch the
+# existing CI workflow on that tag so Package + GitHub release run there.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: auto-release-main
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag the new version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create v<version> and start the release run
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $project = 'src/FileAction.App/FileAction.App.csproj'
+          [xml] $xml = Get-Content $project -Raw
+          $version = @($xml.Project.PropertyGroup.Version) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace($version)) { throw "No <Version> in $project" }
+          $tag = "v$version"
+          Write-Host "version=$version tag=$tag"
+
+          git fetch --tags --force
+          & git rev-parse -q --verify "refs/tags/$tag" 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "$tag already exists; nothing to release."
+            exit 0
+          }
+
+          git config user.name 'DropWheel release bot'
+          git config user.email 'release-bot@dropwheel.invalid'
+          git tag -a $tag -m "DropWheel $version"
+          git push origin "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) { throw "Could not push $tag" }
+
+          # GITHUB_TOKEN tag pushes do not trigger workflows, so dispatch CI on the tag explicitly.
+          gh workflow run ci.yml --ref $tag
+          if ($LASTEXITCODE -ne 0) { throw "Could not dispatch CI for $tag" }
+          Write-Host "CI dispatched for $tag."
