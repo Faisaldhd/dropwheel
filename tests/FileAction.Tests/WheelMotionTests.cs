@@ -249,6 +249,52 @@ public class WheelMotionTests
     }
 
     [Fact]
+    public void The_exact_centre_keeps_the_current_child()
+    {
+        Assert.Equal(2, WheelWindow.HubIndex(2, 5, 0, 0));
+        Assert.Equal(0, WheelWindow.HubIndex(-1, 5, 0, 0));
+        Assert.Equal(2, WheelWindow.HubIndex(0, 5, WheelWindow.SliceAngle(2, 5), 120));
+    }
+
+    [Fact]
+    public void Hovering_the_centre_keeps_the_inner_highlight()
+    {
+        RunOnSta(() =>
+        {
+            var a = new FakeOperation("a");
+            var b = new FakeOperation("b");
+            var group = new WheelGroupOperation(
+                new WheelGroupDefinition("category.test", "a", ["a", "b"]), a, [a, b]);
+            Operation[] outer = [group];
+            var window = new WheelWindow(
+                WheelMode.Click,
+                WheelKind.Tools,
+                [new FileItem("photo.png")],
+                new AppSettings(),
+                (_, _) => outer,
+                (_, _, _) => { });
+            try
+            {
+                var size = (double)typeof(WheelWindow)
+                    .GetField("Size", BindingFlags.NonPublic | BindingFlags.Static)!
+                    .GetRawConstantValue()!;
+                Invoke(window, "PointerMove", new Point(size / 2, size / 2 - WheelWindow.OuterLabelRadius));
+                SetField(window, "_dwellStarted", Environment.TickCount64 - (long)WheelWindow.DwellMs - 1);
+                Invoke(window, "DwellTick");
+                SetField(window, "_innerHighlight", 1);
+
+                Invoke(window, "PointerMove", new Point(size / 2, size / 2));
+
+                Assert.Equal(1, Field<int>(window, "_innerHighlight"));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
     public void The_inner_ring_never_waits_visibly_or_exceeds_its_motion_budget()
     {
         // Owner's budget: a short 450 ms dwell with a visible progress arc, entrance <= 120 ms,

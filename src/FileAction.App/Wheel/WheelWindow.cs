@@ -1503,9 +1503,7 @@ internal sealed class WheelWindow : Window
         if (hit.Zone == WheelZone.Hub && _innerGroupId is not null && _innerChoices.Count > 0)
         {
             zone = WheelZone.Inner;
-            index = _innerHighlight >= 0 && _innerHighlight < _innerChoices.Count
-                ? _innerHighlight
-                : InnerHoverIndex(AngleAt(point), _innerChoices.Count, -1);
+            index = HubIndex(_innerHighlight, _innerChoices.Count, AngleAt(point), RadiusAt(point));
         }
         var overChild = zone == WheelZone.Inner && index >= 0 && index < _innerChoices.Count && !_innerChoices[index].IsMore;
         var overSlice = zone == WheelZone.Outer && index >= 0 && index < _ops.Count;
@@ -1560,9 +1558,7 @@ internal sealed class WheelWindow : Window
         if (hit.Zone == WheelZone.Hub && _innerGroupId is not null && _innerChoices.Count > 0)
         {
             zone = WheelZone.Inner;
-            index = _innerHighlight >= 0 && _innerHighlight < _innerChoices.Count
-                ? _innerHighlight
-                : InnerHoverIndex(AngleAt(point), _innerChoices.Count, -1);
+            index = HubIndex(_innerHighlight, _innerChoices.Count, AngleAt(point), RadiusAt(point));
         }
         else if (hit.Zone == WheelZone.Inner && _innerHighlight >= 0 && _innerHighlight < _innerChoices.Count)
         {
@@ -1754,6 +1750,23 @@ internal sealed class WheelWindow : Window
     }
 
     /// <summary>
+    /// Hub target: at the exact centre the already highlighted child stays selected (the centre belongs
+    /// to the inner ring); away from the centre the nearest child under the pointer wins. Shared by Click
+    /// and Drag mode.
+    /// </summary>
+    internal static int HubIndex(int current, int count, double angle, double radius)
+    {
+        if (count <= 0)
+            return -1;
+        if (radius <= 10 && current >= 0 && current < count)
+            return current;
+        return InnerHoverIndex(angle, count, current);
+    }
+
+    internal static double RadiusAt(Point point) =>
+        Math.Sqrt(Math.Pow(point.X - Size / 2, 2) + Math.Pow(point.Y - Size / 2, 2));
+
+    /// <summary>
     /// The single hover rule of the two-ring wheel, shared by Click and Drag mode: outer slices dwell
     /// for <see cref="DwellMs"/> when no ring is open; once it is open, moving to another category swaps
     /// immediately; over the inner ring the child under the pointer is highlighted and the category
@@ -1845,7 +1858,7 @@ internal sealed class WheelWindow : Window
                 // Crossing the hub is how the pointer reaches the far side of the small inner ring.
                 // Follow the nearest child only inside the hub; the shadow pad outside the disc clears.
                 SetInnerHighlight(hit.Zone == WheelZone.Hub && _innerGroupId is not null
-                    ? InnerHoverIndex(AngleAt(point), _innerChoices.Count, _innerHighlight)
+                    ? HubIndex(_innerHighlight, _innerChoices.Count, AngleAt(point), RadiusAt(point))
                     : -1);
                 // Keep the open category highlighted while crossing the hub; only a closed wheel
                 // clears the outer highlight.
