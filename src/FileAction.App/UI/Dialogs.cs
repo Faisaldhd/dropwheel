@@ -13,30 +13,32 @@ internal static class Dialogs
         LanguageManager.IsRtl ? MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign : MessageBoxOptions.None;
 
     public static MessageBoxResult Show(string text, string title,
-        MessageBoxButton buttons = MessageBoxButton.OK, MessageBoxImage image = MessageBoxImage.None)
+        MessageBoxButton buttons = MessageBoxButton.OK, MessageBoxImage image = MessageBoxImage.None,
+        MessageBoxResult defaultResult = MessageBoxResult.None)
     {
         try
         {
-            return MessageBox.Show(text, title, buttons, image, MessageBoxResult.None, Direction);
+            return MessageBox.Show(text, title, buttons, image, defaultResult, Direction);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
-            return MessageBox.Show(text, title, buttons, image);
+            return MessageBox.Show(text, title, buttons, image, defaultResult);
         }
     }
 
     public static MessageBoxResult Show(Window? owner, string text, string title,
-        MessageBoxButton buttons = MessageBoxButton.OK, MessageBoxImage image = MessageBoxImage.None)
+        MessageBoxButton buttons = MessageBoxButton.OK, MessageBoxImage image = MessageBoxImage.None,
+        MessageBoxResult defaultResult = MessageBoxResult.None)
     {
         if (owner is null)
-            return Show(text, title, buttons, image);
+            return Show(text, title, buttons, image, defaultResult);
         try
         {
-            return MessageBox.Show(owner, text, title, buttons, image, MessageBoxResult.None, Direction);
+            return MessageBox.Show(owner, text, title, buttons, image, defaultResult, Direction);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
-            return MessageBox.Show(owner, text, title, buttons, image);
+            return MessageBox.Show(owner, text, title, buttons, image, defaultResult);
         }
     }
 }

@@ -35,9 +35,11 @@ internal sealed class EditPhotosView
     private readonly Grid _previewHost = new() { ClipToBounds = true };
     private readonly WpfImage _imageView = new()
     {
-        Stretch = Stretch.Uniform,
+        Stretch = Stretch.Fill,
         IsHitTestVisible = false,
         Visibility = Visibility.Collapsed,
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center,
     };
 
     private Border? _placeholder;
@@ -163,6 +165,7 @@ internal sealed class EditPhotosView
         _previewHost.Children.Add(_originalBadge);
         _previewHost.Children.Add(_busy);
         _previewHost.Children.Add(compare);
+        _previewHost.SizeChanged += (_, _) => LayoutPreview();
         MediaSurface.Round(_previewHost);
 
         // Hold anywhere on the preview to see the original while pressed.
@@ -233,6 +236,7 @@ internal sealed class EditPhotosView
         {
             _imageView.Source = bitmap;
             _imageView.Visibility = Visibility.Visible;
+            LayoutPreview();
             if (_placeholder is not null)
                 _placeholder.Visibility = Visibility.Collapsed;
         }
@@ -246,6 +250,20 @@ internal sealed class EditPhotosView
             if (_comparePill.Child is TextBlock label)
                 label.Foreground = original ? Theme.TextOnAccent : Theme.Text;
         }
+    }
+
+    /// <summary>
+    /// Sizes the bitmap at its fitted 1x–2x scale and lets the Grid centre it, so a tiny photo keeps its
+    /// pixels and the rest of the card is letterboxing instead of a stretched bitmap.
+    /// </summary>
+    private void LayoutPreview()
+    {
+        if (_imageView.Source is not BitmapSource bitmap)
+            return;
+        var fit = PreviewFit.Fit(
+            _previewHost.ActualWidth, _previewHost.ActualHeight, bitmap.PixelWidth, bitmap.PixelHeight);
+        _imageView.Width = fit.Width;
+        _imageView.Height = fit.Height;
     }
 
     private void ShowFailure(string message, Exception? error = null)

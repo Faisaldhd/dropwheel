@@ -765,7 +765,11 @@ internal sealed class AnnotationSurface : FrameworkElement
         return true;
     }
 
-    /// <summary>The image's scale and top-left corner inside the element, leaving room for the handles.</summary>
+    /// <summary>
+    /// The image's scale and top-left corner inside the element, leaving room for the handles. The bitmap
+    /// is fitted and capped at 200% of its pixels, so a tiny image is centred and letterboxed instead of
+    /// being stretched across the whole surface.
+    /// </summary>
     private bool TryGetTransform(out double scale, out double originX, out double originY)
     {
         scale = 1;
@@ -779,7 +783,8 @@ internal sealed class AnnotationSurface : FrameworkElement
         if (ActualWidth <= 1 || ActualHeight <= 1)
             return false;
 
-        scale = Math.Min(availableWidth / _imageWidth, availableHeight / _imageHeight);
+        var fit = PreviewFit.Fit(availableWidth, availableHeight, _imageWidth, _imageHeight);
+        scale = fit.Scale;
         if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0)
             scale = 1;
         originX = (ActualWidth - _imageWidth * scale) / 2;
