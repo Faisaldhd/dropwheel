@@ -71,7 +71,15 @@ internal static class WheelCategories
                 slices.Add(new WheelGroupOperation(definition, children[0], children));
             }
         }
-        slices.AddRange(unmatched);
+        // Everything that has no category of its own still gets a ring, under "Other", so every
+        // outer slice opens an inner ring instead of a few direct slices behaving differently.
+        if (unmatched.Count >= 1)
+        {
+            var definition = new WheelGroupDefinition(
+                "category.other", unmatched[0].Id, unmatched.Select(item => item.Id).ToArray(),
+                "wheel.category.other");
+            slices.Add(new WheelGroupOperation(definition, unmatched[0], unmatched));
+        }
         return slices;
     }
 }

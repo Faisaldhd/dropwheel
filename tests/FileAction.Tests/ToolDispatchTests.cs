@@ -113,6 +113,13 @@ public class ToolDispatchTests
     }
 
     [Fact]
+    public void Every_tools_slice_opens_an_inner_ring()
+    {
+        var slices = WheelSlices();
+        Assert.All(slices, slice => Assert.IsType<WheelGroupOperation>(slice));
+    }
+
+    [Fact]
     public void Remove_background_is_a_reachable_interactive_tool()
     {
         var operation = WheelGroups.Flatten(WheelSlices()).Single(candidate => candidate.Id == "tools.removebackground");
