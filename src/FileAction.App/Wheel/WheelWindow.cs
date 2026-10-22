@@ -262,6 +262,7 @@ internal sealed class WheelWindow : Window
     private WheelKind _wheel;
     private int _highlight = -1;
     private int _innerHighlight = -1;
+    private Point _lastPointer;
     private Win32.POINT _anchor;
     private bool _finished;
     private bool _repeat;
@@ -1415,7 +1416,8 @@ internal sealed class WheelWindow : Window
         CancelSwapDwell();
         if (_finished || _switching || _innerGroupId is null || index < 0 || index >= _ops.Count)
             return;
-        var hit = HitAt(Mouse.GetPosition(_canvas));
+        // During an OLE drag Mouse.GetPosition can stay stale; use the last DragOver point instead.
+        var hit = HitAt(_lastPointer);
         if (hit.Zone != WheelZone.Outer || hit.Index != index)
             return;
         if (_ops[index] is not WheelGroupOperation group || group.GroupId == _innerGroupId)
@@ -1750,6 +1752,7 @@ internal sealed class WheelWindow : Window
     {
         if (_finished || _switching)
             return;
+        _lastPointer = point;
         var hit = HitAt(point);
         switch (hit.Zone)
         {
