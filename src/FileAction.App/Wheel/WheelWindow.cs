@@ -1485,9 +1485,10 @@ internal sealed class WheelWindow : Window
     {
         e.Handled = true;
         var point = e.GetPosition(_canvas);
-        if (!_finished && KeepsInnerRing(HitAt(point).Zone))
+        if (!_finished && (KeepsInnerRing(HitAt(point).Zone) || InsideCanvas(point)))
         {
             // Drag churn inside the disc: refresh the hover instead of throwing away the dwell.
+            // InsideCanvas also covers the transparent shadow pad, which OLE reports as a leave.
             PointerMove(point);
             return;
         }
@@ -1523,7 +1524,12 @@ internal sealed class WheelWindow : Window
         // DragOver and the pointer can no longer reach the inner ring. Keep the effect alive over the hub
         // while a category is open; the drop still does nothing until it reaches a child.
         var overHub = hit.Zone == WheelZone.Hub && _innerGroupId is not null;
-        e.Effects = overChild || overSlice || overHub ? SafeEffect(e.AllowedEffects) : DragDropEffects.None;
+        // Never report None anywhere inside the disc while a category is open: OLE stops feeding
+        // DragOver after one None, which is exactly what broke dragging through the centre hub.
+        var keepDragging = _innerGroupId is not null && InsideCanvas(point);
+        e.Effects = overChild || overSlice || overHub || keepDragging
+            ? SafeEffect(e.AllowedEffects)
+            : DragDropEffects.None;
     }
 
     /// <summary>
@@ -1827,6 +1833,10 @@ internal sealed class WheelWindow : Window
     /// Escape/deactivation) may clear it.
     /// </summary>
     internal static bool KeepsInnerRing(WheelZone zone) => zone != WheelZone.None;
+
+    /// <summary>True anywhere in the window canvas, including the transparent shadow pad.</summary>
+    internal static bool InsideCanvas(Point point) =>
+        point.X >= 0 && point.Y >= 0 && point.X <= Size && point.Y <= Size;
 
     private readonly record struct Hit(WheelZone Zone, int Index);
 
