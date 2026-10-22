@@ -1804,25 +1804,44 @@ internal sealed class WheelWindow : Window
                 SetInnerHighlight(-1);
                 if (hit.Index != _suppressIndex)
                     _suppressIndex = -1;
-                SetHighlight(hit.Index);
-                if (_innerGroupId is { } open && hit.Index >= 0 && hit.Index < _ops.Count && _ops[hit.Index] is WheelGroupOperation group)
+                if (_innerGroupId is { } open)
                 {
                     CancelDwell();
-                    if (ShouldSwap(innerOpen: true, sameCategory: group.GroupId == open))
-                        BeginSwapDwell(hit.Index);
+                    if (hit.Index >= 0 && hit.Index < _ops.Count && _ops[hit.Index] is WheelGroupOperation group)
+                    {
+                        if (group.GroupId == open)
+                        {
+                            // Already on the open category: only the outer highlight follows.
+                            SetHighlight(hit.Index);
+                            CancelSwapDwell();
+                        }
+                        else
+                        {
+                            // Do not move the highlight to the candidate yet. Keep the old category
+                            // highlighted until the 180 ms rest actually commits the swap; passing over
+                            // another slice on the way to the inner ring must not leave a stale ring.
+                            BeginSwapDwell(hit.Index);
+                        }
+                    }
                     else
+                    {
                         CancelSwapDwell();
-                }
-                else if (hit.Index >= 0 && hit.Index < _ops.Count && _ops[hit.Index] is WheelGroupOperation
-                    && ShouldDwell(innerOpen: false, sameCategory: false, suppressed: hit.Index == _suppressIndex))
-                {
-                    CancelSwapDwell();
-                    BeginDwell(hit.Index);
+                    }
                 }
                 else
                 {
-                    CancelDwell();
-                    CancelSwapDwell();
+                    SetHighlight(hit.Index);
+                    if (hit.Index >= 0 && hit.Index < _ops.Count && _ops[hit.Index] is WheelGroupOperation
+                        && ShouldDwell(innerOpen: false, sameCategory: false, suppressed: hit.Index == _suppressIndex))
+                    {
+                        CancelSwapDwell();
+                        BeginDwell(hit.Index);
+                    }
+                    else
+                    {
+                        CancelDwell();
+                        CancelSwapDwell();
+                    }
                 }
                 break;
             default:
@@ -1833,7 +1852,10 @@ internal sealed class WheelWindow : Window
                 SetInnerHighlight(hit.Zone == WheelZone.Hub && _innerGroupId is not null
                     ? InnerHoverIndex(AngleAt(point), _innerChoices.Count, _innerHighlight)
                     : -1);
-                SetHighlight(-1);
+                // Keep the open category highlighted while crossing the hub; only a closed wheel
+                // clears the outer highlight.
+                if (_innerGroupId is null)
+                    SetHighlight(-1);
                 break;
         }
     }
