@@ -1512,6 +1512,32 @@ public class LockSafetyTests
         }
     }
     [Fact]
+    public void Folder_unprotects_with_the_rescuer_password()
+    {
+        var directory = NewDirectory();
+        try
+        {
+            var folder = Path.Combine(directory, "Tree");
+            Directory.CreateDirectory(folder);
+            WriteFile(Path.Combine(folder, "keep.txt"), "keep");
+            var container = Path.Combine(directory, "Tree.dwdir");
+            var service = NewService();
+            var credentials = Credentials();
+            service.ProtectTo(folder, container, credentials, keepSource: true);
+            Directory.Delete(folder, recursive: true);
+
+            var restored = service.Unprotect(container, credentials.RescuerPassword, recycleContainer: false);
+            Assert.True(Directory.Exists(restored.RestoredPath));
+            Assert.Equal("keep", File.ReadAllText(Path.Combine(restored.RestoredPath, "keep.txt")));
+            Assert.False(File.Exists(container));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
     public void Relock_keeps_a_rescuer_password_changed_during_the_session()
     {
         var directory = NewDirectory();
