@@ -370,6 +370,17 @@ internal sealed class WheelWindow : Window
             if (Mode == WheelMode.Click && !_finished && !KeepsInnerRing(HitAt(Mouse.GetPosition(_canvas)).Zone))
                 ClearInner();
         };
+        // Right-click anywhere on the wheel is a full cancel: outer and inner rings close, and nothing runs.
+        PreviewMouseRightButtonDown += (_, e) =>
+        {
+            e.Handled = true;
+            if (_finished)
+                return;
+            CancelDwell();
+            CancelSwapDwell();
+            ClearInner(animate: false);
+            Finish();
+        };
         MouseLeftButtonUp += OnClick;
         // Pressed micro-scale (90 ms): confirms the pointer landed on the slice before the action runs.
         PreviewMouseLeftButtonDown += (_, _) => PressHighlight(true);
