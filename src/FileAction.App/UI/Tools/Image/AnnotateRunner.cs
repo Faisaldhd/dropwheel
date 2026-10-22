@@ -76,7 +76,7 @@ internal static class AnnotateRunner
         // a GIF with only frame 1 left. The view shows that conversion as a note before Apply.
         var format = ImageOutput.StillFormatFor(Formats.Normalize(item.Format));
         var baseName = $"{item.BaseName} {T("tool.annotate.suffix")}";
-        return await ImageOutput.WriteAtomicAsync(outputDirectory, baseName, format, target => Task.Run(() =>
+        return await ImageOutput.WriteAtomicFuncAsync(outputDirectory, baseName, format, target => Task.Run(() =>
         {
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(rendered));

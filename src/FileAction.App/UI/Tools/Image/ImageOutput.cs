@@ -101,6 +101,14 @@ internal static class ImageOutput
     public static Task<string> WriteAtomicAsync(string directory, string baseName, string extension, Action<string> write) =>
         OutputPaths.ProduceAsync(directory, baseName, extension, temporary => Task.Run(() => write(temporary)));
 
+    /// <summary>
+    /// Async atomic write. The producer is awaited before the temporary file is moved, so a writer
+    /// that starts a Task no longer returns "no output" and leaves a .part file behind.
+    /// </summary>
+    public static Task<string> WriteAtomicFuncAsync(string directory, string baseName, string extension,
+        Func<string, Task> write) =>
+        OutputPaths.ProduceAsync(directory, baseName, extension, write);
+
     /// <summary>Blocking form for runners that are already called from a worker thread.</summary>
     public static string WriteAtomic(string directory, string baseName, string extension, Action<string> write) =>
         WriteAtomicAsync(directory, baseName, extension, write).GetAwaiter().GetResult();
