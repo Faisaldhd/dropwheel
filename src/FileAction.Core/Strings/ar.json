@@ -109,7 +109,7 @@
   "tool.crop.width": "العرض",
   "tool.crop.height": "الارتفاع",
   "tool.crop.suffix": "مقصوصة",
-  "tool.protect.label": "حماية",
+  "tool.protect.label": "حماية WinRAR",
   "tool.protect.title": "الحماية بكلمة مرور",
   "tool.protect.subtitle": "تشفير AES-256",
   "tool.protect.intro": "أنشئ نسخة محمية بكلمة مرور. لا يتغير الملف الأصلي.",

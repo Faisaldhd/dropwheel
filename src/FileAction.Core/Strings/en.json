@@ -109,7 +109,7 @@
   "tool.crop.width": "W",
   "tool.crop.height": "H",
   "tool.crop.suffix": "Cropped",
-  "tool.protect.label": "Protect",
+  "tool.protect.label": "WinRAR protect",
   "tool.protect.title": "Password protection",
   "tool.protect.subtitle": "AES-256",
   "tool.protect.intro": "Create a password-protected copy. The original file is not changed.",
