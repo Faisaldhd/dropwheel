@@ -262,6 +262,7 @@ internal sealed class WheelWindow : Window
     private WheelKind _wheel;
     private int _highlight = -1;
     private int _innerHighlight = -1;
+    private Point _lastPointer;
     private Win32.POINT _anchor;
     private bool _finished;
     private bool _repeat;
@@ -1098,6 +1099,12 @@ internal sealed class WheelWindow : Window
     private void SwapInnerChildren(double fromAngle)
     {
         StopInnerStoryboard();
+        // A rapid second category change can interrupt a held fade at opacity 0. Reset both layers
+        // before rebuilding; otherwise the ring can stay invisible until the pointer leaves and re-enters.
+        _innerLayer.BeginAnimation(OpacityProperty, null);
+        _innerLayer.Opacity = 1;
+        _innerFadeLayer.BeginAnimation(OpacityProperty, null);
+        _innerFadeLayer.Opacity = 1;
         _innerFadeLayer.Children.Clear();
         while (_innerLayer.Children.Count > 0)
         {
@@ -1108,51 +1115,10 @@ internal sealed class WheelWindow : Window
         _innerScale.ScaleX = 1;
         _innerScale.ScaleY = 1;
         BuildInner();
-        if (_innerGroups.Count == 0)
-        {
-            _innerFadeLayer.Children.Clear();
-            _innerFadeLayer.BeginAnimation(OpacityProperty, null);
-            _innerFadeLayer.Opacity = 1;
-            SettleInner();
-            return;
-        }
-        if (!Motion.Enabled || !IsVisible)
-        {
-            SettleInner();
-            _innerFadeLayer.Children.Clear();
-            return;
-        }
-
-        // First frame after a swap: the old ring is still visible while it fades, and the new ring is
-        // built underneath at opacity 0 so the two label sets never overlap. It starts at 45 ms.
-        _innerLayer.Opacity = 0;
-        var storyboard = new Storyboard();
-        var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(InnerSwapOutMs))
-        {
-            EasingFunction = Motion.EaseIn,
-            FillBehavior = FillBehavior.HoldEnd,
-        };
-        Target(storyboard, _innerFadeLayer, UIElement.OpacityProperty, fadeOut);
-        var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(InnerSwapInMs))
-        {
-            BeginTime = TimeSpan.FromMilliseconds(InnerSwapOutMs),
-            EasingFunction = Motion.EaseOut,
-            FillBehavior = FillBehavior.HoldEnd,
-        };
-        Target(storyboard, _innerLayer, UIElement.OpacityProperty, fadeIn);
-        storyboard.Completed += (_, _) =>
-        {
-            if (!ReferenceEquals(_innerStoryboard, storyboard))
-                return;
-            _innerStoryboard = null;
-            _innerFadeLayer.Children.Clear();
-            _innerFadeLayer.BeginAnimation(OpacityProperty, null);
-            _innerFadeLayer.Opacity = 1;
-            _innerLayer.BeginAnimation(OpacityProperty, null);
-            _innerLayer.Opacity = 1;
-        };
-        _innerStoryboard = storyboard;
-        storyboard.Begin(_canvas, true);
+        // Swap is intentionally instant: an interrupted 45/55 ms fade could leave the ring at opacity 0
+        // until the pointer left and re-entered. Correct contents matter more than the micro-transition.
+        _innerFadeLayer.Children.Clear();
+        SettleInner();
     }
 
     /// <summary>
@@ -1450,7 +1416,8 @@ internal sealed class WheelWindow : Window
         CancelSwapDwell();
         if (_finished || _switching || _innerGroupId is null || index < 0 || index >= _ops.Count)
             return;
-        var hit = HitAt(Mouse.GetPosition(_canvas));
+        // During an OLE drag Mouse.GetPosition can stay stale; use the last DragOver point instead.
+        var hit = HitAt(_lastPointer);
         if (hit.Zone != WheelZone.Outer || hit.Index != index)
             return;
         if (_ops[index] is not WheelGroupOperation group || group.GroupId == _innerGroupId)
@@ -1785,6 +1752,7 @@ internal sealed class WheelWindow : Window
     {
         if (_finished || _switching)
             return;
+        _lastPointer = point;
         var hit = HitAt(point);
         switch (hit.Zone)
         {
@@ -1798,25 +1766,44 @@ internal sealed class WheelWindow : Window
                 SetInnerHighlight(-1);
                 if (hit.Index != _suppressIndex)
                     _suppressIndex = -1;
-                SetHighlight(hit.Index);
-                if (_innerGroupId is { } open && hit.Index >= 0 && hit.Index < _ops.Count && _ops[hit.Index] is WheelGroupOperation group)
+                if (_innerGroupId is { } open)
                 {
                     CancelDwell();
-                    if (ShouldSwap(innerOpen: true, sameCategory: group.GroupId == open))
-                        BeginSwapDwell(hit.Index);
+                    if (hit.Index >= 0 && hit.Index < _ops.Count && _ops[hit.Index] is WheelGroupOperation group)
+                    {
+                        if (group.GroupId == open)
+                        {
+                            // Already on the open category: only the outer highlight follows.
+                            SetHighlight(hit.Index);
+                            CancelSwapDwell();
+                        }
+                        else
+                        {
+                            // Do not move the highlight to the candidate yet. Keep the old category
+                            // highlighted until the 180 ms rest actually commits the swap; passing over
+                            // another slice on the way to the inner ring must not leave a stale ring.
+                            BeginSwapDwell(hit.Index);
+                        }
+                    }
                     else
+                    {
                         CancelSwapDwell();
-                }
-                else if (hit.Index >= 0 && hit.Index < _ops.Count && _ops[hit.Index] is WheelGroupOperation
-                    && ShouldDwell(innerOpen: false, sameCategory: false, suppressed: hit.Index == _suppressIndex))
-                {
-                    CancelSwapDwell();
-                    BeginDwell(hit.Index);
+                    }
                 }
                 else
                 {
-                    CancelDwell();
-                    CancelSwapDwell();
+                    SetHighlight(hit.Index);
+                    if (hit.Index >= 0 && hit.Index < _ops.Count && _ops[hit.Index] is WheelGroupOperation
+                        && ShouldDwell(innerOpen: false, sameCategory: false, suppressed: hit.Index == _suppressIndex))
+                    {
+                        CancelSwapDwell();
+                        BeginDwell(hit.Index);
+                    }
+                    else
+                    {
+                        CancelDwell();
+                        CancelSwapDwell();
+                    }
                 }
                 break;
             default:
@@ -1827,7 +1814,10 @@ internal sealed class WheelWindow : Window
                 SetInnerHighlight(hit.Zone == WheelZone.Hub && _innerGroupId is not null
                     ? InnerHoverIndex(AngleAt(point), _innerChoices.Count, _innerHighlight)
                     : -1);
-                SetHighlight(-1);
+                // Keep the open category highlighted while crossing the hub; only a closed wheel
+                // clears the outer highlight.
+                if (_innerGroupId is null)
+                    SetHighlight(-1);
                 break;
         }
     }

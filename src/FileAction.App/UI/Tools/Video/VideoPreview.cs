@@ -39,7 +39,7 @@ internal sealed class VideoEditPreview : IDisposable
     private readonly TextBlock _playNoteText;
 
     private CancellationTokenSource _seekCts = new();
-    private MediaPlayer? _player;
+    private MediaElement? _player;
     private DispatcherTimer? _playTimer;
     private TimeSpan _playStart;
     private TimeSpan _playEnd;
@@ -340,7 +340,7 @@ internal sealed class VideoEditPreview : IDisposable
 
     private async Task<bool> EnablePlaybackCoreAsync(TimeSpan start, TimeSpan end)
     {
-        if (_ffmpeg is null || Info is null || !IsPlayableFormat(_item.Format) || _playbackUnavailable)
+        if (Info is null || !IsPlayableFormat(_item.Format) || _playbackUnavailable)
             return false;
         if (_player is not null)
         {
@@ -352,22 +352,39 @@ internal sealed class VideoEditPreview : IDisposable
             return false;
 
         _openingPlayback = true;
+        MediaElement? media = null;
         try
         {
-            var player = new MediaPlayer { Volume = 0.7 };
+            // MediaPlayer has no visual output; a MediaElement is the surface that actually shows the
+            // moving frames. It is inserted over the first-frame Image and hidden until it opens.
+            media = new MediaElement
+            {
+                LoadedBehavior = MediaState.Manual,
+                UnloadedBehavior = MediaState.Manual,
+                ScrubbingEnabled = true,
+                Stretch = Stretch.Uniform,
+                Volume = 0.7,
+                Visibility = Visibility.Collapsed,
+                IsHitTestVisible = false,
+            };
+            _surface.Children.Insert(1, media);
             var opened = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            player.MediaOpened += (_, _) => opened.TrySetResult(true);
-            player.MediaFailed += (_, _) => opened.TrySetResult(false);
-            player.Open(new Uri(_item.Path, UriKind.Absolute));
+            media.MediaOpened += (_, _) => opened.TrySetResult(true);
+            media.MediaFailed += (_, _) => opened.TrySetResult(false);
+            media.Source = new Uri(_item.Path, UriKind.Absolute);
 
-            var winner = await Task.WhenAny(opened.Task, Task.Delay(3000));
+            var winner = await Task.WhenAny(opened.Task, Task.Delay(4000));
             if (winner != opened.Task || !await opened.Task || _disposed)
             {
-                player.Close();
+                media.Close();
+                _surface.Children.Remove(media);
                 return false;
             }
 
-            _player = player;
+            _player = media;
+            _image.Visibility = Visibility.Collapsed;
+            media.Visibility = Visibility.Visible;
+            media.Position = VideoEdit.Clamp(start, Info.Duration);
             _playStart = start;
             _playEnd = end;
             _playTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
@@ -376,6 +393,9 @@ internal sealed class VideoEditPreview : IDisposable
         }
         catch (Exception)
         {
+            media?.Close();
+            if (media is not null)
+                _surface.Children.Remove(media);
             return false;
         }
         finally

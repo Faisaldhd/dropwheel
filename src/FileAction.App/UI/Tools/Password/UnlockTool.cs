@@ -44,13 +44,6 @@ internal sealed class UnlockTool : IToolWindowSpec
         new UnlockView(items[0], targets).Build();
 }
 
-/// <summary>Registers the tool from its own file, so no shared list has to be edited.</summary>
-internal static class UnlockToolRegistration
-{
-    [ModuleInitializer]
-    internal static void Register() => ToolRegistry.Register(UnlockTool.Instance);
-}
-
 /// <summary>"Unlock" on the Tools wheel: opens the password window instead of starting a job.</summary>
 internal sealed class UnlockOperation : Operation, IInteractiveTool
 {
