@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -118,14 +120,21 @@ internal sealed class LockOpenWindow : Window
         }
     }
 
-    private void RemoveProtection()
+    private async void RemoveProtection()
     {
         if (Dialogs.Show(this, T("tool.lock.removeConfirm.body", Bidi.Value(LockPaths.DisplayName(_path))),
-                T("tool.lock.removeConfirm.title"), MessageBoxButton.YesNo, MessageBoxImage.Warning) !=
-            MessageBoxResult.Yes)
+                T("tool.lock.removeConfirm.title"), MessageBoxButton.YesNo, MessageBoxImage.Warning,
+                MessageBoxResult.No) != MessageBoxResult.Yes)
             return;
         try
         {
+            // If the item is open in a session, relock and close that session first; otherwise
+            // Unprotect refuses with "Lock this file first" after a just-opened file.
+            if (!await LockRuntime.Sessions.CloseForRemovalAsync(_path))
+            {
+                _error.Text = T("tool.lock.error.openSession");
+                return;
+            }
             var outcome = LockRuntime.Service.Unprotect(_path, _secret.Text,
                 LockRuntime.Settings.RecycleContainerAfterUnlock);
             LockIconCache.RemoveItem(outcome.RestoredPath);
@@ -133,12 +142,25 @@ internal sealed class LockOpenWindow : Window
             if (!outcome.ContainerRemoved)
                 text += Environment.NewLine + T("tool.lock.removeLeftover", Bidi.Value(outcome.ContainerError ?? ""));
             Dialogs.Show(this, text, T("tool.lock.title"), MessageBoxButton.OK, MessageBoxImage.Information);
+            OpenRestored(outcome.RestoredPath);
             Close();
         }
         catch (Exception ex) when (ex is LockException or IOException or UnauthorizedAccessException
                                        or LockPolicyException or ArgumentException)
         {
             _error.Text = LockRuntime.Describe(ex);
+        }
+    }
+
+    private static void OpenRestored(string path)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
+        {
+            // The file is already restored; a missing default handler is not a lock failure.
         }
     }
 }

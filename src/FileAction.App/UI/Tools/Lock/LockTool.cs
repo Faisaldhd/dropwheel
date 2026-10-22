@@ -709,8 +709,8 @@ internal sealed class LockUnlockView
     {
         var owner = Window.GetWindow(_root);
         if (Dialogs.Show(owner, T("tool.lock.removeConfirm.body", Bidi.Value(LockPaths.DisplayName(_item.Path))),
-                T("tool.lock.removeConfirm.title"), MessageBoxButton.YesNo, MessageBoxImage.Warning) !=
-            MessageBoxResult.Yes)
+                T("tool.lock.removeConfirm.title"), MessageBoxButton.YesNo, MessageBoxImage.Warning,
+                MessageBoxResult.No) != MessageBoxResult.Yes)
             return;
         try
         {
