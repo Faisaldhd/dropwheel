@@ -1609,8 +1609,8 @@ internal sealed class WheelWindow : Window
         switch (hit.Zone)
         {
             case WheelZone.Hub:
-                // The hub is a crossing pad, not a button. Clicking it does nothing; Escape or a
-                // click outside the wheel is the way out.
+                // The hub is a crossing pad, not a button: it navigates the inner ring but a click
+                // there runs nothing. Escape or a click outside the wheel is the way out.
                 break;
             case WheelZone.Inner when hit.Index >= 0 && hit.Index < _innerChoices.Count:
                 // Match the sticky hover: the child the user sees highlighted is the child that runs.
@@ -1822,6 +1822,24 @@ internal sealed class WheelWindow : Window
                 }
                 break;
             default:
+                if (hit.Zone is WheelZone.Inner or WheelZone.Hub)
+                {
+                    // Moving inward commits work that was still on a timer: a pending category swap
+                    // must not leave the previous category's children under the pointer, and a pending
+                    // first open must not be cancelled just because the user headed for the centre.
+                    if (_swapIndex >= 0)
+                    {
+                        var swap = _swapIndex;
+                        CancelSwapDwell();
+                        SwapInner(swap, SliceAngle(swap, _ops.Count));
+                    }
+                    else if (_dwellIndex >= 0)
+                    {
+                        var pendingOpen = _dwellIndex;
+                        CancelDwell();
+                        OpenInner(pendingOpen, SliceAngle(pendingOpen, _ops.Count));
+                    }
+                }
                 CancelDwell();
                 CancelSwapDwell();
                 // Crossing the hub is how the pointer reaches the far side of the small inner ring.
