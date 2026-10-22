@@ -67,6 +67,22 @@ public class RevealCommandTests
         }
     }
 
+    [Theory]
+    [InlineData("report.pdf", true)]
+    [InlineData("letter.docx", true)]
+    [InlineData("photo.PNG", true)]
+    [InlineData("notes.txt", true)]
+    [InlineData("setup.exe", false)]
+    [InlineData("run.bat", false)]
+    [InlineData("script.ps1", false)]
+    [InlineData("shortcut.lnk", false)]
+    [InlineData("invoice.pdf.exe", false)]
+    [InlineData("page.url", false)]
+    public void Only_documents_and_images_open_automatically(string name, bool safe)
+    {
+        Assert.Equal(safe, LockOpenWindow.OpensSafely(name));
+    }
+
     private static string NewRoot()
     {
         var path = Path.Combine(Path.GetTempPath(), "dw-reveal-" + Guid.NewGuid().ToString("N"));

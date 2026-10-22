@@ -161,12 +161,27 @@ internal sealed class LockOpenWindow : Window
         return ("explorer.exe", isFolder ? $"\"{folder}\"" : $"/select,\"{path}\"");
     }
 
+    /// <summary>
+    /// Documents and still images are opened with their registered handler; anything else — especially
+    /// .exe/.bat/.ps1/.lnk — is only revealed in Explorer and never executed.
+    /// </summary>
+    internal static bool OpensSafely(string path) =>
+        Path.GetExtension(path).ToLowerInvariant() is
+            ".pdf" or ".doc" or ".docx" or ".xls" or ".xlsx" or ".ppt" or ".pptx" or
+            ".odt" or ".ods" or ".odp" or ".rtf" or ".txt" or
+            ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp" or ".tif" or ".tiff" or
+            ".heic" or ".avif" or ".svg";
+
     private static void OpenRestored(string path)
     {
         try
         {
-            // Never execute a restored file: a .exe/.bat/.ps1/.lnk could run. Reveal it in Explorer,
-            // selected, and let the user decide what to open.
+            if (!Directory.Exists(path) && OpensSafely(path))
+            {
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                return;
+            }
+
             var (fileName, arguments) = RevealCommand(path);
             if (arguments.Length == 0)
                 return;
@@ -174,7 +189,7 @@ internal sealed class LockOpenWindow : Window
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
         {
-            // The file is already restored; failing to reveal it is not a lock failure.
+            // The file is already restored; failing to open/reveal it is not a lock failure.
         }
     }
 }
