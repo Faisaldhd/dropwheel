@@ -490,4 +490,19 @@ public class RedactionTests
         Assert.True(RedactionText.Pad(new RedactionBox(20, 20, 40, 30), double.NaN) ==
                     new RedactionBox(20, 20, 40, 30));
     }
+
+    [Fact]
+    public void A_detected_preview_line_becomes_an_original_pixel_box()
+    {
+        // A 2x preview downscale: a line at (100, 50, 80x20) must land at (194, 94, 172x52)
+        // after a 3-preview-pixel pad, not at (100, 50, 80x20) with only the pad scaled.
+        var original = RedactionText.ToOriginalPixels(new RedactionBox(100, 50, 80, 20), 2);
+
+        Assert.Equal(194, original.X, 3);
+        Assert.Equal(94, original.Y, 3);
+        Assert.Equal(172, original.Width, 3);
+        Assert.Equal(52, original.Height, 3);
+        Assert.True(RedactionText.ToOriginalPixels(default, 2).IsEmpty);
+        Assert.True(RedactionText.ToOriginalPixels(new RedactionBox(1, 1, 2, 2), 0).IsEmpty);
+    }
 }

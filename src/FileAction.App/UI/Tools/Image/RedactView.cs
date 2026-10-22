@@ -800,8 +800,9 @@ internal sealed class RedactView
             var added = 0;
             foreach (var line in lines)
             {
-                var padded = RedactionText.Pad(line, 3 * factor);
-                var box = RedactionEditor.Create(padded.X, padded.Y, padded.Right, padded.Bottom, _imageWidth, _imageHeight);
+                var scaled = RedactionText.ToOriginalPixels(line, factor, 3);
+                var box = RedactionEditor.Create(scaled.X, scaled.Y, scaled.Right, scaled.Bottom,
+                    _imageWidth, _imageHeight);
                 if (box.IsEmpty)
                     continue;
 

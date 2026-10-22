@@ -464,4 +464,20 @@ public static class RedactionText
             return default;
         return RedactionBox.FromEdges(left, top, right, bottom);
     }
+
+    /// <summary>
+    /// Converts a detector line from preview pixels to original-image pixels. The pad is applied in
+    /// preview pixels before scaling; scaling only the pad leaves the box at preview size on a
+    /// downsampled photo, which redacts the wrong part of the image.
+    /// </summary>
+    public static RedactionBox ToOriginalPixels(RedactionBox previewBox, double factor, double padPreview = 3)
+    {
+        if (previewBox.IsEmpty || !double.IsFinite(factor) || factor <= 0)
+            return default;
+        var padded = Pad(previewBox, padPreview);
+        if (padded.IsEmpty)
+            return default;
+        return RedactionBox.FromEdges(padded.X * factor, padded.Y * factor,
+            padded.Right * factor, padded.Bottom * factor);
+    }
 }
