@@ -600,7 +600,7 @@
   "settings.updates.title": "Updates",
   "settings.updates.detail": "DropWheel checks GitHub for a signed update. Nothing is downloaded until you click Update.",
   "settings.updates.automatic.title": "Check for updates automatically",
-  "settings.updates.automatic.detail": "Once a day; it only checks. Downloading always needs a click.",
+  "settings.updates.automatic.detail": "Every 6 hours; it only checks. Downloading always needs a click.",
   "settings.updates.check": "Check for updates",
   "settings.updates.checking": "Checking for updates…",
   "settings.updates.upToDate": "You're up to date ({0})",

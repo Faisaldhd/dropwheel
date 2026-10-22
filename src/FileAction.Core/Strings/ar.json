@@ -600,7 +600,7 @@
   "settings.updates.title": "التحديثات",
   "settings.updates.detail": "يتحقق DropWheel من GitHub بحثًا عن تحديث موقّع. لا يُنزَّل أي شيء حتى تنقر على زر التحديث.",
   "settings.updates.automatic.title": "التحقّق من التحديثات تلقائيًا",
-  "settings.updates.automatic.detail": "مرة واحدة يوميًا؛ يتحقق فقط، أما التنزيل فيحتاج دائمًا إلى نقرة.",
+  "settings.updates.automatic.detail": "كل 6 ساعات؛ يتحقق فقط، أما التنزيل فيحتاج دائمًا إلى نقرة.",
   "settings.updates.check": "التحقّق من التحديثات",
   "settings.updates.checking": "جارٍ التحقق من التحديثات…",
   "settings.updates.upToDate": "لديك أحدث إصدار (⁦{0}⁩)",

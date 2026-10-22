@@ -1485,9 +1485,10 @@ internal sealed class WheelWindow : Window
     {
         e.Handled = true;
         var point = e.GetPosition(_canvas);
-        if (!_finished && KeepsInnerRing(HitAt(point).Zone))
+        if (!_finished && (KeepsInnerRing(HitAt(point).Zone) || InsideCanvas(point)))
         {
             // Drag churn inside the disc: refresh the hover instead of throwing away the dwell.
+            // InsideCanvas also covers the transparent shadow pad, which OLE reports as a leave.
             PointerMove(point);
             return;
         }
@@ -1517,13 +1518,29 @@ internal sealed class WheelWindow : Window
         var point = e.GetPosition(_canvas);
         PointerMove(point);
         var hit = HitAt(point);
-        var overChild = hit.Zone == WheelZone.Inner && hit.Index >= 0 && hit.Index < _innerChoices.Count && !_innerChoices[hit.Index].IsMore;
-        var overSlice = hit.Zone == WheelZone.Outer && hit.Index >= 0 && hit.Index < _ops.Count;
+        // The centre hub is part of the small inner ring while a category is open: it highlights the
+        // nearest child and must accept the drop on that child, not become a dead "no drop" island.
+        var zone = hit.Zone;
+        var index = hit.Index;
+        if (hit.Zone == WheelZone.Hub && _innerGroupId is not null && _innerChoices.Count > 0)
+        {
+            zone = WheelZone.Inner;
+            index = _innerHighlight >= 0 && _innerHighlight < _innerChoices.Count
+                ? _innerHighlight
+                : InnerHoverIndex(AngleAt(point), _innerChoices.Count, -1);
+        }
+        var overChild = zone == WheelZone.Inner && index >= 0 && index < _innerChoices.Count && !_innerChoices[index].IsMore;
+        var overSlice = zone == WheelZone.Outer && index >= 0 && index < _ops.Count;
         // Crossing the hub/text while dragging must not become a "no drop" island: OLE then stops feeding
         // DragOver and the pointer can no longer reach the inner ring. Keep the effect alive over the hub
         // while a category is open; the drop still does nothing until it reaches a child.
         var overHub = hit.Zone == WheelZone.Hub && _innerGroupId is not null;
-        e.Effects = overChild || overSlice || overHub ? SafeEffect(e.AllowedEffects) : DragDropEffects.None;
+        // Never report None anywhere inside the disc while a category is open: OLE stops feeding
+        // DragOver after one None, which is exactly what broke dragging through the centre hub.
+        var keepDragging = _innerGroupId is not null && InsideCanvas(point);
+        e.Effects = overChild || overSlice || overHub || keepDragging
+            ? SafeEffect(e.AllowedEffects)
+            : DragDropEffects.None;
     }
 
     /// <summary>
@@ -1558,16 +1575,27 @@ internal sealed class WheelWindow : Window
         e.Handled = true;
         var point = e.GetPosition(_canvas);
         var hit = HitAt(point);
-        // The visible hover is sticky for 8 degrees; activate exactly what is highlighted.
-        var index = hit.Zone == WheelZone.Inner && _innerHighlight >= 0 && _innerHighlight < _innerChoices.Count
-            ? _innerHighlight
-            : hit.Index;
-        var target = DropTargetAt(hit.Zone, index, _ops, _innerChoices);
+        // The visible hover is sticky for 8 degrees; activate exactly what is highlighted. Dropping on
+        // the hub while a category is open belongs to the nearest inner child.
+        var zone = hit.Zone;
+        var index = hit.Index;
+        if (hit.Zone == WheelZone.Hub && _innerGroupId is not null && _innerChoices.Count > 0)
+        {
+            zone = WheelZone.Inner;
+            index = _innerHighlight >= 0 && _innerHighlight < _innerChoices.Count
+                ? _innerHighlight
+                : InnerHoverIndex(AngleAt(point), _innerChoices.Count, -1);
+        }
+        else if (hit.Zone == WheelZone.Inner && _innerHighlight >= 0 && _innerHighlight < _innerChoices.Count)
+        {
+            index = _innerHighlight;
+        }
+        var target = DropTargetAt(zone, index, _ops, _innerChoices);
         var op = target.Operation;
         e.Effects = target.Action == DropAction.Nothing ? DragDropEffects.None : SafeEffect(e.AllowedEffects);
         // Virtual files and images can only be read while the drop is in progress.
         var content = target.Action == DropAction.Nothing ? null : DropContent.Read(e.Data, materialize: true);
-        var parentAngle = SliceAngle(Math.Max(0, index), hit.Zone == WheelZone.Inner ? _innerChoices.Count : _ops.Count);
+        var parentAngle = SliceAngle(Math.Max(0, index), zone == WheelZone.Inner ? _innerChoices.Count : _ops.Count);
         Finish();
         if (op is not null && content is { Items.Count: > 0 })
         {
@@ -1827,6 +1855,10 @@ internal sealed class WheelWindow : Window
     /// Escape/deactivation) may clear it.
     /// </summary>
     internal static bool KeepsInnerRing(WheelZone zone) => zone != WheelZone.None;
+
+    /// <summary>True anywhere in the window canvas, including the transparent shadow pad.</summary>
+    internal static bool InsideCanvas(Point point) =>
+        point.X >= 0 && point.Y >= 0 && point.X <= Size && point.Y <= Size;
 
     private readonly record struct Hit(WheelZone Zone, int Index);
 
