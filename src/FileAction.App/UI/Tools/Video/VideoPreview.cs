@@ -41,6 +41,10 @@ internal sealed class VideoEditPreview : IDisposable
     private CancellationTokenSource _seekCts = new();
     private MediaElement? _player;
     private DispatcherTimer? _playTimer;
+    private DispatcherTimer? _frameTimer;
+    private TimeSpan _framePosition;
+    private bool _frameLoading;
+    private bool _scrubPlayback;
     private TimeSpan _playStart;
     private TimeSpan _playEnd;
     private int _seekGeneration;
@@ -311,8 +315,15 @@ internal sealed class VideoEditPreview : IDisposable
     /// <summary>The shared button's first click opens the player lazily; later clicks only toggle.</summary>
     private async Task ToggleFromControlAsync()
     {
-        if (_disposed || _externalPlayback || _playbackUnavailable || _openingPlayback || Info is null)
+        if (_disposed || _externalPlayback || (_playbackUnavailable && !_scrubPlayback) ||
+            _openingPlayback || Info is null)
             return;
+
+        if (_scrubPlayback)
+        {
+            TogglePlayback();
+            return;
+        }
 
         if (_player is null)
         {
@@ -332,10 +343,12 @@ internal sealed class VideoEditPreview : IDisposable
 
     private void MarkPlaybackUnavailable()
     {
-        _playbackUnavailable = true;
-        _playButton.Visibility = Visibility.Collapsed;
-        if (!_externalPlayback)
-            _playNote.Visibility = Visibility.Visible;
+        // Media Foundation refused this file, but FFmpeg can still decode frames. Keep the play
+        // button and animate the preview from still frames (silent) instead of dead-ending at a note.
+        _scrubPlayback = true;
+        _playbackUnavailable = false;
+        _playNote.Visibility = Visibility.Collapsed;
+        _playButton.Visibility = Visibility.Visible;
     }
 
     private async Task<bool> EnablePlaybackCoreAsync(TimeSpan start, TimeSpan end)
@@ -412,7 +425,7 @@ internal sealed class VideoEditPreview : IDisposable
 
     public void TogglePlayback()
     {
-        if (_player is null || Info is null)
+        if (Info is null)
             return;
         if (IsPlaying)
         {
@@ -420,6 +433,14 @@ internal sealed class VideoEditPreview : IDisposable
             return;
         }
 
+        if (_scrubPlayback)
+        {
+            StartFramePlayback();
+            return;
+        }
+
+        if (_player is null)
+            return;
         try
         {
             _player.Position = VideoEdit.Clamp(_playStart, Info.Duration);
@@ -436,6 +457,7 @@ internal sealed class VideoEditPreview : IDisposable
     public void StopPlayback()
     {
         _playTimer?.Stop();
+        _frameTimer?.Stop();
         try
         {
             _player?.Pause();
@@ -447,6 +469,59 @@ internal sealed class VideoEditPreview : IDisposable
             return;
         IsPlaying = false;
         PlayingChanged?.Invoke(false);
+    }
+
+    private void StartFramePlayback()
+    {
+        if (Info is null)
+            return;
+        _framePosition = VideoEdit.Clamp(_playStart, Info.Duration);
+        IsPlaying = true;
+        PlayingChanged?.Invoke(true);
+        _frameTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(140) };
+        _frameTimer.Tick -= OnFrameTick;
+        _frameTimer.Tick += OnFrameTick;
+        _frameTimer.Start();
+        _ = ShowFrameAsync(_framePosition);
+    }
+
+    private async void OnFrameTick(object? sender, EventArgs e)
+    {
+        if (!IsPlaying || Info is null)
+        {
+            _frameTimer?.Stop();
+            return;
+        }
+        _framePosition += TimeSpan.FromMilliseconds(140);
+        if (_framePosition >= _playEnd)
+        {
+            StopPlayback();
+            _framePosition = _playStart;
+            PlaybackPositionChanged?.Invoke(_framePosition);
+            return;
+        }
+        PlaybackPositionChanged?.Invoke(_framePosition);
+        await ShowFrameAsync(_framePosition);
+    }
+
+    private async Task ShowFrameAsync(TimeSpan position)
+    {
+        if (_frameLoading || _disposed)
+            return;
+        _frameLoading = true;
+        try
+        {
+            var frame = await CaptureAsync(position, _lifetime.Token);
+            if (frame is not null && !_disposed)
+            {
+                _image.Source = frame;
+                _image.Visibility = Visibility.Visible;
+            }
+        }
+        finally
+        {
+            _frameLoading = false;
+        }
     }
 
     private void OnPlayTick()

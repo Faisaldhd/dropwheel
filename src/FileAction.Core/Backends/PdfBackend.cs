@@ -2,6 +2,7 @@ using System.Text;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
 using UglyToad.PdfPig;
+using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 using static FileAction.Core.Loc;
 
@@ -168,10 +169,20 @@ public static class PdfBackend
         var produced = await OfficeBackend.TryConvertToTempAsync(ctx, item.Path, "xlsx", "calc_pdf_import").ConfigureAwait(false);
         try
         {
-            if (produced is null || !HasTableData(produced))
+            if (produced is not null && HasTableData(produced))
+            {
+                var finalTable = OutputPaths.Unique(ctx.OutputDirFor(item.Path), item.BaseName, "xlsx");
+                File.Move(produced, finalTable);
+                return finalTable;
+            }
+
+            // Ledger/statement PDFs often have aligned columns but no ruled table, so LibreOffice's
+            // PDF-import filter produces an empty workbook. Rebuild the rows from PdfPig word positions.
+            var rows = ExtractTextTableRows(item.Path);
+            if (rows.Count < 2)
                 throw new ConversionException(T("error.pdf.noTables"));
             var final = OutputPaths.Unique(ctx.OutputDirFor(item.Path), item.BaseName, "xlsx");
-            File.Move(produced, final);
+            SpreadsheetBackend.WriteXlsx([new SpreadsheetBackend.Sheet("Table", rows)], final);
             return final;
         }
         finally
@@ -179,6 +190,117 @@ public static class PdfBackend
             if (produced is not null)
                 OutputPaths.TryDelete(Path.GetDirectoryName(produced)!);
         }
+    }
+
+    /// <summary>
+    /// Rebuilds rows from word positions for unruled, column-aligned PDFs. A detected header supplies the
+    /// column anchors; without one, cells are split on visual gaps.
+    /// </summary>
+    internal static List<string[]> ExtractTextTableRows(string path)
+    {
+        var lines = new List<(int Page, double Y, List<Word> Words)>();
+        using var document = UglyToad.PdfPig.PdfDocument.Open(path);
+        var pageNumber = 0;
+        foreach (var page in document.GetPages())
+        {
+            pageNumber++;
+            foreach (var word in page.GetWords().Where(w => !string.IsNullOrWhiteSpace(w.Text)))
+            {
+                var y = page.Height - word.BoundingBox.Bottom;
+                var line = lines.FirstOrDefault(candidate =>
+                    candidate.Page == pageNumber && Math.Abs(candidate.Y - y) <= 3);
+                if (line.Words is null)
+                {
+                    line = (pageNumber, y, []);
+                    lines.Add(line);
+                }
+                line.Words.Add(word);
+            }
+        }
+        var ordered = lines.OrderBy(line => line.Page).ThenByDescending(line => line.Y)
+            .Select(line => line.Words.OrderBy(word => word.BoundingBox.Left).ToList())
+            .ToList();
+
+        var header = ordered.FirstOrDefault(IsTableHeader);
+        if (header is not null)
+        {
+            var anchors = header.Select(word => (word.BoundingBox.Left + word.BoundingBox.Right) / 2).ToArray();
+            var rows = new List<string[]>();
+            var started = false;
+            foreach (var line in ordered)
+            {
+                if (!started)
+                {
+                    if (!ReferenceEquals(line, header))
+                        continue;
+                    started = true;
+                }
+                var cells = new string[anchors.Length];
+                foreach (var word in line)
+                {
+                    var center = (word.BoundingBox.Left + word.BoundingBox.Right) / 2;
+                    var column = 0;
+                    var best = double.MaxValue;
+                    for (var i = 0; i < anchors.Length; i++)
+                    {
+                        var distance = Math.Abs(center - anchors[i]);
+                        if (distance < best)
+                        {
+                            best = distance;
+                            column = i;
+                        }
+                    }
+                    cells[column] = string.IsNullOrEmpty(cells[column])
+                        ? word.Text
+                        : cells[column] + " " + word.Text;
+                }
+                if (cells.Count(cell => !string.IsNullOrWhiteSpace(cell)) >= 2)
+                    rows.Add(cells);
+            }
+            // Keep the header and real ledger lines only; page headers/footers and the address block are
+            // not part of the table.
+            return rows.Where((row, index) => (header is not null && index == 0) ||
+                    row.Any(cell => !string.IsNullOrEmpty(cell) &&
+                        System.Text.RegularExpressions.Regex.IsMatch(cell, @"\b\d{2}/\d{2}/\d{4}\b")) ||
+                    row.Any(cell => cell is not null && cell.Contains("Total", StringComparison.OrdinalIgnoreCase)))
+                .Where(row => !row.Any(cell => cell is not null &&
+                    (cell.Contains("Printed On", StringComparison.OrdinalIgnoreCase) ||
+                     cell.StartsWith("Page ", StringComparison.OrdinalIgnoreCase))))
+                .ToList();
+        }
+
+        var generic = new List<string[]>();
+        foreach (var line in ordered)
+        {
+            var cells = new List<string>();
+            var current = new StringBuilder();
+            Word? previous = null;
+            foreach (var word in line)
+            {
+                if (previous is not null && word.BoundingBox.Left - previous.BoundingBox.Right > 14)
+                {
+                    cells.Add(current.ToString().Trim());
+                    current.Clear();
+                }
+                if (current.Length > 0)
+                    current.Append(' ');
+                current.Append(word.Text);
+                previous = word;
+            }
+            cells.Add(current.ToString().Trim());
+            if (cells.Count(cell => cell.Length > 0) >= 2)
+                generic.Add(cells.ToArray());
+        }
+        return generic;
+    }
+
+    private static bool IsTableHeader(List<Word> line)
+    {
+        var text = string.Join(' ', line.Select(word => word.Text));
+        return text.Contains("Debit", StringComparison.OrdinalIgnoreCase) &&
+               text.Contains("Credit", StringComparison.OrdinalIgnoreCase) &&
+               (text.Contains("Date", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("Balance", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>True when any sheet has at least one non-blank cell; a PDF import without tables leaves them empty.</summary>
