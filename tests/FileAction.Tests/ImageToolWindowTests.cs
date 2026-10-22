@@ -127,6 +127,47 @@ public class ImageToolWindowTests
         Assert.Contains("new WrapPanel", ratios, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void The_three_image_previews_cap_the_bitmap_at_200_percent()
+    {
+        var edit = ReadImageSource("EditPhotosView.cs");
+        Assert.Contains("PreviewFit.Fit(", edit, StringComparison.Ordinal);
+        Assert.Contains("_previewHost.SizeChanged += (_, _) => LayoutPreview();", edit, StringComparison.Ordinal);
+        Assert.Contains("HorizontalAlignment = HorizontalAlignment.Center", edit, StringComparison.Ordinal);
+        Assert.DoesNotContain("Stretch = Stretch.Uniform,", edit, StringComparison.Ordinal);
+
+        var annotate = ReadImageSource("AnnotationSurface.cs");
+        Assert.Contains("PreviewFit.Fit(availableWidth, availableHeight, _imageWidth, _imageHeight)",
+            annotate, StringComparison.Ordinal);
+
+        var addBackground = ReadImageSource(Path.Combine("Frame", "AddBackgroundView.cs"));
+        Assert.Contains("PreviewFit.ScaleFor(", addBackground, StringComparison.Ordinal);
+        Assert.Contains("_composition.CanvasWidth", addBackground, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tool_window_minimums_keep_the_image_layouts_usable()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "src", "FileAction.App", "UI", "Tools", "ToolWindow.cs"));
+
+        // 2.5.4: the minimums come from each tool's declared chrome and preview floor. The preview cap
+        // must be applied inside the view; weakening these would let the controls fall out of the card.
+        Assert.Contains("MinWidth = Math.Max(320, spec.Layout.ChromeWidth + spec.Layout.PreviewMinWidth);",
+            source, StringComparison.Ordinal);
+        Assert.Contains("MinHeight = Math.Max(360, spec.Layout.ChromeHeight + spec.Layout.PreviewMinHeight);",
+            source, StringComparison.Ordinal);
+
+        Assert.Equal(420, Math.Max(320,
+            EditPhotosTool.ToolLayout.ChromeWidth + EditPhotosTool.ToolLayout.PreviewMinWidth));
+        Assert.Equal(680, Math.Max(360,
+            EditPhotosTool.ToolLayout.ChromeHeight + EditPhotosTool.ToolLayout.PreviewMinHeight));
+        Assert.Equal(368, Math.Max(320,
+            AnnotateTool.AnnotateLayout.ChromeWidth + AnnotateTool.AnnotateLayout.PreviewMinWidth));
+        Assert.Equal(602, Math.Max(360,
+            AnnotateTool.AnnotateLayout.ChromeHeight + AnnotateTool.AnnotateLayout.PreviewMinHeight));
+    }
+
     private static string ReadImageSource(string file) => File.ReadAllText(Path.Combine(
         RepoRoot(), "src", "FileAction.App", "UI", "Tools", "Image", file));
 

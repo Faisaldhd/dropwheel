@@ -608,9 +608,10 @@ internal sealed class AddBackgroundView
         _composition = AddBackground.Compose(_previewWidth, _previewHeight, _padding, _corners, _shadow, _ratio);
         var availableWidth = Math.Max(1, _stageHost.ActualWidth - 12);
         var availableHeight = Math.Max(1, _stageHost.ActualHeight - 12);
-        var scale = Math.Min(availableWidth / _composition.CanvasWidth, availableHeight / _composition.CanvasHeight);
-        if (!(scale > 0) || double.IsInfinity(scale))
-            scale = 1;
+        // The composition is already in preview pixels, so the same 200% cap applies to the photo: a tiny
+        // image is centred at no more than twice its size instead of filling the preview card.
+        var scale = PreviewFit.ScaleFor(
+            availableWidth, availableHeight, _composition.CanvasWidth, _composition.CanvasHeight);
 
         _stage.Width = Math.Max(1, _composition.CanvasWidth * scale);
         _stage.Height = Math.Max(1, _composition.CanvasHeight * scale);
