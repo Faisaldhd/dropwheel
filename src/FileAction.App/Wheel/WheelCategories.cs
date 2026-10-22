@@ -77,7 +77,7 @@ internal static class WheelCategories
         {
             var definition = new WheelGroupDefinition(
                 "category.other", unmatched[0].Id, unmatched.Select(item => item.Id).ToArray(),
-                "wheel.category.other");
+                "wheel.category.misc");
             slices.Add(new WheelGroupOperation(definition, unmatched[0], unmatched));
         }
         return slices;

@@ -1187,6 +1187,6 @@
   "wheel.category.pdf": "PDF",
   "wheel.category.protect": "Protect",
   "wheel.category.archive": "Archive",
-  "wheel.category.other": "Other",
+  "wheel.category.misc": "Other",
   "tool.window.loading": "Preparing…"
 }
