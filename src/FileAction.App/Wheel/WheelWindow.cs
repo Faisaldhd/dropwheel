@@ -1798,7 +1798,11 @@ internal sealed class WheelWindow : Window
                     }
                     else
                     {
+                        // A direct tool slice has no child ring. Close the previous category instead of
+                        // leaving its children under the pointer.
                         CancelSwapDwell();
+                        ClearInner();
+                        SetHighlight(hit.Index);
                     }
                 }
                 else
