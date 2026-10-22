@@ -166,14 +166,6 @@ public class WheelMotionTests
     }
 
     [Fact]
-    public void A_hub_click_uses_the_highlighted_child_or_the_nearest_one()
-    {
-        Assert.Equal(1, WheelWindow.HubChildIndex(1, 3, 200));
-        Assert.Equal(-1, WheelWindow.HubChildIndex(-1, 0, 0));
-        Assert.Equal(2, WheelWindow.HubChildIndex(-1, 3, WheelWindow.SliceAngle(2, 3)));
-    }
-
-    [Fact]
     public void Moving_from_a_category_straight_to_the_hub_opens_its_ring_immediately()
     {
         RunOnSta(() =>

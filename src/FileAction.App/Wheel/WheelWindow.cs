@@ -1608,12 +1608,9 @@ internal sealed class WheelWindow : Window
         var hit = HitAt(point);
         switch (hit.Zone)
         {
-            case WheelZone.Hub when _innerGroupId is not null && _innerChoices.Count > 0:
-                // The hub is part of the inner ring: a click runs the highlighted child, or the child
-                // nearest the pointer if nothing is highlighted yet.
-                var child = HubChildIndex(_innerHighlight, _innerChoices.Count, AngleAt(point));
-                if (child >= 0 && !_innerChoices[child].IsMore)
-                    RunInner(child);
+            case WheelZone.Hub:
+                // The hub is a crossing pad, not a button: it navigates the inner ring but a click
+                // there runs nothing. Escape or a click outside the wheel is the way out.
                 break;
             case WheelZone.Inner when hit.Index >= 0 && hit.Index < _innerChoices.Count:
                 // Match the sticky hover: the child the user sees highlighted is the child that runs.
@@ -1755,10 +1752,6 @@ internal sealed class WheelWindow : Window
         var delta = Math.Abs((angle - SliceAngle(current, count) + 540) % 360 - 180);
         return delta <= step / 2 + InnerHysteresisDeg ? current : SliceIndexAt(angle, count);
     }
-
-    /// <summary>Hub click/drop target: the sticky highlight if valid, otherwise the nearest child.</summary>
-    internal static int HubChildIndex(int highlight, int count, double angle) =>
-        highlight >= 0 && highlight < count ? highlight : InnerHoverIndex(angle, count, -1);
 
     /// <summary>
     /// The single hover rule of the two-ring wheel, shared by Click and Drag mode: outer slices dwell
