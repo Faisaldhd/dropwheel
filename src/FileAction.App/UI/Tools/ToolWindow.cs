@@ -105,6 +105,10 @@ internal sealed class ToolWindow : Window
             spec.Layout, null, null, initialWork.WidthInPixels, initialWork.HeightInPixels, initialWork.Scale);
         Width = initial.Width;
         Height = initial.Height;
+        // A tall image must not shrink the window below the controls' usable width. The sizer already
+        // respects PreviewMinWidth, but a DPI/work-area edge can still request a narrower window.
+        MinWidth = Math.Max(320, spec.Layout.ChromeWidth + spec.Layout.PreviewMinWidth);
+        MinHeight = Math.Max(360, spec.Layout.ChromeHeight + spec.Layout.PreviewMinHeight);
 
         // Show the frame immediately; the tool's real view is built after the window is on screen. This
         // removes the click-to-window delay on tools whose Create() touches COM, icons or a decoder.
