@@ -152,18 +152,25 @@ internal sealed class LockOpenWindow : Window
         }
     }
 
+    internal static (string FileName, string Arguments) RevealCommand(string path)
+    {
+        var isFolder = Directory.Exists(path);
+        var folder = isFolder ? path : Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(folder))
+            return ("explorer.exe", string.Empty);
+        return ("explorer.exe", isFolder ? $"\"{folder}\"" : $"/select,\"{path}\"");
+    }
+
     private static void OpenRestored(string path)
     {
         try
         {
             // Never execute a restored file: a .exe/.bat/.ps1/.lnk could run. Reveal it in Explorer,
             // selected, and let the user decide what to open.
-            var isFolder = Directory.Exists(path);
-            var folder = isFolder ? path : Path.GetDirectoryName(path);
-            if (string.IsNullOrEmpty(folder))
+            var (fileName, arguments) = RevealCommand(path);
+            if (arguments.Length == 0)
                 return;
-            var arguments = isFolder ? $"\"{folder}\"" : $"/select,\"{path}\"";
-            Process.Start(new ProcessStartInfo("explorer.exe", arguments) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(fileName, arguments) { UseShellExecute = true });
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or FileNotFoundException)
         {
