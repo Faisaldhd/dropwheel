@@ -297,7 +297,7 @@ public sealed class DragDropTests : IDisposable
     public void Every_registered_tool_window_is_reachable_from_the_wheel_by_its_own_id()
     {
         var registered = ToolRegistry.All.Select(s => s.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
-        Assert.Equal(27, registered.Length); // 26 in 2.4.0 + Remove background in 2.4.7
+        Assert.Equal(26, registered.Length); // 27 minus the removed Unlock password tool
         Assert.Equal(registered.Length, registered.Distinct(StringComparer.Ordinal).Count());
 
         var wheel = WheelController.BuildOperations().Select(o => o.Id).ToHashSet(StringComparer.Ordinal);
