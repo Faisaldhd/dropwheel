@@ -1114,51 +1114,10 @@ internal sealed class WheelWindow : Window
         _innerScale.ScaleX = 1;
         _innerScale.ScaleY = 1;
         BuildInner();
-        if (_innerGroups.Count == 0)
-        {
-            _innerFadeLayer.Children.Clear();
-            _innerFadeLayer.BeginAnimation(OpacityProperty, null);
-            _innerFadeLayer.Opacity = 1;
-            SettleInner();
-            return;
-        }
-        if (!Motion.Enabled || !IsVisible)
-        {
-            SettleInner();
-            _innerFadeLayer.Children.Clear();
-            return;
-        }
-
-        // First frame after a swap: the old ring is still visible while it fades, and the new ring is
-        // built underneath at opacity 0 so the two label sets never overlap. It starts at 45 ms.
-        _innerLayer.Opacity = 0;
-        var storyboard = new Storyboard();
-        var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(InnerSwapOutMs))
-        {
-            EasingFunction = Motion.EaseIn,
-            FillBehavior = FillBehavior.HoldEnd,
-        };
-        Target(storyboard, _innerFadeLayer, UIElement.OpacityProperty, fadeOut);
-        var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(InnerSwapInMs))
-        {
-            BeginTime = TimeSpan.FromMilliseconds(InnerSwapOutMs),
-            EasingFunction = Motion.EaseOut,
-            FillBehavior = FillBehavior.HoldEnd,
-        };
-        Target(storyboard, _innerLayer, UIElement.OpacityProperty, fadeIn);
-        storyboard.Completed += (_, _) =>
-        {
-            if (!ReferenceEquals(_innerStoryboard, storyboard))
-                return;
-            _innerStoryboard = null;
-            _innerFadeLayer.Children.Clear();
-            _innerFadeLayer.BeginAnimation(OpacityProperty, null);
-            _innerFadeLayer.Opacity = 1;
-            _innerLayer.BeginAnimation(OpacityProperty, null);
-            _innerLayer.Opacity = 1;
-        };
-        _innerStoryboard = storyboard;
-        storyboard.Begin(_canvas, true);
+        // Swap is intentionally instant: an interrupted 45/55 ms fade could leave the ring at opacity 0
+        // until the pointer left and re-entered. Correct contents matter more than the micro-transition.
+        _innerFadeLayer.Children.Clear();
+        SettleInner();
     }
 
     /// <summary>
