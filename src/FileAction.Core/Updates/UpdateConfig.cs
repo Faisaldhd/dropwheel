@@ -27,8 +27,8 @@ public static class UpdateConfig
     /// <summary>First check runs one minute after start.</summary>
     public static readonly TimeSpan FirstCheckDelay = TimeSpan.FromSeconds(60);
 
-    /// <summary>Then once a day.</summary>
-    public static readonly TimeSpan CheckInterval = TimeSpan.FromHours(24);
+    /// <summary>Then every six hours; the manual Check for updates button remains immediate.</summary>
+    public static readonly TimeSpan CheckInterval = TimeSpan.FromHours(6);
 
     /// <summary>Network timeout; a slow GitHub must never block the UI.</summary>
     public static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(10);

@@ -2,7 +2,7 @@ namespace FileAction.Core.Updates;
 
 /// <summary>
 /// The real update checker/downloader: anonymous GitHub lookup, numeric version comparison, a silent
-/// background timer (60 s after start, then every 24 h) and a verified, one-at-a-time download.
+/// background timer (60 s after start, then every 6 h) and a verified, one-at-a-time download.
 /// <para>
 /// A download is only returned after BOTH trust anchors agree: the SHA-256 against the GitHub asset
 /// <c>digest</c> field and against <c>SHA256SUMS.txt</c>, and an ECDSA P-256 signature over the file's

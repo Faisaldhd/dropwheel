@@ -60,7 +60,7 @@ public interface IUpdateService : IDisposable
 
     /// <summary>
     /// Checks the latest release. <paramref name="userInitiated"/> only decides whether an error is surfaced;
-    /// network failures never throw. Background checks run 60 s after start and every 24 h.
+    /// network failures never throw. Background checks run 60 s after start and every 6 h.
     /// </summary>
     Task<UpdateCheckStatus> CheckAsync(bool userInitiated, CancellationToken cancellationToken = default);
 
@@ -71,7 +71,7 @@ public interface IUpdateService : IDisposable
     /// </summary>
     Task<string?> DownloadAsync(UpdateInfo info, IProgress<double>? progress, CancellationToken cancellationToken = default);
 
-    /// <summary>Starts the silent 60 s / 24 h timer loop. Calling it twice is harmless.</summary>
+    /// <summary>Starts the silent 60 s / 6 h timer loop. Calling it twice is harmless.</summary>
     void StartBackgroundChecks();
 
     /// <summary>Stops the timer loop (app exit, or tests).</summary>
