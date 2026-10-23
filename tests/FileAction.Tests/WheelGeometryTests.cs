@@ -95,8 +95,8 @@ public class WheelGeometryTests
         // narrower there than at the top; the side of a six-slice ring is the tightest case.
         Assert.True(WheelWindow.InnerSliceLabelWidth(6, 1) < WheelWindow.InnerSliceLabelWidth(6, 0));
         Assert.True(WheelWindow.InnerSliceLabelWidth(6, 1) < WheelWindow.InnerLabelWidth);
-        Assert.Equal(6, WheelWindow.InnerCapacity);
-        Assert.Equal(5, WheelWindow.InnerPerPage);
+        Assert.Equal(8, WheelWindow.InnerCapacity);
+        Assert.Equal(7, WheelWindow.InnerPerPage);
     }
 
     [Fact]
@@ -134,21 +134,21 @@ public class WheelGeometryTests
     }
 
     [Fact]
-    public void A_category_with_more_than_six_children_pages_instead_of_crowding()
+    public void A_category_with_more_than_eight_children_pages_instead_of_crowding()
     {
         var children = Enumerable.Range(0, 12).Select(i => (Operation)new FakeOperation($"op{i}")).ToArray();
-        Assert.Equal(1, WheelWindow.InnerPageCount(6));
-        Assert.Equal(2, WheelWindow.InnerPageCount(7));
-        Assert.Equal(3, WheelWindow.InnerPageCount(12));
+        Assert.Equal(1, WheelWindow.InnerPageCount(8));
+        Assert.Equal(2, WheelWindow.InnerPageCount(9));
+        Assert.Equal(2, WheelWindow.InnerPageCount(12));
 
         var first = WheelWindow.InnerRing(children, 0);
-        Assert.Equal(6, first.Count);
-        Assert.Equal(5, first.Count(choice => !choice.IsMore));
+        Assert.Equal(8, first.Count);
+        Assert.Equal(7, first.Count(choice => !choice.IsMore));
         Assert.True(first[^1].IsMore);
-        Assert.Equal(7, first[^1].Hidden);
-        Assert.Equal(children.Take(5).Select(child => child.Id), first.Where(c => !c.IsMore).Select(c => c.Operation!.Id));
+        Assert.Equal(5, first[^1].Hidden);
+        Assert.Equal(children.Take(7).Select(child => child.Id), first.Where(c => !c.IsMore).Select(c => c.Operation!.Id));
 
-        // Every page stays at six slices or fewer and always offers the way to the next page.
+        // Every page stays within the ring capacity and always offers the way to the next page.
         for (var page = 0; page < WheelWindow.InnerPageCount(children.Length); page++)
         {
             var ring = WheelWindow.InnerRing(children, page);
@@ -156,10 +156,10 @@ public class WheelGeometryTests
             Assert.Contains(ring, choice => choice.IsMore);
         }
 
-        // Six or fewer fit as they are: no "+n" slice is added while there is room.
-        var six = WheelWindow.InnerRing(children.Take(6).ToArray(), 0);
-        Assert.Equal(6, six.Count);
-        Assert.DoesNotContain(six, choice => choice.IsMore);
+        // Eight or fewer fit as they are: no "+n" slice is added while there is room.
+        var eight = WheelWindow.InnerRing(children.Take(8).ToArray(), 0);
+        Assert.Equal(8, eight.Count);
+        Assert.DoesNotContain(eight, choice => choice.IsMore);
     }
 
     [Fact]

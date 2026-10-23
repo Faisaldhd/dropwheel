@@ -134,9 +134,9 @@ internal sealed class WheelWindow : Window
     internal const double MoreMinFont = 10;
 
     /// <summary>At most five children plus the "more" slice: six labels on a 60° step, never crowded.</summary>
-    internal const int InnerCapacity = 6;
+    internal const int InnerCapacity = 8;
 
-    internal const int InnerPerPage = 5;
+    internal const int InnerPerPage = 7;
 
     /// <summary>
     /// Keeps the current inner slice selected for this many degrees past its midpoint. Without it the
@@ -158,7 +158,7 @@ internal sealed class WheelWindow : Window
     /// <summary>First frame of an inner ring is already visible; the entrance finishes inside 120 ms.</summary>
     internal const double InnerEnterMs = 90;
 
-    internal const double InnerEnterStaggerMs = 5;
+    internal const double InnerEnterStaggerMs = 4;
     internal const double InnerRevealFrom = 0.4;
     internal const double InnerScaleFrom = 0.9;
 
@@ -1758,7 +1758,10 @@ internal sealed class WheelWindow : Window
     {
         if (count <= 0)
             return -1;
-        if (radius <= 10 && current >= 0 && current < count)
+        // The whole hub keeps the current child. Recomputing the angle across the centre makes the
+        // selection flip to the opposite slice while the mouse is still crossing; choose a child only
+        // on the first entry, then hold it until the pointer reaches the inner band.
+        if (radius <= HubRadius + 1 && current >= 0 && current < count)
             return current;
         return InnerHoverIndex(angle, count, current);
     }

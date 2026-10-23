@@ -252,6 +252,7 @@ public class WheelMotionTests
     public void The_exact_centre_keeps_the_current_child()
     {
         Assert.Equal(2, WheelWindow.HubIndex(2, 5, 0, 0));
+        Assert.Equal(2, WheelWindow.HubIndex(2, 5, 180, 50));
         Assert.Equal(0, WheelWindow.HubIndex(-1, 5, 0, 0));
         Assert.Equal(2, WheelWindow.HubIndex(0, 5, WheelWindow.SliceAngle(2, 5), 120));
     }
