@@ -255,6 +255,46 @@ public class WheelMotionTests
     }
 
     [Fact]
+    public void Clipping_the_first_pixels_of_the_outer_band_does_not_switch_category()
+    {
+        RunOnSta(() =>
+        {
+            var a = Group("category.a", new FakeOperation("a-child"));
+            var b = Group("category.b", new FakeOperation("b-child"));
+            Operation[] outer = [a, b];
+            var window = new WheelWindow(
+                WheelMode.Drag,
+                WheelKind.Tools,
+                [new FileItem("photo.png")],
+                new AppSettings(),
+                (_, _) => outer,
+                (_, _, _) => { });
+            try
+            {
+                var size = (double)typeof(WheelWindow)
+                    .GetField("Size", BindingFlags.NonPublic | BindingFlags.Static)!
+                    .GetRawConstantValue()!;
+                var top = new Point(size / 2, size / 2 - WheelWindow.OuterLabelRadius);
+                var justIntoOuter = new Point(size / 2, size / 2 + WheelWindow.OuterInnerRadius + 4);
+
+                Invoke(window, "PointerMove", top);
+                SetField(window, "_dwellStarted", Environment.TickCount64 - (long)WheelWindow.DwellMs - 1);
+                Invoke(window, "DwellTick");
+                Assert.Equal(a.GroupId, Field<string?>(window, "_innerGroupId"));
+
+                Invoke(window, "PointerMove", justIntoOuter);
+
+                Assert.Equal(a.GroupId, Field<string?>(window, "_innerGroupId"));
+                Assert.Equal(-1, Field<int>(window, "_swapIndex"));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [Fact]
     public void The_exact_centre_keeps_the_current_child()
     {
         Assert.Equal(2, WheelWindow.HubIndex(2, 5, 0, 0));

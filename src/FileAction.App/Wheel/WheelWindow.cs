@@ -1791,9 +1791,17 @@ internal sealed class WheelWindow : Window
                 SetInnerHighlight(InnerHoverIndex(AngleAt(point), _innerChoices.Count, _innerHighlight));
                 break;
             case WheelZone.Outer:
+                // A pointer circling the inner tools can clip the first few pixels of the outer band.
+                // That is not an intentional category choice: keep the ring and its selection until
+                // the pointer is clearly inside the outer band.
+                if (_innerGroupId is not null && RadiusAt(point) < OuterInnerRadius + 8)
+                {
+                    CancelDwell();
+                    CancelSwapDwell();
+                    break;
+                }
                 // Keep the selected inner child highlighted while the pointer is only grazing the
-                // outer band: the ring swaps after its 180 ms rest, so the highlight must not vanish
-                // first (the wheel looked like it left the category on the first outer pixel).
+                // outer band: the ring swaps after its rest, so the highlight must not vanish first.
                 if (_innerGroupId is null)
                     SetInnerHighlight(-1);
                 if (hit.Index != _suppressIndex)
