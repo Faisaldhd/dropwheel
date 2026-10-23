@@ -2905,7 +2905,6 @@ internal sealed class WheelWindow : Window
             _hubDisc.StrokeThickness = index >= 0 ? 2 : 1;
             _hubDisc.Fill = Theme.Slice;
         }
-        UpdateHubText();
     }
 
     private void Paint(int index, bool on)
@@ -2992,16 +2991,14 @@ internal sealed class WheelWindow : Window
                 : _highlight >= 0 ? T("wheel.repeat.suffix") : last.Label;
             return;
         }
-        // An open inner ring mirrors the selected child in the hub: the centre is part of the ring, so it
-        // names the tool under the pointer (or the category while nothing is selected).
+        // An open inner ring names its category and the selection size in the hub. The Shift/Ctrl/Alt
+        // tabs sit directly below, so the hub always answers "which category, how many items, which key".
+        // Its role changes (it participates in inner navigation) but its title stays the category.
         if (_innerGroupId is { } id)
         {
             var category = _ops.OfType<WheelGroupOperation>().FirstOrDefault(group => group.GroupId == id);
-            var selected = _innerHighlight >= 0 && _innerHighlight < _innerChoices.Count
-                ? _innerChoices[_innerHighlight].Operation
-                : null;
-            _title.Text = selected?.Label ?? category?.Label ?? AppSettings.WheelName(_wheel);
-            _detail.Text = selected?.Subtitle ?? category?.Subtitle
+            _title.Text = category?.Label ?? AppSettings.WheelName(_wheel);
+            _detail.Text = category?.Subtitle
                 ?? (_items.Count == 0 ? T("wheel.dropHere")
                     : _ops.Count == 0 ? T("wheel.nothingForSelection") : DescribeItems());
             return;
