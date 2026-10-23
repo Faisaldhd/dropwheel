@@ -150,10 +150,10 @@ internal sealed class WheelWindow : Window
 
     /// <summary>
     /// With an inner ring open, crossing another outer slice must not swap the category on a single
-    /// mouse sample: the pointer often crosses the rim/hub on its way to the far inner tools. Swap only
-    /// after this short rest.
+    /// mouse sample or while passing over it. The pointer must actually rest on the outer slice; use the
+    /// same 450 ms intentional rest as the first open, not a 180 ms graze.
     /// </summary>
-    internal const double SwapDwellMs = 180;
+    internal const double SwapDwellMs = 450;
 
     /// <summary>First frame of an inner ring is already visible; the entrance finishes inside 120 ms.</summary>
     internal const double InnerEnterMs = 90;
