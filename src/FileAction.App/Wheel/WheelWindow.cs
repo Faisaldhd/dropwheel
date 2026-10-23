@@ -183,6 +183,7 @@ internal sealed class WheelWindow : Window
     private readonly Canvas _innerLayer = new() { Width = Size, Height = Size, IsHitTestVisible = false };
     private readonly Canvas _innerFadeLayer = new() { Width = Size, Height = Size, IsHitTestVisible = false };
     private readonly Canvas _hubLayer = new() { Width = Size, Height = Size, IsHitTestVisible = false };
+    private Ellipse? _hubDisc;
     private readonly Motion.Handle _motion;
     private readonly List<Path> _slices = [];
     private readonly List<StackPanel> _labels = [];
@@ -2180,6 +2181,7 @@ internal sealed class WheelWindow : Window
             StrokeThickness = 1,
             Effect = Theme.Shadow(12),
         };
+        _hubDisc = hub;
         Canvas.SetLeft(hub, Size / 2 - hubSize / 2);
         Canvas.SetTop(hub, Size / 2 - hubSize / 2);
         _canvas.Children.Add(hub);
@@ -2893,6 +2895,14 @@ internal sealed class WheelWindow : Window
         _innerHighlight = index;
         if (_innerHighlight >= 0 && _innerHighlight < _innerSlices.Count)
             PaintInner(_innerHighlight, true);
+        // The hub is part of the inner ring: when a child is selected, its rim uses the same accent,
+        // so the centre reads as the selected child's continuation rather than a separate island.
+        if (_hubDisc is not null)
+        {
+            _hubDisc.Stroke = index >= 0 ? Theme.Accent : Theme.PanelBorder;
+            _hubDisc.StrokeThickness = index >= 0 ? 2 : 1;
+            _hubDisc.Fill = index >= 0 ? Theme.Slice : Theme.Hub;
+        }
     }
 
     private void Paint(int index, bool on)
