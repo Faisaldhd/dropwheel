@@ -183,6 +183,7 @@ internal sealed class WheelWindow : Window
     private readonly Canvas _innerLayer = new() { Width = Size, Height = Size, IsHitTestVisible = false };
     private readonly Canvas _innerFadeLayer = new() { Width = Size, Height = Size, IsHitTestVisible = false };
     private readonly Canvas _hubLayer = new() { Width = Size, Height = Size, IsHitTestVisible = false };
+    private Ellipse? _hubDisc;
     private readonly Motion.Handle _motion;
     private readonly List<Path> _slices = [];
     private readonly List<StackPanel> _labels = [];
@@ -2175,11 +2176,12 @@ internal sealed class WheelWindow : Window
         {
             Width = hubSize,
             Height = hubSize,
-            Fill = Theme.Hub,
-            Stroke = Theme.PanelBorder,
+            Fill = Theme.Slice,
+            Stroke = Theme.SliceEdge,
             StrokeThickness = 1,
             Effect = Theme.Shadow(12),
         };
+        _hubDisc = hub;
         Canvas.SetLeft(hub, Size / 2 - hubSize / 2);
         Canvas.SetTop(hub, Size / 2 - hubSize / 2);
         _canvas.Children.Add(hub);
@@ -2893,6 +2895,16 @@ internal sealed class WheelWindow : Window
         _innerHighlight = index;
         if (_innerHighlight >= 0 && _innerHighlight < _innerSlices.Count)
             PaintInner(_innerHighlight, true);
+        // The hub is part of the inner ring: when a child is selected, its rim uses the same accent,
+        // so the centre reads as the selected child's continuation rather than a separate island.
+        if (_hubDisc is not null)
+        {
+            // The hub always uses the inner-slice fill, not a separate hub colour; only the accent rim
+            // marks a selected child.
+            _hubDisc.Stroke = index >= 0 ? Theme.Accent : Theme.SliceEdge;
+            _hubDisc.StrokeThickness = index >= 0 ? 2 : 1;
+            _hubDisc.Fill = Theme.Slice;
+        }
     }
 
     private void Paint(int index, bool on)
@@ -2981,12 +2993,11 @@ internal sealed class WheelWindow : Window
         }
         // An open inner ring names its category and the selection size in the hub. The Shift/Ctrl/Alt
         // tabs sit directly below, so the hub always answers "which category, how many items, which key".
+        // Its role changes (it participates in inner navigation) but its title stays the category.
         if (_innerGroupId is { } id)
         {
             var category = _ops.OfType<WheelGroupOperation>().FirstOrDefault(group => group.GroupId == id);
             _title.Text = category?.Label ?? AppSettings.WheelName(_wheel);
-            // The category's own subtitle is its operation count ("5 items"); fall back to the selection
-            // size only for a category that has no count.
             _detail.Text = category?.Subtitle
                 ?? (_items.Count == 0 ? T("wheel.dropHere")
                     : _ops.Count == 0 ? T("wheel.nothingForSelection") : DescribeItems());
