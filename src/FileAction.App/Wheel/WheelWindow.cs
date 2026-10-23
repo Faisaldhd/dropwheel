@@ -2176,8 +2176,8 @@ internal sealed class WheelWindow : Window
         {
             Width = hubSize,
             Height = hubSize,
-            Fill = Theme.Hub,
-            Stroke = Theme.PanelBorder,
+            Fill = Theme.Slice,
+            Stroke = Theme.SliceEdge,
             StrokeThickness = 1,
             Effect = Theme.Shadow(12),
         };
@@ -2899,9 +2899,11 @@ internal sealed class WheelWindow : Window
         // so the centre reads as the selected child's continuation rather than a separate island.
         if (_hubDisc is not null)
         {
-            _hubDisc.Stroke = index >= 0 ? Theme.Accent : Theme.PanelBorder;
+            // The hub always uses the inner-slice fill, not a separate hub colour; only the accent rim
+            // marks a selected child.
+            _hubDisc.Stroke = index >= 0 ? Theme.Accent : Theme.SliceEdge;
             _hubDisc.StrokeThickness = index >= 0 ? 2 : 1;
-            _hubDisc.Fill = index >= 0 ? Theme.Slice : Theme.Hub;
+            _hubDisc.Fill = Theme.Slice;
         }
     }
 
