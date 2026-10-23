@@ -233,8 +233,11 @@ public class WheelMotionTests
                 Invoke(window, "DwellTick");
                 Assert.Equal(a.GroupId, Field<string?>(window, "_innerGroupId"));
 
+                SetField(window, "_innerHighlight", 0);
                 Invoke(window, "PointerMove", bottom);
                 Assert.Equal(1, Field<int>(window, "_swapIndex"));
+                // Grazing the outer band must not clear the selected child before the swap commits.
+                Assert.Equal(0, Field<int>(window, "_innerHighlight"));
 
                 Invoke(window, "PointerMove", hub);
 
