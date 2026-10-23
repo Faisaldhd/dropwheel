@@ -105,6 +105,7 @@ public class ToolDispatchTests
         Assert.Contains(annotate.Children, child => child.Id == "tools.redact");
         Assert.Contains(annotate.Children, child => child.Id == "tools.removebackground");
         Assert.Contains(annotate.Children, child => child.Id == "image.bg.remove");
+        Assert.Contains(annotate.Children, child => child.Id == "tools.ocr");
 
         // A category with one applicable tool stays a category (one-slice ring) instead of turning into
         // a direct operation that silently has no children.

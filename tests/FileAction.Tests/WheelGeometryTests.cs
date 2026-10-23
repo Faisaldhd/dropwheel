@@ -163,7 +163,7 @@ public class WheelGeometryTests
     }
 
     [Fact]
-    public void The_seven_intent_categories_of_an_image_stay_on_the_outer_ring()
+    public void The_six_intent_categories_of_an_image_stay_on_the_outer_ring()
     {
         // A real image in the repository, so the Lock operation's "the file exists" rule applies and the
         // Protect category forms exactly as it does for an owner's photo.
@@ -178,11 +178,11 @@ public class WheelGeometryTests
             WheelController.BuildOperations());
 
         Assert.Equal(
-            ["Crop & rotate", "Optimize", "Annotate", "Metadata", "Protect", "Archive", "Other"],
+            ["Crop & rotate", "Optimize", "Annotate", "Metadata", "Protect", "Archive"],
             slices.Select(slice => slice.Label).ToArray());
-        // Every slice opens a ring; unmatched tools (Extract text) live under Other.
-        Assert.Equal(7, slices.OfType<WheelGroupOperation>().Count());
-        Assert.Equal("wheel.group.category.other", slices[^1].Id);
+        // Every slice opens a ring; Extract text now lives in Annotate, so there is no Other for an image.
+        Assert.Equal(6, slices.OfType<WheelGroupOperation>().Count());
+        Assert.Equal("wheel.group.category.archive", slices[^1].Id);
     }
 
     private static string RepoRoot()
