@@ -1845,14 +1845,12 @@ internal sealed class WheelWindow : Window
             default:
                 if (hit.Zone is WheelZone.Inner or WheelZone.Hub)
                 {
-                    // Moving inward commits work that was still on a timer: a pending category swap
-                    // must not leave the previous category's children under the pointer, and a pending
-                    // first open must not be cancelled just because the user headed for the centre.
+                    // Moving inward cancels a pending category swap. The pointer is still inside the
+                    // category's own ring, so switching categories here was the "sudden jump" while
+                    // circling the inner tools. A first open is still committed: there was no ring yet.
                     if (_swapIndex >= 0)
                     {
-                        var swap = _swapIndex;
                         CancelSwapDwell();
-                        SwapInner(swap, SliceAngle(swap, _ops.Count));
                     }
                     else if (_dwellIndex >= 0)
                     {

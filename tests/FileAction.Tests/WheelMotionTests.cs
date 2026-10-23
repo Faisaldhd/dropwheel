@@ -204,7 +204,7 @@ public class WheelMotionTests
     }
 
     [Fact]
-    public void A_pending_swap_commits_when_the_pointer_heads_inward()
+    public void A_pending_swap_is_cancelled_when_the_pointer_returns_inward()
     {
         RunOnSta(() =>
         {
@@ -241,8 +241,11 @@ public class WheelMotionTests
 
                 Invoke(window, "PointerMove", hub);
 
-                Assert.Equal(b.GroupId, Field<string?>(window, "_innerGroupId"));
+                // The pointer never rested on B; it is back inside A's ring. A must stay open and B's
+                // pending swap must be dropped, never applied behind the pointer.
+                Assert.Equal(a.GroupId, Field<string?>(window, "_innerGroupId"));
                 Assert.Equal(-1, Field<int>(window, "_swapIndex"));
+                Assert.Equal(0, Field<int>(window, "_innerHighlight"));
             }
             finally
             {
