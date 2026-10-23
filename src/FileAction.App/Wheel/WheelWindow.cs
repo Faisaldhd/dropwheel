@@ -150,10 +150,10 @@ internal sealed class WheelWindow : Window
 
     /// <summary>
     /// With an inner ring open, crossing another outer slice must not swap the category on a single
-    /// mouse sample: the pointer often crosses the rim/hub on its way to the far inner tools. Swap only
-    /// after this short rest.
+    /// mouse sample or while passing over it. The pointer must actually rest on the outer slice; use the
+    /// same 450 ms intentional rest as the first open, not a 180 ms graze.
     /// </summary>
-    internal const double SwapDwellMs = 180;
+    internal const double SwapDwellMs = 450;
 
     /// <summary>First frame of an inner ring is already visible; the entrance finishes inside 120 ms.</summary>
     internal const double InnerEnterMs = 90;
@@ -1791,7 +1791,19 @@ internal sealed class WheelWindow : Window
                 SetInnerHighlight(InnerHoverIndex(AngleAt(point), _innerChoices.Count, _innerHighlight));
                 break;
             case WheelZone.Outer:
-                SetInnerHighlight(-1);
+                // A pointer circling the inner tools can clip the first few pixels of the outer band.
+                // That is not an intentional category choice: keep the ring and its selection until
+                // the pointer is clearly inside the outer band.
+                if (_innerGroupId is not null && RadiusAt(point) < OuterInnerRadius + 8)
+                {
+                    CancelDwell();
+                    CancelSwapDwell();
+                    break;
+                }
+                // Keep the selected inner child highlighted while the pointer is only grazing the
+                // outer band: the ring swaps after its rest, so the highlight must not vanish first.
+                if (_innerGroupId is null)
+                    SetInnerHighlight(-1);
                 if (hit.Index != _suppressIndex)
                     _suppressIndex = -1;
                 if (_innerGroupId is { } open)
@@ -1841,14 +1853,12 @@ internal sealed class WheelWindow : Window
             default:
                 if (hit.Zone is WheelZone.Inner or WheelZone.Hub)
                 {
-                    // Moving inward commits work that was still on a timer: a pending category swap
-                    // must not leave the previous category's children under the pointer, and a pending
-                    // first open must not be cancelled just because the user headed for the centre.
+                    // Moving inward cancels a pending category swap. The pointer is still inside the
+                    // category's own ring, so switching categories here was the "sudden jump" while
+                    // circling the inner tools. A first open is still committed: there was no ring yet.
                     if (_swapIndex >= 0)
                     {
-                        var swap = _swapIndex;
                         CancelSwapDwell();
-                        SwapInner(swap, SliceAngle(swap, _ops.Count));
                     }
                     else if (_dwellIndex >= 0)
                     {
